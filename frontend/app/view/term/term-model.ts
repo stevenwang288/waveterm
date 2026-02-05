@@ -8,6 +8,7 @@ import { appHandleKeyDown } from "@/app/store/keymodel";
 import type { TabModel } from "@/app/store/tab-model";
 import { waveEventSubscribe } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
+import { FavoritesModel } from "@/app/store/favorites-model";
 import { makeFeBlockRouteId } from "@/app/store/wshrouter";
 import { DefaultRouter, TabRpcClient } from "@/app/store/wshrpcutil";
 import { TerminalView } from "@/app/view/term/term";
@@ -818,6 +819,20 @@ export class TermViewModel implements ViewModel {
             }
             menu.push({ type: "separator" });
         }
+
+        menu.push({
+            label: "收藏",
+            click: () => {
+                const currentPath = globalStore.get(this.nodeModel.blockMetaAtom)?.meta?.["dir"] || 
+                                   globalStore.get(this.nodeModel.blockMetaAtom)?.meta?.["cwd"] ||
+                                   "~";
+                const favoritesModel = FavoritesModel.getInstance();
+                favoritesModel.addFavorite(currentPath);
+                window.dispatchEvent(new Event("favorites-updated"));
+            },
+        });
+
+        menu.push({ type: "separator" });
 
         menu.push({
             label: i18next.t("ctx.paste"),
