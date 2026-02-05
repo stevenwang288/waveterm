@@ -6,6 +6,7 @@ import { atoms, getApi, globalStore } from "@/app/store/global";
 import i18next from "@/app/i18n";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { FavoritesModel } from "@/app/store/favorites-model";
 import { checkKeyPressed, isCharacterKeyEvent } from "@/util/keyutil";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
 import { addOpenMenuItems } from "@/util/previewutil";
@@ -412,6 +413,17 @@ function TableBody({
             ];
             addOpenMenuItems(menu, conn, finfo);
             menu.push(
+                {
+                    type: "separator",
+                },
+                {
+                    label: "添加到收藏夹",
+                    click: () => {
+                        const favoritesModel = FavoritesModel.getInstance();
+                        favoritesModel.addFavorite(finfo.path, fileName);
+                        window.dispatchEvent(new Event("favorites-updated"));
+                    },
+                },
                 {
                     type: "separator",
                 },

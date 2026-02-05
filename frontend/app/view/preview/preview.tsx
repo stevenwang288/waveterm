@@ -122,6 +122,18 @@ function PreviewView({
         setErrorMsg(null);
     }, [connection, fileInfo]);
 
+    useEffect(() => {
+        const handleNavigateToPath = (event: CustomEvent) => {
+            const { path } = event.detail;
+            if (path) {
+                model.goHistory(path);
+            }
+        };
+
+        window.addEventListener("navigate-to-path", handleNavigateToPath as EventListener);
+        return () => window.removeEventListener("navigate-to-path", handleNavigateToPath as EventListener);
+    }, [model]);
+
     if (connStatus?.status != "connected") {
         return null;
     }
