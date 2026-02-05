@@ -1,0 +1,402 @@
+// Copyright 2025, Command Line Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+import { SecretNameRegex, type WaveConfigViewModel } from "@/app/view/waveconfig/waveconfig-model";
+import { cn } from "@/util/util";
+import { useAtomValue, useSetAtom } from "jotai";
+import { memo, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+
+interface ErrorDisplayProps {
+    message: string;
+    variant?: "error" | "warning";
+}
+
+const ErrorDisplay = memo(({ message, variant = "error" }: ErrorDisplayProps) => {
+    const icon = variant === "error" ? "fa-circle-exclamation" : "fa-triangle-exclamation";
+    const baseClasses = "flex items-center gap-2 p-4 border rounded-lg";
+    const variantClasses =
+        variant === "error"
+            ? "bg-red-500/10 border-red-500/20 text-red-400"
+            : "bg-yellow-500/10 border-yellow-500/20 text-yellow-400";
+
+    return (
+        <div className={`${baseClasses} ${variantClasses}`}>
+            <i className={`fa-sharp fa-solid ${icon}`} />
+            <span>{message}</span>
+        </div>
+    );
+});
+ErrorDisplay.displayName = "ErrorDisplay";
+
+const LoadingSpinner = memo(({ message }: { message: string }) => {
+    return (
+        <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <i className="fa-sharp fa-solid fa-spinner fa-spin text-2xl text-zinc-400" />
+            <span className="text-zinc-400">{message}</span>
+        </div>
+    );
+});
+LoadingSpinner.displayName = "LoadingSpinner";
+
+const EmptyState = memo(({ onAddSecret }: { onAddSecret: () => void }) => {
+    const { t } = useTranslation();
+    return (
+        <div className="flex flex-col items-center justify-center gap-4 py-12 h-full bg-zinc-800/50 rounded-lg">
+            <i className="fa-sharp fa-solid fa-key text-4xl text-zinc-600" />
+            <h3 className="text-lg font-semibold text-zinc-400">{t("waveconfig.secrets.emptyTitle")}</h3>
+            <p className="text-zinc-500">{t("waveconfig.secrets.emptyDesc")}</p>
+            <button
+                className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 rounded cursor-pointer transition-colors"
+                onClick={onAddSecret}
+            >
+                <i className="fa-sharp fa-solid fa-plus" />
+                <span className="font-medium">{t("waveconfig.secrets.addNew")}</span>
+            </button>
+        </div>
+    );
+});
+EmptyState.displayName = "EmptyState";
+
+const CLIInfoBubble = memo(() => {
+    const { t } = useTranslation();
+    return (
+        <div className="flex flex-col gap-2 p-4 m-4 bg-zinc-800/50 rounded-lg">
+            <div className="flex items-center gap-2">
+                <i className="fa-sharp fa-solid fa-terminal text-zinc-400" />
+                <div className="text-sm font-medium text-zinc-300">{t("waveconfig.secrets.cliAccess")}</div>
+            </div>
+            <div className="font-mono text-xs bg-black/20 px-3 py-2 rounded leading-relaxed text-zinc-300">
+                {t("waveconfig.secrets.cliCommands.list")}
+                <br />
+                {t("waveconfig.secrets.cliCommands.get")}
+                <br />
+                {t("waveconfig.secrets.cliCommands.set")}
+            </div>
+        </div>
+    );
+});
+CLIInfoBubble.displayName = "CLIInfoBubble";
+
+interface SecretListViewProps {
+    secretNames: string[];
+    onSelectSecret: (name: string) => void;
+    onAddSecret: () => void;
+}
+
+const SecretListView = memo(({ secretNames, onSelectSecret, onAddSecret }: SecretListViewProps) => {
+    const { t } = useTranslation();
+    return (
+        <div className="flex flex-col h-full w-full rounded-lg">
+            <div className="flex flex-col divide-y divide-zinc-700">
+                {secretNames.map((name) => (
+                    <div
+                        key={name}
+                        className={cn(
+                            "flex items-center gap-3 p-4 hover:bg-zinc-700/50 cursor-pointer transition-colors"
+                        )}
+                        onClick={() => onSelectSecret(name)}
+                    >
+                        <i className="fa-sharp fa-solid fa-key text-accent-500" />
+                        <span className="flex-1 font-mono">{name}</span>
+                        <i className="fa-sharp fa-solid fa-chevron-right text-zinc-500 text-sm" />
+                    </div>
+                ))}
+                <div
+                    className={cn(
+                        "flex items-center justify-center gap-2 p-4 hover:bg-zinc-700/50 cursor-pointer transition-colors border-t-2 border-zinc-600"
+                    )}
+                    onClick={onAddSecret}
+                >
+                    <i className="fa-sharp fa-solid fa-plus text-accent-500" />
+                    <span className="font-medium text-accent-500">{t("waveconfig.secrets.addNew")}</span>
+                </div>
+            </div>
+            <CLIInfoBubble />
+        </div>
+    );
+});
+SecretListView.displayName = "SecretListView";
+
+interface AddSecretFormProps {
+    newSecretName: string;
+    newSecretValue: string;
+    isLoading: boolean;
+    onNameChange: (name: string) => void;
+    onValueChange: (value: string) => void;
+    onCancel: () => void;
+    onSubmit: () => void;
+}
+
+const AddSecretForm = memo(
+    ({
+        newSecretName,
+        newSecretValue,
+        isLoading,
+        onNameChange,
+        onValueChange,
+        onCancel,
+        onSubmit,
+    }: AddSecretFormProps) => {
+        const { t } = useTranslation();
+        const isNameInvalid = newSecretName !== "" && !SecretNameRegex.test(newSecretName);
+
+        return (
+            <div className="flex flex-col gap-4 min-h-full p-6 bg-zinc-800/50 rounded-lg">
+                <h3 className="text-lg font-semibold">{t("waveconfig.secrets.addTitle")}</h3>
+                <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium">{t("waveconfig.secrets.nameLabel")}</label>
+                    <input
+                        type="text"
+                        className={cn(
+                            "px-3 py-2 bg-zinc-800 border rounded focus:outline-none",
+                            isNameInvalid
+                                ? "border-red-500 focus:border-red-500"
+                                : "border-zinc-600 focus:border-accent-500"
+                        )}
+                        value={newSecretName}
+                        onChange={(e) => onNameChange(e.target.value)}
+                        placeholder={t("waveconfig.secrets.namePlaceholder")}
+                        disabled={isLoading}
+                    />
+                    <div className="text-xs text-zinc-400">
+                        {t("waveconfig.secrets.nameHelp")}
+                    </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium">{t("waveconfig.secrets.valueLabel")}</label>
+                    <textarea
+                        className="px-3 py-2 bg-zinc-800 border border-zinc-600 rounded focus:outline-none focus:border-accent-500 font-mono text-sm"
+                        value={newSecretValue}
+                        onChange={(e) => onValueChange(e.target.value)}
+                        placeholder={t("waveconfig.secrets.valuePlaceholder")}
+                        disabled={isLoading}
+                        rows={4}
+                    />
+                </div>
+                <div className="flex gap-2 justify-end">
+                    <button
+                        className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={onCancel}
+                        disabled={isLoading}
+                    >
+                        {t("common.cancel")}
+                    </button>
+                    <button
+                        className="px-4 py-2 bg-accent-600 hover:bg-accent-500 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        onClick={onSubmit}
+                        disabled={isLoading || isNameInvalid || newSecretName.trim() === ""}
+                    >
+                        {isLoading ? (
+                            <>
+                                <i className="fa-sharp fa-solid fa-spinner fa-spin" />
+                                {t("common.adding")}
+                            </>
+                        ) : (
+                            t("waveconfig.secrets.addButton")
+                        )}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+);
+AddSecretForm.displayName = "AddSecretForm";
+
+interface SecretDetailViewProps {
+    model: WaveConfigViewModel;
+}
+
+const SecretDetailView = memo(({ model }: SecretDetailViewProps) => {
+    const { t } = useTranslation();
+    const secretName = useAtomValue(model.selectedSecretAtom);
+    const secretValue = useAtomValue(model.secretValueAtom);
+    const secretShown = useAtomValue(model.secretShownAtom);
+    const isLoading = useAtomValue(model.isLoadingAtom);
+    const setSecretValue = useSetAtom(model.secretValueAtom);
+
+    if (!secretName) {
+        return null;
+    }
+
+    return (
+        <div className="flex flex-col gap-4 min-h-full p-6 bg-zinc-800/50 rounded-lg">
+            <div className="flex items-center gap-2">
+                <i className="fa-sharp fa-solid fa-key text-accent-500" />
+                <h3 className="text-lg font-semibold">{secretName}</h3>
+            </div>
+            <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">{t("waveconfig.secrets.valueLabel")}</label>
+                <textarea
+                    ref={(ref) => {
+                        model.secretValueRef = ref;
+                        if (ref) {
+                            ref.focus();
+                        }
+                    }}
+                    className="px-3 py-2 bg-zinc-800 border border-zinc-600 rounded focus:outline-none focus:border-accent-500 font-mono text-sm"
+                    value={secretValue}
+                    onChange={(e) => setSecretValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                            model.closeSecretView();
+                        }
+                    }}
+                    disabled={isLoading}
+                    rows={6}
+                    placeholder={!secretShown ? t("waveconfig.secrets.valuePlaceholderNew") : ""}
+                />
+                {!secretShown && (
+                    <div className="text-sm text-zinc-400">
+                        {t("waveconfig.secrets.hiddenNotice")}{" "}
+                        {isLoading ? (
+                            <span className="text-zinc-500">
+                                <i className="fa-sharp fa-solid fa-spinner fa-spin" /> {t("common.loading")}
+                            </span>
+                        ) : (
+                            <button
+                                className="text-accent-500 underline hover:text-accent-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => model.showSecret()}
+                                disabled={isLoading}
+                            >
+                                {t("waveconfig.secrets.showSecret")}
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+            <div className="flex gap-2 justify-between">
+                <button
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    onClick={() => model.deleteSecret()}
+                    disabled={isLoading}
+                    title={t("waveconfig.secrets.deleteTitle")}
+                >
+                    {isLoading ? (
+                        <>
+                            <i className="fa-sharp fa-solid fa-spinner fa-spin" />
+                            {t("common.deleting")}
+                        </>
+                    ) : (
+                        <>
+                            <i className="fa-sharp fa-solid fa-trash" />
+                            {t("common.delete")}
+                        </>
+                    )}
+                </button>
+                <div className="flex gap-2">
+                    <button
+                        className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() => model.closeSecretView()}
+                        disabled={isLoading}
+                    >
+                        {t("common.cancel")}
+                    </button>
+                    <button
+                        className="px-4 py-2 bg-accent-600 hover:bg-accent-500 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        onClick={() => model.saveSecret()}
+                        disabled={isLoading}
+                    >
+                        {isLoading ? (
+                            <>
+                                <i className="fa-sharp fa-solid fa-spinner fa-spin" />
+                                {t("common.saving")}
+                            </>
+                        ) : (
+                            t("common.save")
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+SecretDetailView.displayName = "SecretDetailView";
+
+interface SecretsContentProps {
+    model: WaveConfigViewModel;
+}
+
+export const SecretsContent = memo(({ model }: SecretsContentProps) => {
+    const { t } = useTranslation();
+    const secretNames = useAtomValue(model.secretNamesAtom);
+    const selectedSecret = useAtomValue(model.selectedSecretAtom);
+    const isLoading = useAtomValue(model.isLoadingAtom);
+    const errorMessage = useAtomValue(model.errorMessageAtom);
+    const storageBackendError = useAtomValue(model.storageBackendErrorAtom);
+    const isAddingNew = useAtomValue(model.isAddingNewAtom);
+    const newSecretName = useAtomValue(model.newSecretNameAtom);
+    const newSecretValue = useAtomValue(model.newSecretValueAtom);
+
+    const setNewSecretName = useSetAtom(model.newSecretNameAtom);
+    const setNewSecretValue = useSetAtom(model.newSecretValueAtom);
+
+    const sortedSecretNames = useMemo(() => {
+        return [...secretNames].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    }, [secretNames]);
+
+    if (storageBackendError) {
+        return (
+            <div className="w-full h-full">
+                <div className="p-4">
+                    <ErrorDisplay message={storageBackendError} variant="warning" />
+                </div>
+            </div>
+        );
+    }
+
+    if (isLoading && secretNames.length === 0 && !selectedSecret) {
+        return (
+            <div className="w-full h-full">
+                <div>
+                    <LoadingSpinner message={t("waveconfig.secrets.loadingSecrets")} />
+                </div>
+            </div>
+        );
+    }
+
+    const renderContent = () => {
+        if (isAddingNew) {
+            return (
+                <AddSecretForm
+                    newSecretName={newSecretName}
+                    newSecretValue={newSecretValue}
+                    isLoading={isLoading}
+                    onNameChange={setNewSecretName}
+                    onValueChange={setNewSecretValue}
+                    onCancel={() => model.cancelAddingSecret()}
+                    onSubmit={() => model.addNewSecret()}
+                />
+            );
+        }
+
+        if (selectedSecret) {
+            return <SecretDetailView model={model} />;
+        }
+
+        if (secretNames.length === 0) {
+            return <EmptyState onAddSecret={() => model.startAddingSecret()} />;
+        }
+
+        return (
+            <SecretListView
+                secretNames={sortedSecretNames}
+                onSelectSecret={(name) => model.viewSecret(name)}
+                onAddSecret={() => model.startAddingSecret()}
+            />
+        );
+    };
+
+    return (
+        <div className="w-full h-full">
+            {errorMessage && (
+                <div className="p-4">
+                    <ErrorDisplay message={errorMessage} />
+                </div>
+            )}
+            {renderContent()}
+        </div>
+    );
+});
+
+SecretsContent.displayName = "SecretsContent";

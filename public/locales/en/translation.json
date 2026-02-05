@@ -1,0 +1,899 @@
+{
+  "menu": {
+    "createWorkspace": "Create Workspace",
+    "newWindow": "New Window",
+    "newBuilderWindow": "New WaveApp Builder Window",
+    "about": "About Wave Terminal",
+    "checkUpdates": "Check for Updates",
+    "reloadWindow": "Reload Window",
+    "reloadTab": "Reload Tab",
+    "relaunchAll": "Relaunch All Windows",
+    "clearTabCache": "Clear Tab Cache",
+    "toggleDevTools": "Toggle DevTools",
+    "resetZoom": "Reset Zoom",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out",
+    "launchFullScreen": "Launch On Full Screen",
+    "on": "On",
+    "off": "Off",
+    "workspace": "Workspace",
+    "window": "Window",
+    "view": "View",
+    "edit": "Edit",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "delete": "Delete",
+    "selectAll": "Select All",
+    "services": "Services",
+    "hide": "Hide Wave",
+    "hideOthers": "Hide Others",
+    "unhide": "Show All",
+    "quit": "Quit Wave",
+    "minimize": "Minimize",
+    "zoom": "Zoom",
+    "front": "Bring All to Front",
+    "closeWindow": "Close Window",
+    "toggleFullScreen": "Toggle Full Screen",
+    "file": "File"
+  },
+  "ctx": {
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "openClipboardUrl": "Open Clipboard URL ({{host}})"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "ok": "Ok",
+    "close": "Close",
+    "closeEsc": "Close (ESC)",
+    "closeError": "Close error",
+    "clickToCopyErrorMessage": "Click to Copy Error Message",
+    "invalidConfigurationClientOrWindowNotLoaded": "Invalid configuration: client or window was not loaded",
+    "delete": "Delete",
+    "deleting": "Deleting...",
+    "adding": "Adding...",
+    "copy": "Copy",
+    "reset": "Reset",
+    "retry": "Retry",
+    "default": "Default",
+    "defaultWithValue": "Default ({{value}})",
+    "on": "On",
+    "off": "Off",
+    "moreOptions": "More options",
+    "confirm": "Confirm",
+    "quit": "Quit",
+    "closeWindow": "Close Window",
+    "deleteWorkspace": "Delete Workspace",
+    "dismiss": "Dismiss",
+    "learnMore": "Learn More",
+    "confirmQuitTitle": "Confirm Quit",
+    "confirmQuitMessage": "Are you sure you want to quit {{appName}}?"
+  },
+  "onboarding": {
+    "welcome": "Welcome to Wave Terminal",
+    "supportGithub": "Support us on GitHub",
+    "openSourceDesc": "We're <i>open source</i> and committed to providing a free terminal for individual users. Please show your support by giving us a star on <1>Github (wavetermdev/waveterm)</1>",
+    "joinCommunity": "Join our Community",
+    "communityDesc": "Get help, submit feature requests, report bugs, or just chat with fellow terminal enthusiasts.<1>Join the Wave Discord Channel</1>",
+    "telemetryDesc": "Anonymous usage data helps us improve features you use.<1>Privacy Policy</1>",
+    "continue": "Continue",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "telemetryDisabledTitle": "Telemetry Disabled ✓",
+    "telemetryDisabledDesc1": "No problem, we respect your privacy.",
+    "telemetryDisabledDesc2": "But, without usage data, we're flying blind. A GitHub star helps us know Wave is useful and worth maintaining.",
+    "starOnGithub": "⭐ Star on GitHub",
+    "maybeLater": "Maybe Later",
+    "next": "Next",
+    "prev": "Prev",
+    "stepOf": "{{currentStep}} of {{totalSteps}}",
+    "getStarted": "Get Started",
+    "skipTour": "Skip Feature Tour >",
+    "waveAiTitle": "Wave AI",
+    "waveAiDesc": "Wave AI is your terminal assistant with context. I can read your terminal output, analyze widgets, read/write files, and help you solve problems faster.",
+    "waveAiToggleWithHeaderButton": "Toggle the Wave AI panel with the <0/> button in the header (top left)",
+    "waveAiToggleWithShortcut": "Or use the keyboard shortcut <0>{{shortcutKey}}</0> to quickly toggle",
+    "waveAiByokDesc": "Bring your own API keys or run local models with Ollama, LM Studio, and other OpenAI-compatible providers",
+    "magnifyTitle": "Magnify Blocks",
+    "magnifyDesc1": "Magnify any block to focus on what matters. Expand terminals, editors, and previews for a better view.",
+    "magnifyDesc2": "Use the magnify feature to work with complex outputs and large files more efficiently.",
+    "magnifyClickIcon": "You can also magnify a block by clicking on the <0/> icon in the block header.",
+    "magnifyQuickToggle": "A quick {{shortcutKey}}-M to magnify and another {{shortcutKey}}-M to unmagnify",
+    "filesTitle": "Viewing/Editing Files",
+    "filesDesc": "Wave can preview markdown, images, and video files on both local <i>and remote</i> machines.",
+    "filesUseWshView": "Use <0/> to preview files in Wave's graphical viewer",
+    "filesUseWshEdit": "Use <0/> to open config files or code files in Wave's graphical editor",
+    "filesCommandsWorkLocallyAndRemotely": "These commands work seamlessly on both local and remote machines, making it easy to view and edit files wherever they are.",
+    "upgradeMinor": {
+      "welcomeTitle": "Welcome to Wave v{{version}}!",
+      "waveAiIntro": "Wave AI is your terminal assistant with full context. It can read your terminal output, analyze widgets, read and write files, and help you solve problems faster.",
+      "newInVersion": "<0>New in v{{version}}:</0> Wave AI now supports local models and bring-your-own-key! Use Ollama, LM Studio, vLLM, OpenRouter, or any OpenAI-compatible provider.",
+      "betaFeedback": "Wave AI is in beta with included AI credits while we refine the experience. We're actively improving it and would love your feedback in <0>Discord</0>.",
+      "thanks": "Thanks for being an early Wave adopter! ⭐",
+      "githubStarDesc": "A GitHub star shows your support for Wave (and open-source) and helps us reach more developers.",
+      "alreadyStarred": "🙏 Already Starred",
+      "starNow": "⭐ Star Now"
+    },
+    "upgradePatch": {
+      "title": "Wave {{version}} Update",
+      "prevWithVersion": "Prev ({{version}})",
+      "nextWithVersion": "Next ({{version}})"
+    },
+    "fakeChat": {
+      "thinking": "AI is thinking...",
+      "widgetAccessOnTitle": "Widget Access ON"
+    },
+    "upgrade": {
+      "v0121": {
+        "summary": "Patch release focused on shell integration improvements, Wave AI enhancements, and restoring syntax highlighting in code editor blocks.",
+        "shell": {
+          "title": "Shell Integration & Context",
+          "osc7": "<0>OSC 7 Support</0> - Wave now automatically tracks and restores your current directory across restarts for bash, zsh, fish, and pwsh shells",
+          "contextTracking": "<0>Shell Context Tracking</0> - Tracks when your shell is ready, last command executed, and exit codes for better terminal management"
+        },
+        "waveAi": {
+          "title": "Wave AI Improvements",
+          "bullet1": "Display reasoning summaries while waiting for AI responses",
+          "bullet2": "Enhanced terminal context - AI now has access to shell state, current directory, command history, and exit codes",
+          "bullet3": "Added feedback buttons (thumbs up/down) for AI responses",
+          "bullet4": "Added copy button to easily copy AI responses to clipboard"
+        },
+        "other": {
+          "title": "Other Changes",
+          "bullet1": "Mobile user agent emulation support for web widgets",
+          "bullet2": "Fixed padding for header buttons in code editor",
+          "bullet3": "Restored syntax highlighting in code editor preview blocks"
+        }
+      },
+      "v0122": {
+        "summary": "Wave AI can now create and modify files with visual diff previews and easy rollback capabilities. Plus performance improvements and bug fixes.",
+        "fileEditing": {
+          "title": "Wave AI File Editing",
+          "bullet1": "<0>File Write Tool</0> - Wave AI can now create and modify files with your approval",
+          "bullet2": "<0>Visual Diff Preview</0> - See exactly what will change before approving edits",
+          "bullet3": "<0>Easy Rollback</0> - Revert file changes with a simple \"Revert File\" button"
+        },
+        "aiImprovements": {
+          "title": "Additional AI Improvements",
+          "bullet1": "Drag & drop files from preview viewer directly to Wave AI",
+          "bullet2": "Directory listings support in <0>`wsh ai`</0> commands",
+          "bullet3": "Adjustable thinking level and max output tokens per chat",
+          "bullet4": "Improved tool descriptions and input validations"
+        },
+        "bugFixes": {
+          "title": "Bug Fixes & Improvements",
+          "bullet1": "Fixed significant memory leak in the RPC system",
+          "bullet2": "Config file schema validation restored",
+          "bullet3": "Fixed PowerShell 5.x regression"
+        }
+      },
+      "v0123": {
+        "summary": "Wave AI model upgrade to GPT-5.1, new secret management features, and improved terminal input handling for interactive CLI tools.",
+        "waveAi": {
+          "title": "Wave AI Updates",
+          "bullet1": "<0>GPT-5.1 Model</0> - Upgraded to OpenAI's GPT-5.1 model for improved responses",
+          "bullet2": "<0>Thinking Mode Toggle</0> - New dropdown to select between Quick, Balanced, and Deep thinking modes",
+          "bullet3": "Fixed path mismatch issue when restoring AI write file backups"
+        },
+        "terminal": {
+          "title": "Terminal Improvements",
+          "bullet1": "<0>Enhanced Input Handling</0> - Better support for CLI tools like Claude Code",
+          "bullet2": "<0>Image Paste Support</0> - Paste images directly into terminal (saved to temp files)",
+          "bullet3": "Shift+Enter now inserts newlines by default for multi-line commands",
+          "bullet4": "Fixed duplicate text issue when switching input methods (IME)"
+        },
+        "secretStore": {
+          "title": "Secret Store",
+          "bullet1": "<0>Secret Management Widget</0> - Store and manage sensitive credentials securely",
+          "bullet2": "Access secrets via CLI with <0>wsh secret list/get/set</0> commands"
+        }
+      },
+      "v0130": {
+        "summary": "Wave v0.13 brings local AI support, bring-your-own-key (BYOK), a redesigned configuration system, and improved terminal functionality.",
+        "localAi": {
+          "title": "Local AI & BYOK",
+          "bullet1": "<0>OpenAI-Compatible API</0> - Connect to Ollama, LM Studio, vLLM, OpenRouter, and other local or hosted models",
+          "bullet2": "<0>Google Gemini</0> - Native support for Gemini models",
+          "bullet3": "<0>Provider Presets</0> - Built-in configs for OpenAI, OpenRouter, Google, Azure, and custom endpoints",
+          "bullet4": "<0>Multiple AI Modes</0> - Easily switch between models and providers"
+        },
+        "configWidget": {
+          "title": "Configuration Widget",
+          "bullet1": "<0>New Config Interface</0> - Dedicated widget accessible from the sidebar",
+          "bullet2": "<0>Better Organization</0> - Browse and edit settings with improved validation and error handling",
+          "bullet3": "<0>Integrated Secrets</0> - Manage API keys and credentials from the config widget"
+        },
+        "terminal": {
+          "title": "Terminal Updates",
+          "bullet1": "<0>Bracketed Paste Mode</0> - Enabled by default for better multi-line paste behavior",
+          "bullet2": "<0>Windows Paste Fix</0> - Ctrl+V now works as standard paste on Windows",
+          "bullet3": "<0>SSH Password Storage</0> - Store SSH passwords in Wave's secret store"
+        }
+      },
+      "v0131": {
+        "summary": "Wave v0.13.1 focuses on Windows platform improvements, Wave AI visual updates, and enhanced terminal navigation.",
+        "windows": {
+          "title": "Windows Platform Enhancements",
+          "bullet1": "<0>Integrated Window Layout</0> - Cleaner interface with controls integrated into the tab-bar header",
+          "bullet2": "<0>Git Bash Auto-Detection</0> - Automatically detects Git Bash installations",
+          "bullet3": "<0>SSH Agent Fallback</0> - Improved SSH agent support on Windows",
+          "bullet4": "<0>Updated Focus Keybinding</0> - Wave AI focus key changed to Alt:0 on Windows"
+        },
+        "waveAi": {
+          "title": "Wave AI Updates",
+          "bullet1": "<0>Refreshed Visual Design</0> - Complete UI refresh with transparency support for custom backgrounds",
+          "bullet2": "<0>BYOK Without Telemetry</0> - Wave AI now works with bring-your-own-key and local models without requiring telemetry"
+        },
+        "terminal": {
+          "title": "Terminal Improvements",
+          "bullet1": "<0>New Scrolling Keybindings</0> - Added Shift+Home, Shift+End, Shift+PageUp, and Shift+PageDown for better navigation"
+        }
+      }
+    }
+  },
+  "tab": {
+    "addTab": "Add Tab",
+    "configClean": "Configuration Clean",
+    "configCleanDesc": "There are no longer any errors detected in your config.",
+    "configError": "Configuration Error",
+    "configErrorButton": "Config Error",
+    "clearIndicator": "Clear Tab Indicator",
+    "clearAllIndicators": "Clear All Indicators",
+    "renameTab": "Rename Tab",
+    "copyTabId": "Copy TabId",
+    "backgrounds": "Backgrounds",
+    "closeTab": "Close Tab",
+    "activityNotification": "Activity notification"
+  },
+  "workspace": {
+    "switchWorkspace": "Switch workspace",
+    "openWorkspace": "Open workspace",
+    "createNew": "Create new workspace",
+    "save": "Save workspace",
+    "edit": "Edit workspace",
+    "current": "This is your current workspace",
+    "isOpen": "This workspace is open",
+    "menu": {
+      "settings": "Settings",
+      "tips": "Tips",
+      "secrets": "Secrets",
+      "help": "Help",
+      "editWidgetsJson": "Edit widgets.json"
+    },
+    "settingsHelpTooltip": "Settings & Help",
+    "runningDevBuild": "Running Wave Dev Build",
+    "apps": "Apps",
+    "noLocalAppsFound": "No local apps found",
+    "localWaveAppsTooltip": "Local WaveApps",
+    "confirmCloseWindowUnsavedTabs": "Window has unsaved tabs, closing window will delete existing tabs.\\n\\nContinue?",
+    "confirmDeleteWorkspace": "Deleting workspace will also delete its contents.\\n\\nContinue?"
+  },
+  "about": {
+    "title": "Wave Terminal",
+    "description": "Open-Source AI-Native Terminal<0/>Built for Seamless Workflows",
+    "clientVersion": "Client Version {{version}} {{dev}}({{buildTime}})",
+    "updateChannel": "Update Channel: {{channel}}",
+    "github": "Github",
+    "website": "Website",
+    "acknowledgements": "Acknowledgements",
+    "copyright": "&copy; {{year}} Command Line Inc."
+  },
+  "launcher": {
+    "viewName": "Widget Launcher",
+    "logoAlt": "Logo",
+    "searchWidgets": "Search widgets",
+    "noWidgets": "No widgets found. Press Escape to clear search.",
+    "typeToFilter": "Type to Filter",
+    "searching": "Searching \"{{term}}\"",
+    "enterToLaunch": ", Enter to Launch",
+    "arrowKeys": ", Arrow Keys to Navigate"
+  },
+  "waveconfig": {
+    "title": "Config Files",
+    "unsavedChanges": "Unsaved changes",
+    "save": "Save",
+    "saving": "Saving...",
+    "visual": "Visual",
+    "rawJson": "Raw JSON",
+    "viewDocumentation": "View documentation",
+    "deprecated": "Deprecated",
+    "files": {
+      "general": "General",
+      "connections": "Connections",
+      "connectionsDescWindows": "SSH hosts and WSL distros",
+      "connectionsDesc": "SSH hosts",
+      "sidebarWidgets": "Sidebar Widgets",
+      "waveAiModes": "Wave AI Modes",
+      "waveAiModesDesc": "Local models and BYOK",
+      "tabBackgrounds": "Tab Backgrounds",
+      "secrets": "Secrets",
+      "presets": "Presets",
+      "aiPresets": "AI Presets"
+    },
+    "secrets": {
+      "emptyTitle": "No Secrets",
+      "emptyDesc": "Add a secret to get started",
+      "addNew": "Add New Secret",
+      "cliAccess": "CLI Access",
+      "loadingSecrets": "Loading secrets...",
+      "addTitle": "Add New Secret",
+      "nameLabel": "Secret Name",
+      "namePlaceholder": "MY_SECRET",
+      "nameHelp": "Must start with a letter and contain only letters, numbers, and underscores",
+      "valueLabel": "Secret Value",
+      "valuePlaceholder": "Enter secret value...",
+      "valuePlaceholderNew": "Enter new secret value...",
+      "addButton": "Add Secret",
+      "showSecret": "Show Secret",
+      "hiddenNotice": "The current secret value is not shown by default for security purposes.",
+      "cliCommands": {
+        "list": "wsh secret list",
+        "get": "wsh secret get MY_SECRET",
+        "set": "wsh secret set MY_SECRET=myvalue"
+      },
+      "deleteTitle": "Delete this secret"
+    }
+  },
+  "connection": {
+    "local": "Local",
+    "remote": "Remote",
+    "editConnections": "Edit Connections",
+    "newConnection": "{{conn}} (New Connection)",
+    "reconnectTo": "Reconnect to {{conn}}",
+    "disconnect": "Disconnect {{conn}}",
+    "connectTo": "Connect to (username@host)...",
+    "gitBash": "Git Bash",
+    "connectedToGitBash": "Connected to Git Bash",
+    "connectedToLocalMachine": "Connected to Local Machine",
+    "connectedToLocalMachineWithName": "Connected to Local Machine ({{name}})",
+    "connectedTo": "Connected to {{conn}}",
+    "connectingTo": "Connecting to {{conn}}",
+    "errorConnectingTo": "Error connecting to {{conn}}",
+    "errorConnectingToWithError": "Error connecting to {{conn}} ({{error}})",
+    "disconnectedFrom": "Disconnected from {{conn}}",
+    "wshNotInstalled": "wsh is not installed for this connection"
+  },
+  "suggestion": {
+    "noSuggestions": "No Suggestions"
+  },
+  "preview": {
+    "entryManager": {
+      "newFile": "New File",
+      "newFolder": "New Folder",
+      "rename": "Rename"
+    },
+    "copyFileName": "Copy File Name",
+    "copyFullFileName": "Copy Full File Name",
+    "copyFileNameShellQuoted": "Copy File Name (Shell Quoted)",
+    "copyFullFileNameShellQuoted": "Copy Full File Name (Shell Quoted)",
+    "downloadFile": "Download File",
+    "openPreviewInNewBlock": "Open Preview in New Block",
+    "openTerminalHere": "Open Terminal Here",
+    "openFilePlaceholder": "Open File...",
+    "invalidSpecializedView": "Invalid Specialized View Component ({{view}})",
+    "tableOfContents": "Table of Contents",
+    "refresh": "Refresh",
+    "goToBookmark": "Go to {{label}} ({{path}})",
+    "copyFullPath": "Copy Full Path",
+    "editorFontSize": "Editor Font Size",
+    "saveFile": "Save File",
+    "revertFile": "Revert File",
+    "wordWrap": "Word Wrap",
+    "readOnly": "Read Only",
+    "edit": "Edit",
+    "bookmarks": {
+      "home": "Home",
+      "desktop": "Desktop",
+      "downloads": "Downloads",
+      "documents": "Documents",
+      "root": "Root"
+    }
+  },
+  "aipanel": {
+    "header": "Wave AI",
+    "widgetContext": "Widget Context",
+    "widgetContextOn": "ON",
+    "widgetContextOff": "OFF",
+    "context": "Context",
+    "moreOptions": "More options",
+    "dropFiles": "Drop files here",
+    "dropFilesDesc": "Images, PDFs, and text/code files supported",
+    "fileRejectedUnsupportedType_one": "{{count}} file rejected (unsupported type): {{fileNames}}. Supported: images, PDFs, and text/code files.",
+    "fileRejectedUnsupportedType_other": "{{count}} files rejected (unsupported type): {{fileNames}}. Supported: images, PDFs, and text/code files.",
+    "welcome": "Welcome to Wave AI",
+    "welcomeDesc": "Wave AI is your terminal assistant with context. I can read your terminal output, analyze widgets, access files, and help you solve problems faster.",
+    "gettingStarted": "Getting Started:",
+    "widgetContextDescOn": "When ON, I can read your terminal and analyze widgets.",
+    "widgetContextDescOff": "When OFF, I'm sandboxed with no system access.",
+    "dragDropDesc": "Drag & drop files or images for analysis",
+    "waitingForToolApprovals": "Waiting for tool approvals...",
+    "aiThinking": "AI is thinking...",
+    "noTextContent": "(no text content)",
+    "startChatKey": "to start a new chat",
+    "togglePanelKey": "to toggle panel",
+    "focusKey": "to focus",
+    "questionsFeedback": "Questions or feedback?",
+    "joinDiscord": "Join our Discord",
+    "betaMsg": "BETA: Free to use. Daily limits keep our costs in check.",
+    "builderWelcome": "WaveApp Builder",
+    "builderWelcomeDesc": "The WaveApp builder helps create wave widgets that integrate seamlessly into Wave Terminal.",
+    "newChat": "New Chat",
+    "configureModes": "Configure Modes",
+    "premiumTag": "(premium)",
+    "modeSection": {
+      "current": "Current",
+      "compatible": "Compatible Modes",
+      "incompatible": "Incompatible Modes",
+      "waveAiCloud": "Wave AI Cloud",
+      "custom": "Custom"
+    },
+    "startNewChatToSwitch": "(Start a New Chat to Switch)",
+    "enableTelemetryToUnlockWaveAiCloud": "(enable telemetry to unlock Wave AI Cloud)",
+    "invalidModeWithValue": "Invalid ({{mode}})",
+    "aiModeTitle": "AI Mode: {{mode}}",
+    "noToolsWarning": "Warning: This custom mode was configured without the \"tools\" capability in the \"ai:capabilities\" array. Without tool support, Wave AI will not be able to interact with widgets or files.",
+    "noToolsSupport": "No Tools Support",
+    "rateLimit": {
+      "getMore": "Get More",
+      "soon": "soon",
+      "premiumUsed": "{{used}}/{{limit}} Premium Used",
+      "premium": "{{limit}}/{{limit}} Premium",
+      "nowOnBasic": "Now on Basic",
+      "reqs": "{{limit}}/{{limit}} Reqs",
+      "limitReached": "Limit Reached",
+      "resetsIn": "Resets in {{time}}"
+    },
+    "byokAnnouncement": {
+      "title": "New: BYOK & Local AI Support",
+      "desc": "Wave AI now supports bring-your-own-key (BYOK) with OpenAI, Google Gemini, Azure, and OpenRouter, plus local models via Ollama, LM Studio, and other OpenAI-compatible providers.",
+      "configureAiModes": "Configure AI Modes",
+      "viewDocs": "View Docs"
+    },
+    "tools": {
+      "approve": "Approve",
+      "approveAllWithCount": "Approve All ({{count}})",
+      "deny": "Deny",
+      "denyAll": "Deny All",
+      "notApproved": "Not approved",
+      "readingFiles": "Reading Files",
+      "restoreBackupFile": "Restore backup file",
+      "revertFile": "Revert File",
+      "openInDiffViewer": "Open in diff viewer",
+      "showDiff": "Show Diff"
+    },
+    "maxTokens": "Max Output Tokens",
+    "maxTokensOption": "{{tokens}}",
+    "maxTokensOptionPro": "{{tokens}} (Pro)",
+    "maxTokensOptionDevTesting": "{{tokens}} (Dev Testing)",
+    "hideWaveAI": "Hide Wave AI",
+    "telemetryRequiredTitle": "Wave AI",
+    "telemetryRequiredDesc": "Wave AI is free to use and provides integrated AI chat that can interact with your widgets, help you with code, analyze files, and assist with your terminal workflows.",
+    "telemetryTitle": "Telemetry keeps Wave AI free",
+    "telemetryDesc1": "To keep Wave AI free for everyone, we require a small amount of <i>anonymous</i> usage data (app version, feature usage, system info).",
+    "telemetryDesc2": "This helps us block abuse by automated systems and ensure it's used by real people like you.",
+    "telemetryDesc3": "We never collect your files, prompts, keystrokes, hostnames, or personally identifying information. Wave AI is powered by OpenAI's APIs, please refer to OpenAI's privacy policy for details on how they handle your data.",
+    "telemetryDesc4": "For information about BYOK and local model support, see",
+    "enableTelemetry": "Enable Telemetry and Continue",
+    "enablingTelemetry": "Enabling...",
+    "privacyPolicy": "Privacy Policy",
+    "feedback": {
+      "good": "Good Response",
+      "bad": "Bad Response",
+      "copyMessage": "Copy Message"
+    },
+    "restoreBackup": {
+      "successTitle": "Backup Successfully Restored",
+      "successDesc": "The file <0>{{filename}}</0> has been restored to its previous state.",
+      "errorTitle": "Failed to Restore Backup",
+      "errorDesc": "An error occurred while restoring the backup:",
+      "confirmTitle": "Restore File Backup",
+      "confirmDesc": "This will restore <0>{{filename}}</0> to its state before this edit was made{{timestamp}}.",
+      "confirmWarning": "Any changes made by this edit and subsequent edits will be lost.",
+      "confirmRestore": "Confirm Restore",
+      "restoring": "Restoring..."
+    }
+  },
+  "block": {
+    "settings": "Settings",
+    "addToLayout": "Add to Layout",
+    "closeBlock": "Close Block",
+    "copyBlockId": "Copy BlockId",
+    "magnifyBlock": "Magnify Block",
+    "unMagnifyBlock": "Un-Magnify Block",
+    "minimize": "Minimize",
+    "magnify": "Magnify",
+    "errorRenderingHeader": "Error Rendering View Header: {{message}}",
+    "viewName": {
+      "none": "(No View)",
+      "terminal": "Terminal",
+      "preview": "Preview",
+      "web": "Web",
+      "waveai": "WaveAI",
+      "help": "Help",
+      "tips": "Tips"
+    },
+    "durableSession": {
+      "base": "Durable Session",
+      "attached": "Durable Session (Attached)",
+      "detached": "Durable Session (Detached)",
+      "starting": "Durable Session (Starting)",
+      "endedExited": "Durable Session (Ended, Exited)",
+      "endedEnvLost": "Durable Session (Ended, Environment Lost)",
+      "endedFailedStart": "Durable Session (Ended, Failed to Start)",
+      "ended": "Durable Session (Ended)",
+      "awaitingConnection": "Durable Session (Awaiting Connection)",
+      "noSession": "No Session"
+    }
+  },
+  "tips": {
+    "headerIcons": {
+      "title": "Header Icons",
+      "magnifyBlock": "Magnify a Block",
+      "connectRemoteServer": "Connect to a remote server",
+      "blockSettings": "Block Settings",
+      "closeBlock": "Close Block"
+    },
+    "keybindings": {
+      "title": "Important Keybindings",
+      "main": {
+        "title": "Main Keybindings",
+        "newTab": "New Tab",
+        "newTerminalBlock": "New Terminal Block",
+        "openWaveAiPanel": "Open Wave AI Panel"
+      },
+      "tabSwitching": {
+        "titleWithKey": "Tab Switching ({{key}})",
+        "switchToNthTab": "Switch To Nth Tab",
+        "previousTab": "Previous Tab",
+        "nextTab": "Next Tab"
+      },
+      "blockNavigation": {
+        "titleWithKeys": "Block Navigation ({{keys}})",
+        "navigateBetweenBlocks": "Navigate Between Blocks",
+        "focusNthBlock": "Focus Nth Block",
+        "focusWaveAi": "Focus Wave AI"
+      },
+      "splitBlocks": {
+        "title": "Split Blocks",
+        "splitRight": "Split Right",
+        "splitBelow": "Split Below",
+        "splitInDirection": "Split in Direction"
+      }
+    },
+    "wshCommands": {
+      "title": "wsh commands",
+      "viewDesc": "Preview files, directories, or web URLs",
+      "editDesc": "Edit config and code files"
+    },
+    "moreTips": {
+      "title": "More Tips",
+      "tabs": "<0>Tabs</0> - Right click any tab to change backgrounds or rename.",
+      "webView": "<0>Web View</0> - Click the gear in the web view to set your homepage",
+      "terminal": "<0>Terminal</0> - Click the gear in the terminal to set your terminal theme and font size"
+    },
+    "needMoreHelp": {
+      "title": "Need More Help?",
+      "joinDiscord": "Join Our Discord",
+      "configurationOptions": "Configuration Options",
+      "allKeybindings": "All Keybindings",
+      "fullDocumentation": "Full Documentation"
+    }
+  },
+  "search": {
+    "placeholder": "Search",
+    "resultsLabel": "Search Results",
+    "prevResult": "Previous Result (Shift+Enter)",
+    "nextResult": "Next Result (Enter)",
+    "regex": "Regular Expression",
+    "wholeWord": "Whole Word",
+    "caseSensitive": "Case Sensitive"
+  },
+  "term": {
+    "waveApp": "Wave App",
+    "switchBackToTerminal": "Switch back to Terminal",
+    "switchToWaveApp": "Switch to Wave App",
+    "restartingCommand": "Restarting Command",
+    "commandExitedSuccessfully": "Command Exited Successfully",
+    "exitCode": "Exit Code: {{code}}",
+    "multiInputOn": "Multi Input ON",
+    "multiInputTitle": "Input will be sent to all connected terminals (click to disable)",
+    "controllerNoun": {
+      "command": "Command",
+      "shell": "Shell"
+    },
+    "controller": {
+      "clickToStart": "Click to Start {{noun}}",
+      "runningClickToRestart": "{{noun}} Running. Click to Restart",
+      "exitedClickToRestart": "{{noun}} Exited. Click to Restart"
+    },
+    "shellIntegration": {
+      "noIntegration": "No shell integration — Wave AI unable to run commands.",
+      "ready": "Shell ready — Wave AI can run commands in this terminal.",
+      "busy": "Shell busy — Wave AI unable to run commands while another command is running.",
+      "disabledInProgram": "Wave AI integration disabled while you're inside {{program}}."
+    },
+    "sendToWaveAI": "Send to Wave AI",
+    "openUrl": "Open URL ({{host}})",
+    "openUrlExternal": "Open URL in External Browser",
+    "newBlockInheritCwd": "New Terminal Block (Inherit Path)",
+    "splitHorizontally": "Split Horizontally",
+    "splitVertically": "Split Vertically",
+    "fileBrowser": "File Browser",
+    "themes": "Themes",
+    "fontSize": "Font Size",
+    "transparency": "Transparency",
+    "transparentBackground": "Transparent Background",
+    "noTransparency": "No Transparency",
+    "advanced": "Advanced",
+    "allowBracketedPasteMode": "Allow Bracketed Paste Mode",
+    "forceRestartController": "Force Restart Controller",
+    "clearOutputOnRestart": "Clear Output On Restart",
+    "runOnStartup": "Run On Startup",
+    "debugConnection": "Debug Connection",
+    "debugConnectionInfo": "Info",
+    "debugConnectionVerbose": "Verbose",
+    "sessionDurability": "Session Durability",
+    "restartSessionStandardMode": "Restart Session in Standard Mode",
+    "closeToolbar": "Close Toolbar"
+  },
+  "webview": {
+    "openExternalBrowser": "Open in External Browser",
+    "mobileUserAgentIphoneTitle": "Mobile User Agent: iPhone",
+    "mobileUserAgentAndroidTitle": "Mobile User Agent: Android",
+    "copyUrlToClipboard": "Copy URL to Clipboard",
+    "setBlockHomepage": "Set Block Homepage",
+    "setDefaultHomepage": "Set Default Homepage",
+    "userAgentType": "User Agent Type",
+    "userAgentIphone": "Mobile: iPhone",
+    "userAgentAndroid": "Mobile: Android",
+    "hideNavigation": "Hide Navigation",
+    "showNavigation": "Show Navigation",
+    "openDevTools": "Open DevTools",
+    "closeDevTools": "Close DevTools",
+    "setZoomFactor": "Set Zoom Factor",
+    "clearHistory": "Clear History",
+    "clearCookiesAndStorageAll": "Clear Cookies and Storage (All Web Widgets)",
+    "bookmarks": {
+      "openBookmarkPlaceholder": "Open Bookmark...",
+      "noBookmarksTitle": "No Bookmarks Configured",
+      "noBookmarksDesc": "Edit your <0>bookmarks.json</0> file to configure bookmarks.",
+      "openBookmarksJson": "Open bookmarks.json",
+      "noMatching": "No matching bookmarks",
+      "editBookmarksJson": "Edit bookmarks.json"
+    }
+  },
+  "native": {
+    "openInDefaultApp": "Open in Default Application",
+    "revealInManager": "Reveal in {{manager}}",
+    "manager": {
+      "finder": "Finder",
+      "explorer": "Explorer",
+      "fileManager": "File Manager"
+    },
+    "saveImage": "Save Image",
+    "images": "Images",
+    "arm64Translation": {
+      "title": "Wave has detected a performance issue",
+      "message": "Wave is running in ARM64 translation mode which may impact performance.\\n\\nRecommendation: Download the native ARM64 version from our website for optimal performance."
+    }
+  },
+  "sysinfo": {
+    "plotType": "Plot Type",
+    "time": "Time",
+    "cpuPercent": "CPU %",
+    "memoryTotal": "Memory Total",
+    "memoryUsed": "Memory Used",
+    "memoryFree": "Memory Free",
+    "memoryAvailable": "Memory Available",
+    "core": "Core"
+  },
+  "builder": {
+    "title": "WaveApp Builder",
+    "windowTitle": "WaveApp Builder ({{appId}})",
+    "tabs": {
+      "preview": "Preview",
+      "code": "Code",
+      "configData": "Config/Data",
+      "files": "Files",
+      "secrets": "Secrets"
+    },
+    "actions": {
+      "create": "Create",
+      "publishApp": "Publish App",
+      "publish": "Publish",
+      "refresh": "Refresh",
+      "rename": "Rename",
+      "restartApp": "Restart App",
+      "sendOutputToAi": "Send Output to AI",
+      "addErrorToAiContext": "Add Error to AI Context",
+      "askAiToFix": "Ask AI to Fix",
+      "startApp": "Start App",
+      "switchApp": "Switch App",
+      "mapDefault": "Map Default",
+      "setAndMapDefault": "Set and Map Default",
+      "setAndMap": "Set and Map"
+    },
+    "appSelection": {
+      "createNew": "Create New WaveApp",
+      "namePlaceholder": "my-app",
+      "selectToEdit": "Select a WaveApp to Edit",
+      "existingWaveApps": "Existing WaveApps",
+      "loadingApps": "Loading apps...",
+      "failedToLoadApps": "Failed to load apps",
+      "failedToCreateDraftFromLocal": "Failed to create draft from {{appId}}: {{errorMessage}}",
+      "lastUpdated": "Last updated: {{relativeTime}}",
+      "or": "or",
+      "draftSuffix": "(draft)",
+      "validation": {
+        "maxLength": "Name must be {{max}} characters or less",
+        "allowedChars": "Only letters, numbers, hyphens, and underscores allowed"
+      }
+    },
+    "publish": {
+      "confirmTitle": "Publish App",
+      "successTitle": "App Published Successfully",
+      "publishedTo": "Your app has been published to",
+      "failedTitle": "Publish Failed",
+      "noBuilderAppId": "No builder app ID found",
+      "publishTo": "This will publish your app to",
+      "overwriteWarning": "This will overwrite any existing app with the same name. Are you sure?"
+    },
+    "buildPanel": {
+      "title": "Build Output",
+      "debug": "Debug",
+      "addToContext": "Add to Context",
+      "fromBuilderOutput": "from builder output:",
+      "waitingForOutput": "Waiting for output..."
+    },
+    "codeTab": {
+      "noAppSelected": "No builder app selected",
+      "loadingFile": "Loading {{fileName}}..."
+    },
+    "configDataTab": {
+      "notRunningTitle": "App Not Running",
+      "notRunningDesc": "The tsunami app must be running to view config and data. Please start the app from the Preview tab first.",
+      "errorLoadingTitle": "Error Loading Data",
+      "loadingData": "Loading data...",
+      "configTitle": "Config",
+      "dataTitle": "Data",
+      "copyConfig": "Copy Config",
+      "copyData": "Copy Data"
+    },
+    "filesTab": {
+      "title": "Static Files",
+      "refreshFileList": "Refresh file list",
+      "addFile": "Add File",
+      "dragDropHint": "Drag and drop files here or click \"{{addFileLabel}}\". Maximum file size: {{maxFileSize}}",
+      "loadingFiles": "Loading files...",
+      "emptyState": "No files yet. Drag and drop files here or click \"{{addFileLabel}}\" to get started.",
+      "generatedReadOnly": "Generated by framework (read-only)",
+      "fileOptions": "File options",
+      "errors": {
+        "fileTooLarge": "File size exceeds maximum allowed size of {{maxSize}}"
+      },
+      "context": {
+        "renameFile": "Rename File",
+        "deleteFile": "Delete File"
+      },
+      "rename": {
+        "title": "Rename File",
+        "currentName": "Current name:",
+        "errors": {
+          "emptyName": "File name cannot be empty",
+          "invalidCharacters": "File name cannot contain / or \\\\"
+        }
+      },
+      "delete": {
+        "title": "Delete File",
+        "confirmPrefix": "Are you sure you want to delete",
+        "cannotUndo": "This action cannot be undone."
+      }
+    },
+    "previewTab": {
+      "emptyState": {
+        "title": "No App to Preview",
+        "desc": "Get started by using the AI chat interface on the left to create your WaveApp. Describe what you want to build, and the AI will help you generate the code.",
+        "hintPrefix": "Your app will appear here once",
+        "hintSuffix": "is created"
+      },
+      "error": {
+        "title": "Build Error",
+        "unknownError": "Unknown Error"
+      },
+      "secretError": {
+        "title": "Secrets Required",
+        "desc": "This app requires secrets that must be configured. Please use the Secrets tab to set and bind the required secrets for your app to run.",
+        "goToSecretsTab": "Go to Secrets Tab"
+      },
+      "building": {
+        "title": "App is Building...",
+        "desc": "Your WaveApp is being compiled and prepared. This may take a few moments."
+      },
+      "stopped": {
+        "title": "App is Not Running",
+        "desc": "Your WaveApp is currently not running. Click the button below to start it.",
+        "starting": "Starting..."
+      },
+      "ai": {
+        "buildError": "Build Error:",
+        "buildOutput": "Build Output:",
+        "fixPrompt": "Please help me fix this build error:"
+      }
+    },
+    "secretsTab": {
+      "title": "Secret Bindings",
+      "intro": "Map app secrets to Wave secret store names. Required secrets must be bound before the app can run successfully. Changes are saved automatically.",
+      "unboundRequiredWarning": "Some required secrets are not bound yet.",
+      "emptyState": "No secrets defined in this app manifest.",
+      "manifestNotAvailable": "App manifest not available. Secrets will be shown once the app builds successfully.",
+      "required": "Required",
+      "optional": "Optional",
+      "status": {
+        "notMapped": "Secret is Not Mapped",
+        "validMapping": "Secret Has a Valid Mapping",
+        "invalidBinding": "Secret Binding is Invalid"
+      },
+      "errors": {
+        "saveBindingsFailed": "Failed to save secret bindings: {{errorMessage}}"
+      },
+      "setSecret": {
+        "title": "Set and Map Secret",
+        "errorTitle": "Error Setting Secret",
+        "secretNameLabel": "Secret Name:",
+        "valuePlaceholder": "Paste secret value here...",
+        "storageHint": "Secrets are stored securely in Wave's secret store"
+      }
+    }
+  },
+  "waveai": {
+    "provider": {
+      "remoteAnthropic": "Using Remote Anthropic API ({{model}})",
+      "remotePerplexity": "Using Remote Perplexity API ({{model}})",
+      "waveProxy": "Using Wave's AI Proxy ({{model}})",
+      "openAiDefaultEndpoint": "OpenAI Default Endpoint",
+      "localModel": "Using Local Model @ {{baseUrl}} ({{model}})",
+      "remoteModel": "Using Remote Model @ {{baseUrl}} ({{model}})"
+    },
+    "presets": {
+      "add": "Add AI preset...",
+      "selectTitle": "Select AI Configuration"
+    },
+    "history": {
+      "clear": "Clear Chat History"
+    }
+  },
+  "waveapp": {
+    "start": "Start",
+    "starting": "Starting...",
+    "stop": "Stop WaveApp",
+    "restart": "Restart WaveApp",
+    "restartForceRebuild": "Restart WaveApp and Force Rebuild",
+    "remixInBuilder": "Remix WaveApp in Builder"
+  },
+  "update": {
+    "availableTitle": "Update Available",
+    "availableMessage": "A new update is available and ready to be installed.",
+    "noUpdatesAvailable": "There are currently no updates available.",
+    "applicationUpdateTitle": "Application Update",
+    "downloadedDetail": "A new version has been downloaded. Restart the application to apply the updates.",
+    "restart": "Restart",
+    "later": "Later",
+    "installNow": "Install Now",
+    "downloadingTitle": "Downloading Update",
+    "downloadingMessage": "The update is currently being downloaded.",
+    "downloadingAction": "Downloading...",
+    "installingTitle": "Installing Update",
+    "installingMessage": "The update is currently being installed.",
+    "installingAction": "Installing...",
+    "errorTitle": "Update Error",
+    "errorMessage": "An error occurred during the update process.",
+    "retryUpdate": "Retry Update"
+  }
+}
