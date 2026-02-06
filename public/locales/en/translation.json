@@ -47,6 +47,7 @@
   },
   "common": {
     "loading": "Loading...",
+    "open": "Open",
     "save": "Save",
     "saving": "Saving...",
     "cancel": "Cancel",
@@ -60,6 +61,7 @@
     "deleting": "Deleting...",
     "adding": "Adding...",
     "copy": "Copy",
+    "copied": "Copied",
     "reset": "Reset",
     "retry": "Retry",
     "default": "Default",
@@ -75,6 +77,77 @@
     "learnMore": "Learn More",
     "confirmQuitTitle": "Confirm Quit",
     "confirmQuitMessage": "Are you sure you want to quit {{appName}}?"
+  },
+  "favorites": {
+    "title": "Favorites",
+    "hint": "Right-click a folder and choose “Add to Favorites”.",
+    "copyFullPath": "Copy Full Path",
+    "add": "Add to Favorites",
+    "addCurrentFolder": "Add current folder to Favorites",
+    "remove": "Remove from Favorites"
+  },
+  "explorer": {
+    "thisPC": "This PC",
+    "quickAccess": "Quick access",
+    "back": "Back",
+    "forward": "Forward",
+    "up": "Up",
+    "address": "Address",
+    "search": "Search",
+    "details": "Details",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleHidden": "Toggle hidden files",
+    "openView": "Open Explorer view",
+    "confirm": {
+      "copy": {
+        "title": "Confirm Copy",
+        "text": "Copy “{{name}}” to “{{dest}}” and proceed?"
+      },
+      "move": {
+        "title": "Confirm Move",
+        "text": "Move “{{name}}” to “{{dest}}” and proceed?"
+      }
+    },
+    "confirmOverwrite": {
+      "title": "Confirm Overwrite File(s)",
+      "copyText": "This copy operation will overwrite an existing file. Would you like to continue?",
+      "moveText": "This move operation will overwrite an existing file. Would you like to continue?",
+      "deleteThenCopy": "Delete Then Copy",
+      "deleteThenMove": "Delete Then Move",
+      "sync": "Sync"
+    },
+    "operationFailed": {
+      "copyTitle": "Copy Failed",
+      "moveTitle": "Move Failed"
+    },
+    "dnd": {
+      "invalidTarget": {
+        "title": "Invalid Drop Target",
+        "text": "Can't copy or move a folder into itself."
+      }
+    },
+    "context": {
+      "view": "View",
+      "sortBy": "Sort by"
+    },
+    "view": {
+      "details": "Details",
+      "list": "List",
+      "smallIcons": "Small icons",
+      "mediumIcons": "Medium icons",
+      "largeIcons": "Large icons"
+    },
+    "sort": {
+      "name": "Name",
+      "dateModified": "Date modified",
+      "type": "Type",
+      "size": "Size",
+      "ascending": "Ascending",
+      "descending": "Descending"
+    },
+    "type": "Type",
+    "size": "Size",
+    "modified": "Modified"
   },
   "onboarding": {
     "welcome": "Welcome to Wave Terminal",
@@ -260,6 +333,7 @@
     "edit": "Edit workspace",
     "current": "This is your current workspace",
     "isOpen": "This workspace is open",
+    "noActiveTab": "No active tab",
     "menu": {
       "settings": "Settings",
       "tips": "Tips",
@@ -360,6 +434,14 @@
     "disconnectedFrom": "Disconnected from {{conn}}",
     "wshNotInstalled": "wsh is not installed for this connection"
   },
+  "connStatus": {
+    "disconnected": "Disconnected from {{connName}}",
+    "connecting": "Connecting to {{connName}}",
+    "reconnect": "Reconnect",
+    "errorLine": "Error: {{error}}",
+    "wshErrorLine": "WSH: {{error}}",
+    "disableWshAlways": "Disable WSH for this connection"
+  },
   "suggestion": {
     "noSuggestions": "No Suggestions"
   },
@@ -394,6 +476,19 @@
       "downloads": "Downloads",
       "documents": "Documents",
       "root": "Root"
+    },
+    "directory": {
+      "columns": {
+        "name": "Name",
+        "perm": "Perm",
+        "lastModified": "Date modified",
+        "type": "Type",
+        "size": "Size"
+      },
+      "search": {
+        "typeToSearch": "Type to search",
+        "searchingFor": "Searching for “{{search}}”"
+      }
     }
   },
   "aipanel": {

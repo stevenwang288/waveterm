@@ -6,6 +6,7 @@ import { ContextMenuModel } from "@/app/store/contextmenu";
 import { FavoriteItem, FavoritesModel } from "@/app/store/favorites-model";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { atoms } from "@/store/global";
 import { makeIconClass } from "@/util/util";
 import {
     FloatingPortal,
@@ -17,6 +18,7 @@ import {
     useInteractions,
 } from "@floating-ui/react";
 import clsx from "clsx";
+import { useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -33,6 +35,7 @@ const FavoritesItem = memo(
         onToggleExpand,
         onRemove,
         onNavigate,
+        scopeId,
     }: {
         item: FavoriteItem;
         level: number;
@@ -40,6 +43,7 @@ const FavoritesItem = memo(
         onToggleExpand: (id: string) => void;
         onRemove: (id: string) => void;
         onNavigate: (path: string) => void;
+        scopeId: string;
     }) => {
         const { t } = useTranslation();
         const hasChildren = item.children && item.children.length > 0;
@@ -62,7 +66,7 @@ const FavoritesItem = memo(
                         click: () => {
                             const label = prompt("输入分类名称:");
                             if (label) {
-                                const model = FavoritesModel.getInstance();
+                                const model = FavoritesModel.getInstance(scopeId);
                                 model.addFavorite(`${item.path}/__category__`, label, item.id);
                                 // Trigger re-render
                                 window.dispatchEvent(new Event("favorites-updated"));
@@ -78,7 +82,7 @@ const FavoritesItem = memo(
                     },
                 ];
 
-                ContextMenuModel.showContextMenu(menu, e.nativeEvent);
+                ContextMenuModel.showContextMenu(menu, e);
             },
             [item, t, onRemove, onNavigate]
         );
@@ -119,6 +123,7 @@ const FavoritesItem = memo(
                                 onToggleExpand={onToggleExpand}
                                 onRemove={onRemove}
                                 onNavigate={onNavigate}
+                                scopeId={scopeId}
                             />
                         ))}
                     </div>
@@ -132,11 +137,12 @@ FavoritesItem.displayName = "FavoritesItem";
 
 const FavoritesPanel = memo(() => {
     const { t } = useTranslation();
+    const tabId = useAtomValue(atoms.staticTabId);
     const [state, setState] = useState<FavoritesUIState>({
         items: [],
         expandedIds: new Set(),
     });
-    const favoritesModel = FavoritesModel.getInstance();
+    const favoritesModel = FavoritesModel.getInstance(tabId);
 
     useEffect(() => {
         const updateFavorites = () => {
@@ -202,6 +208,7 @@ const FavoritesPanel = memo(() => {
                                 onToggleExpand={handleToggleExpand}
                                 onRemove={handleRemove}
                                 onNavigate={handleNavigate}
+                                scopeId={tabId}
                             />
                         ))}
                     </div>

@@ -14,11 +14,12 @@ interface ConnectionButtonProps {
     connection: string;
     changeConnModalAtom: jotai.PrimitiveAtom<boolean>;
     isTerminalBlock?: boolean;
+    compact?: boolean;
 }
 
 export const ConnectionButton = React.memo(
     React.forwardRef<HTMLDivElement, ConnectionButtonProps>(
-        ({ connection, changeConnModalAtom, isTerminalBlock }: ConnectionButtonProps, ref) => {
+        ({ connection, changeConnModalAtom, isTerminalBlock, compact }: ConnectionButtonProps, ref) => {
             const { t } = useTranslation();
             const [connModalOpen, setConnModalOpen] = jotai.useAtom(changeConnModalAtom);
             const isLocal = util.isLocalConnName(connection);
@@ -105,7 +106,10 @@ export const ConnectionButton = React.memo(
                 <>
                     <div
                         ref={ref}
-                        className="group flex items-center flex-nowrap overflow-hidden text-ellipsis min-w-0 font-normal text-primary rounded-sm hover:bg-highlightbg cursor-pointer"
+                        className={util.cn(
+                            "group flex items-center flex-nowrap overflow-hidden text-ellipsis min-w-0 font-normal text-primary rounded-sm hover:bg-highlightbg cursor-pointer",
+                            compact && "w-7 h-7 justify-center"
+                        )}
                         onClick={clickHandler}
                         title={titleText}
                     >
@@ -124,18 +128,19 @@ export const ConnectionButton = React.memo(
                                 style={{ color: color }}
                             />
                         </span>
-                        {connDisplayName ? (
-                            <div
-                                className={util.cn(
-                                    "flex-[1_2_auto] overflow-hidden pr-1 ellipsis",
-                                    extraDisplayNameClassName
-                                )}
-                            >
-                                {connDisplayName}
-                            </div>
-                        ) : isLocal ? null : (
-                            <div className="flex-[1_2_auto] overflow-hidden pr-1 ellipsis">{connection}</div>
-                        )}
+                        {!compact &&
+                            (connDisplayName ? (
+                                <div
+                                    className={util.cn(
+                                        "flex-[1_2_auto] overflow-hidden pr-1 ellipsis",
+                                        extraDisplayNameClassName
+                                    )}
+                                >
+                                    {connDisplayName}
+                                </div>
+                            ) : isLocal ? null : (
+                                <div className="flex-[1_2_auto] overflow-hidden pr-1 ellipsis">{connection}</div>
+                            ))}
                     </div>
                     {showNoWshButton && (
                         <IconButton

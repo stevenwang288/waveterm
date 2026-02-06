@@ -4,15 +4,90 @@
 import { WindowService } from "@/app/store/services";
 import { RpcResponseHelper, WshClient } from "@/app/store/wshclient";
 import { RpcApi } from "@/app/store/wshclientapi";
+import { fireAndForget, isBlank } from "@/util/util";
 import { Notification, net, safeStorage, shell } from "electron";
 import { getResolvedUpdateChannel } from "emain/updater";
 import { unamePlatform } from "./emain-platform";
 import { getWebContentsByBlockId, webGetSelector } from "./emain-web";
-import { createBrowserWindow, getWaveWindowById, getWaveWindowByWorkspaceId } from "./emain-window";
+import {
+    createBrowserWindow,
+    createWindowForWorkspace,
+    focusedWaveWindow,
+    getAllWaveWindows,
+    getWaveWindowById,
+    getWaveWindowByTabId,
+    getWaveWindowByWorkspaceId,
+} from "./emain-window";
 
 export class ElectronWshClientType extends WshClient {
     constructor() {
         super("electron");
+    }
+
+    private async focusFromNotification(
+        notificationOptions: WaveNotificationOptions,
+        sourceRouteId?: string
+    ): Promise<void> {
+        let tabId = notificationOptions?.tabid;
+        let workspaceId = notificationOptions?.workspaceid;
+        const blockId = notificationOptions?.blockid;
+
+        if (isBlank(tabId) && sourceRouteId?.startsWith("tab:")) {
+            tabId = sourceRouteId.slice("tab:".length);
+        }
+
+        if ((isBlank(tabId) || isBlank(workspaceId)) && !isBlank(blockId)) {
+            try {
+                const blockInfo = await RpcApi.BlockInfoCommand(ElectronWshClient, blockId, { timeout: 2000 });
+                tabId = tabId || blockInfo?.tabid;
+                workspaceId = workspaceId || blockInfo?.workspaceid;
+            } catch (e) {
+                // ignore; fall back to focusing a window
+            }
+        }
+
+        let ww = !isBlank(tabId) ? getWaveWindowByTabId(tabId) : null;
+        if (ww == null && !isBlank(workspaceId)) {
+            ww = getWaveWindowByWorkspaceId(workspaceId);
+        }
+        if (ww == null && !isBlank(workspaceId)) {
+            try {
+                await createWindowForWorkspace(workspaceId);
+            } catch {
+                // ignore
+            }
+            ww = getWaveWindowByWorkspaceId(workspaceId);
+        }
+        if (ww == null) {
+            ww = focusedWaveWindow;
+        }
+        if (ww == null) {
+            ww = getAllWaveWindows()?.[0];
+        }
+        if (ww == null) {
+            return;
+        }
+
+        try {
+            ww.show();
+        } catch {
+            // ignore
+        }
+        ww.focus();
+
+        if (!isBlank(tabId)) {
+            await ww.setActiveTab(tabId, true);
+            if (!isBlank(blockId)) {
+                try {
+                    await RpcApi.SetBlockFocusCommand(ElectronWshClient, blockId, {
+                        route: `tab:${tabId}`,
+                        timeout: 2000,
+                    });
+                } catch {
+                    // ignore
+                }
+            }
+        }
     }
 
     async handle_webselector(rh: RpcResponseHelper, data: CommandWebSelectorData): Promise<string[]> {
@@ -32,11 +107,16 @@ export class ElectronWshClientType extends WshClient {
     }
 
     async handle_notify(rh: RpcResponseHelper, notificationOptions: WaveNotificationOptions) {
-        new Notification({
+        const sourceRouteId = rh.getSource();
+        const notification = new Notification({
             title: notificationOptions.title,
             body: notificationOptions.body,
             silent: notificationOptions.silent,
-        }).show();
+        });
+        notification.on("click", () => {
+            fireAndForget(() => this.focusFromNotification(notificationOptions, sourceRouteId));
+        });
+        notification.show();
     }
 
     async handle_getupdatechannel(rh: RpcResponseHelper): Promise<string> {

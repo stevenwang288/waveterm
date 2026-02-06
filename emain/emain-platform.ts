@@ -15,9 +15,8 @@ import i18next from "./i18n-main";
 // On macOS, it will store to ~/Library/Application \Support/waveterm/electron
 // On Linux, it will store to ~/.config/waveterm/electron
 // On Windows, it will store to %LOCALAPPDATA%/waveterm/electron
-app.setName("waveterm-zhcn/electron");
-
 const isDev = !app.isPackaged;
+app.setName(isDev ? "waveterm-zhcn-dev/electron" : "waveterm-zhcn/electron");
 const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;
 console.log(`Running in ${isDev ? "development" : "production"} mode`);
 if (isDev) {

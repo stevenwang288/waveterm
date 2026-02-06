@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Tooltip } from "@/app/element/tooltip";
+import { ConnectionButton } from "@/app/block/connectionbutton";
 import { ContextMenuModel } from "@/app/store/contextmenu";
+import { FocusManager } from "@/app/store/focusManager";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { atoms, createBlock, isDev } from "@/store/global";
+import { atoms, createBlock, getBlockComponentModel, useBlockAtom, WOS, isDev } from "@/store/global";
 import { fireAndForget, isBlank, makeIconClass } from "@/util/util";
 import {
     FloatingPortal,
@@ -17,8 +19,8 @@ import {
     useInteractions,
 } from "@floating-ui/react";
 import clsx from "clsx";
-import { useAtomValue } from "jotai";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { atom, useAtom, useAtomValue, type PrimitiveAtom } from "jotai";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 function sortByDisplayOrder(wmap: { [key: string]: WidgetConfigType }): WidgetConfigType[] {
@@ -76,6 +78,54 @@ const Widget = memo(({ widget, mode }: { widget: WidgetConfigType; mode: "normal
         </Tooltip>
     );
 });
+
+const ExplorerConnectionButton = memo(({ mode }: { mode: "normal" | "compact" | "supercompact" }) => {
+    const focusedBlockId = useAtomValue(FocusManager.getInstance().blockFocusAtom);
+    if (!focusedBlockId) {
+        return null;
+    }
+    return <ExplorerConnectionButtonInner blockId={focusedBlockId} mode={mode} />;
+});
+
+ExplorerConnectionButton.displayName = "ExplorerConnectionButton";
+
+const ExplorerConnectionButtonInner = memo(
+    ({ blockId, mode }: { blockId: string; mode: "normal" | "compact" | "supercompact" }) => {
+        const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
+        const isExplorerMode = blockData?.meta?.view === "preview" && !!blockData?.meta?.["preview:explorer"];
+        const connection = blockData?.meta?.connection ?? "";
+
+        const changeConnModalAtom = useBlockAtom(blockId, "changeConn", () => atom(false)) as PrimitiveAtom<boolean>;
+        const [, setConnModalOpen] = useAtom(changeConnModalAtom);
+
+        const bcm = getBlockComponentModel(blockId);
+        const connBtnRef = (bcm?.viewModel as any)?.connBtnRef as RefObject<HTMLDivElement> | undefined;
+
+        if (!isExplorerMode || !connBtnRef) {
+            return null;
+        }
+
+        return (
+            <div
+                className={clsx(
+                    "flex flex-col justify-center items-center w-full py-1.5 pr-0.5",
+                    "text-secondary overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer",
+                    mode === "supercompact" ? "text-sm" : "text-lg"
+                )}
+                onClick={() => setConnModalOpen(true)}
+            >
+                <ConnectionButton
+                    ref={connBtnRef}
+                    connection={connection}
+                    changeConnModalAtom={changeConnModalAtom}
+                    compact
+                />
+            </div>
+        );
+    }
+);
+
+ExplorerConnectionButtonInner.displayName = "ExplorerConnectionButtonInner";
 
 function calculateGridSize(appCount: number): number {
     if (appCount <= 4) return 2;
@@ -325,15 +375,35 @@ const Widgets = memo(() => {
 
     const featureWaveAppBuilder = fullConfig?.settings?.["feature:waveappbuilder"] ?? false;
     const widgetsMap = fullConfig?.widgets ?? {};
+    const effectiveWidgetsMap = useMemo(() => {
+        if (widgetsMap["defwidget@explorer"]) {
+            return widgetsMap;
+        }
+        const explorerWidget: WidgetConfigType = {
+            "display:order": -3.5,
+            icon: "folder-tree",
+            label: "explorer",
+            description: "Windows-like explorer",
+            blockdef: {
+                meta: {
+                    view: "preview",
+                    file: "~",
+                    "preview:explorer": true,
+                },
+            },
+        };
+        return { ...widgetsMap, "defwidget@explorer": explorerWidget };
+    }, [widgetsMap]);
     const filteredWidgets = hasCustomAIPresets
-        ? widgetsMap
-        : Object.fromEntries(Object.entries(widgetsMap).filter(([key]) => key !== "defwidget@ai"));
+        ? effectiveWidgetsMap
+        : Object.fromEntries(Object.entries(effectiveWidgetsMap).filter(([key]) => key !== "defwidget@ai"));
     const widgets = sortByDisplayOrder(filteredWidgets);
 
     const [isAppsOpen, setIsAppsOpen] = useState(false);
     const appsButtonRef = useRef<HTMLDivElement>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const settingsButtonRef = useRef<HTMLDivElement>(null);
+    const focusedBlockId = useAtomValue(FocusManager.getInstance().blockFocusAtom);
 
     const checkModeNeeded = useCallback(() => {
         if (!containerRef.current || !measurementRef.current) return;
@@ -378,7 +448,7 @@ const Widgets = memo(() => {
 
     useEffect(() => {
         checkModeNeeded();
-    }, [widgets, checkModeNeeded]);
+    }, [widgets, focusedBlockId, checkModeNeeded]);
 
     const handleWidgetsBarContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -417,6 +487,7 @@ const Widgets = memo(() => {
                         </div>
                         <div className="flex-grow" />
                         <div className="grid grid-cols-2 gap-0 w-full">
+                            <ExplorerConnectionButton mode={mode} />
                             {isDev() || featureWaveAppBuilder ? (
                                 <div
                                     ref={appsButtonRef}
@@ -457,6 +528,7 @@ const Widgets = memo(() => {
                             <Widget key={`widget-${idx}`} widget={data} mode={mode} />
                         ))}
                         <div className="flex-grow" />
+                        <ExplorerConnectionButton mode={mode} />
                         {isDev() || featureWaveAppBuilder ? (
                             <div
                                 ref={appsButtonRef}
@@ -522,6 +594,7 @@ const Widgets = memo(() => {
                     <Widget key={`measurement-widget-${idx}`} widget={data} mode="normal" />
                 ))}
                 <div className="flex-grow" />
+                <ExplorerConnectionButton mode="normal" />
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>
                         <i className={makeIconClass("gear", true)}></i>

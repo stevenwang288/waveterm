@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { atoms, getApi, globalStore } from "@/app/store/global";
+import { atoms, createBlock, getApi, globalStore } from "@/app/store/global";
 import i18next from "@/app/i18n";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -17,6 +17,7 @@ import {
     Header,
     Row,
     RowData,
+    SortingState,
     Table,
     createColumnHelper,
     flexRender,
@@ -47,6 +48,74 @@ import {
 import { type PreviewModel } from "./preview-model";
 
 const PageJumpSize = 20;
+type DragDropOperation = "copy" | "move";
+type DirectoryViewMode = "details" | "list" | "smallIcons" | "mediumIcons" | "largeIcons";
+
+function parseWshUri(uri: string): { connection: string; path: string } | null {
+    if (!uri) {
+        return null;
+    }
+    const match = uri.match(/^wsh:\/\/([^/]+)\/(.*)$/);
+    if (!match) {
+        return null;
+    }
+    return {
+        connection: match[1] ?? "",
+        path: match[2] ?? "",
+    };
+}
+
+function getWindowsDriveLetter(path: string): string | null {
+    if (!path) {
+        return null;
+    }
+    const match = path.match(/^([A-Za-z]):[\\/]/);
+    if (!match) {
+        return null;
+    }
+    return match[1]!.toUpperCase();
+}
+
+function isPathEqualOrDescendant(ancestor: string, maybeDescendant: string): boolean {
+    if (!ancestor || !maybeDescendant) {
+        return false;
+    }
+    const aNorm = ancestor.replace(/[\\/]+$/, "");
+    const dNorm = maybeDescendant.replace(/[\\/]+$/, "");
+    if (!aNorm || !dNorm) {
+        return false;
+    }
+
+    const aLower = aNorm.toLowerCase();
+    const dLower = dNorm.toLowerCase();
+    if (aLower === dLower) {
+        return true;
+    }
+    if (dLower.startsWith(aLower + "/") || dLower.startsWith(aLower + "\\")) {
+        return true;
+    }
+    return false;
+}
+
+function determineDragDropOperation(srcUri: string, destUri: string): DragDropOperation {
+    const src = parseWshUri(srcUri);
+    const dest = parseWshUri(destUri);
+    if (!src || !dest) {
+        return "copy";
+    }
+    if (!src.connection || !dest.connection) {
+        return "copy";
+    }
+    if (src.connection !== dest.connection) {
+        return "copy";
+    }
+    const srcDrive = getWindowsDriveLetter(src.path);
+    const destDrive = getWindowsDriveLetter(dest.path);
+    if (srcDrive && destDrive && srcDrive !== destDrive) {
+        return "copy";
+    }
+    return "move";
+}
 
 interface DirectoryTableHeaderCellProps {
     header: Header<FileInfo, unknown>;
@@ -86,6 +155,9 @@ interface DirectoryTableProps {
     model: PreviewModel;
     data: FileInfo[];
     search: string;
+    viewMode: DirectoryViewMode;
+    sorting: SortingState;
+    setSorting: React.Dispatch<React.SetStateAction<SortingState>>;
     focusIndex: number;
     setFocusIndex: (_: number) => void;
     setSearch: (_: string) => void;
@@ -102,6 +174,9 @@ function DirectoryTable({
     model,
     data,
     search,
+    viewMode,
+    sorting,
+    setSorting,
     focusIndex,
     setFocusIndex,
     setSearch,
@@ -113,7 +188,10 @@ function DirectoryTable({
 }: DirectoryTableProps) {
     const searchActive = useAtomValue(model.directorySearchActive);
     const fullConfig = useAtomValue(atoms.fullConfigAtom);
+    const blockData = useAtomValue(model.blockAtom);
+    const isExplorerView = !!blockData?.meta?.["preview:explorer"];
     const setErrorMsg = useSetAtom(model.errorMsgAtom);
+    const isCompactView = viewMode !== "details";
     const getIconFromMimeType = useCallback(
         (mimeType: string): string => {
             while (mimeType.length > 0) {
@@ -132,8 +210,8 @@ function DirectoryTable({
         [fullConfig.mimetypes]
     );
     const columns = useMemo(
-        () => [
-            columnHelper.accessor("mimetype", {
+        () => {
+            const iconColumn = columnHelper.accessor("mimetype", {
                 cell: (info) => (
                     <i
                         className={getIconFromMimeType(info.getValue() ?? "")}
@@ -144,54 +222,60 @@ function DirectoryTable({
                 id: "logo",
                 size: 25,
                 enableSorting: false,
-            }),
-            columnHelper.accessor("name", {
+            });
+            const nameColumn = columnHelper.accessor("name", {
                 cell: (info) => <span className="dir-table-name ellipsis">{info.getValue()}</span>,
                 header: () => <span className="dir-table-head-name">{i18next.t("preview.directory.columns.name")}</span>,
                 sortingFn: "alphanumeric",
-                size: 200,
+                size: 240,
+                minSize: 120,
+            });
+            const modTimeColumn = columnHelper.accessor("modtime", {
+                cell: (info) => (
+                    <span className="dir-table-lastmod">{getLastModifiedTime(info.getValue(), info.column)}</span>
+                ),
+                header: () => <span>{i18next.t("preview.directory.columns.lastModified")}</span>,
+                size: 140,
                 minSize: 90,
-            }),
-            columnHelper.accessor("modestr", {
+                sortingFn: "datetime",
+            });
+            const typeColumn = columnHelper.accessor("mimetype", {
+                cell: (info) => <span className="dir-table-type ellipsis">{cleanMimetype(info.getValue() ?? "")}</span>,
+                header: () => <span className="dir-table-head-type">{i18next.t("preview.directory.columns.type")}</span>,
+                size: 140,
+                minSize: 110,
+                sortingFn: "alphanumeric",
+            });
+            const sizeColumn = columnHelper.accessor("size", {
+                cell: (info) => <span className="dir-table-size">{getBestUnit(info.getValue())}</span>,
+                header: () => <span className="dir-table-head-size">{i18next.t("preview.directory.columns.size")}</span>,
+                size: 90,
+                minSize: 70,
+                sortingFn: "auto",
+            });
+            const pathColumn = columnHelper.accessor("path", {});
+
+            if (isExplorerView) {
+                return [iconColumn, nameColumn, modTimeColumn, typeColumn, sizeColumn, pathColumn];
+            }
+
+            const permColumn = columnHelper.accessor("modestr", {
                 cell: (info) => <span className="dir-table-modestr">{info.getValue()}</span>,
                 header: () => <span>{i18next.t("preview.directory.columns.perm")}</span>,
                 size: 91,
                 minSize: 90,
                 sortingFn: "alphanumeric",
-            }),
-            columnHelper.accessor("modtime", {
-                cell: (info) => (
-                    <span className="dir-table-lastmod">{getLastModifiedTime(info.getValue(), info.column)}</span>
-                ),
-                header: () => <span>{i18next.t("preview.directory.columns.lastModified")}</span>,
-                size: 91,
-                minSize: 65,
-                sortingFn: "datetime",
-            }),
-            columnHelper.accessor("size", {
-                cell: (info) => <span className="dir-table-size">{getBestUnit(info.getValue())}</span>,
-                header: () => <span className="dir-table-head-size">{i18next.t("preview.directory.columns.size")}</span>,
-                size: 55,
-                minSize: 50,
-                sortingFn: "auto",
-            }),
-            columnHelper.accessor("mimetype", {
-                cell: (info) => <span className="dir-table-type ellipsis">{cleanMimetype(info.getValue() ?? "")}</span>,
-                header: () => <span className="dir-table-head-type">{i18next.t("preview.directory.columns.type")}</span>,
-                size: 97,
-                minSize: 97,
-                sortingFn: "alphanumeric",
-            }),
-            columnHelper.accessor("path", {}),
-        ],
-        [fullConfig]
+            });
+            return [iconColumn, nameColumn, permColumn, modTimeColumn, sizeColumn, typeColumn, pathColumn];
+        },
+        [fullConfig, getIconColor, getIconFromMimeType, isExplorerView]
     );
 
     const setEntryManagerProps = useSetAtom(entryManagerOverlayPropsAtom);
 
     const updateName = useCallback(
         (path: string, isDir: boolean) => {
-            const fileName = path.split("/").at(-1);
+            const fileName = path.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1);
             setEntryManagerProps({
                 entryManagerType: EntryManagerType.EditName,
                 startingValue: fileName,
@@ -210,20 +294,29 @@ function DirectoryTable({
         [model, setErrorMsg]
     );
 
+    const columnVisibility = useMemo(() => {
+        if (!isCompactView) {
+            return { path: false };
+        }
+        return {
+            path: false,
+            modtime: false,
+            size: false,
+            mimetype: false,
+            modestr: false,
+        };
+    }, [isCompactView]);
+
     const table = useReactTable({
         data,
         columns,
+        state: { sorting, columnVisibility },
+        onSortingChange: setSorting,
         columnResizeMode: "onChange",
         getSortedRowModel: getSortedRowModel(),
         getCoreRowModel: getCoreRowModel(),
 
         initialState: {
-            sorting: [
-                {
-                    id: "name",
-                    desc: false,
-                },
-            ],
             columnVisibility: {
                 path: false,
             },
@@ -239,7 +332,7 @@ function DirectoryTable({
     const sortingState = table.getState().sorting;
     useEffect(() => {
         const allRows = table.getRowModel()?.flatRows || [];
-        setSelectedPath((allRows[focusIndex]?.getValue("path") as string) ?? null);
+        setSelectedPath((allRows[focusIndex]?.getValue("path") as string) ?? "");
     }, [focusIndex, data, setSelectedPath, sortingState]);
 
     const columnSizeVars = useMemo(() => {
@@ -275,15 +368,17 @@ function DirectoryTable({
             ref={osRef}
             data-scroll-height={scrollHeight}
         >
-            <div className="dir-table-head">
-                {table.getHeaderGroups().map((headerGroup) => (
-                    <div className="dir-table-head-row" key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                            <DirectoryTableHeaderCell key={header.id} header={header} />
-                        ))}
-                    </div>
-                ))}
-            </div>
+            {!isCompactView && (
+                <div className="dir-table-head">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                        <div className="dir-table-head-row" key={headerGroup.id}>
+                            {headerGroup.headers.map((header) => (
+                                <DirectoryTableHeaderCell key={header.id} header={header} />
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            )}
             <TableComponent
                 bodyRef={bodyRef}
                 model={model}
@@ -327,6 +422,8 @@ function TableBody({
     osRef,
 }: TableBodyProps) {
     const searchActive = useAtomValue(model.directorySearchActive);
+    const blockData = useAtomValue(model.blockAtom);
+    const isExplorerView = !!blockData?.meta?.["preview:explorer"];
     const dummyLineRef = useRef<HTMLDivElement>(null);
     const warningBoxRef = useRef<HTMLDivElement>(null);
     const conn = useAtomValue(model.connection);
@@ -371,7 +468,7 @@ function TableBody({
             if (finfo == null) {
                 return;
             }
-            const fileName = finfo.path.split("/").pop();
+            const fileName = finfo.path.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1);
             const menu: ContextMenuItem[] = [
                 {
                     label: i18next.t("preview.entryManager.newFile"),
@@ -412,18 +509,24 @@ function TableBody({
                 },
             ];
             addOpenMenuItems(menu, conn, finfo);
-            menu.push(
-                {
-                    type: "separator",
-                },
-                {
-                    label: "添加到收藏夹",
-                    click: () => {
-                        const favoritesModel = FavoritesModel.getInstance();
-                        favoritesModel.addFavorite(finfo.path, fileName);
-                        window.dispatchEvent(new Event("favorites-updated"));
+
+            if (finfo.isdir) {
+                menu.push(
+                    {
+                        type: "separator",
                     },
-                },
+                    {
+                        label: i18next.t("favorites.add"),
+                        click: () => {
+                            const favoritesModel = FavoritesModel.getInstance(model.tabModel.tabId);
+                            favoritesModel.addFavorite(finfo.path, fileName);
+                            window.dispatchEvent(new Event("favorites-updated"));
+                        },
+                    }
+                );
+            }
+
+            menu.push(
                 {
                     type: "separator",
                 },
@@ -443,7 +546,7 @@ function TableBody({
 
     return (
         <div className="dir-table-body" ref={bodyRef}>
-            {(searchActive || search !== "") && (
+            {!isExplorerView && (searchActive || search !== "") && (
                 <div className="flex rounded-[3px] py-1 px-2 bg-warning text-black" ref={warningBoxRef}>
                     <span>
                         {search === ""
@@ -578,11 +681,52 @@ const MemoizedTableBody = React.memo(
 
 interface DirectoryPreviewProps {
     model: PreviewModel;
+    searchText?: string;
+    setSearchText?: React.Dispatch<React.SetStateAction<string>>;
+    onSelectedPathChange?: (path: string) => void;
 }
 
-function DirectoryPreview({ model }: DirectoryPreviewProps) {
-    const [searchText, setSearchText] = useState("");
+function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: setSearchTextProp, onSelectedPathChange }: DirectoryPreviewProps) {
+    const [internalSearchText, setInternalSearchText] = useState("");
+    const searchText = searchTextProp ?? internalSearchText;
+    const setSearchText = setSearchTextProp ?? setInternalSearchText;
     const [focusIndex, setFocusIndex] = useState(0);
+    const sortingStorageKey = "waveterm-directory-sorting";
+    const viewModeStorageKey = "waveterm-directory-viewmode";
+    const [viewMode, setViewMode] = useState<DirectoryViewMode>(() => {
+        try {
+            const stored = localStorage.getItem(viewModeStorageKey);
+            if (
+                stored === "details" ||
+                stored === "list" ||
+                stored === "smallIcons" ||
+                stored === "mediumIcons" ||
+                stored === "largeIcons"
+            ) {
+                return stored;
+            }
+        } catch {
+            // ignore
+        }
+        return "details";
+    });
+    const [sorting, setSorting] = useState<SortingState>(() => {
+        try {
+            const stored = localStorage.getItem(sortingStorageKey);
+            if (stored) {
+                const parsed = JSON.parse(stored) as unknown;
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const first = parsed[0] as any;
+                    if (typeof first?.id === "string" && typeof first?.desc === "boolean") {
+                        return parsed as SortingState;
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return [{ id: "name", desc: false }];
+    });
     const [unfilteredData, setUnfilteredData] = useState<FileInfo[]>([]);
     const showHiddenFiles = useAtomValue(model.showHiddenFiles);
     const [selectedPath, setSelectedPath] = useState("");
@@ -647,10 +791,30 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                 if (!showHiddenFiles && fileInfo.name.startsWith(".") && fileInfo.name != "..") {
                     return false;
                 }
-                return fileInfo.name.toLowerCase().includes(searchText);
+                return fileInfo.name.toLowerCase().includes(searchText.toLowerCase());
             }) ?? [],
         [unfilteredData, showHiddenFiles, searchText]
     );
+
+    useEffect(() => {
+        onSelectedPathChange?.(selectedPath);
+    }, [onSelectedPathChange, selectedPath]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(sortingStorageKey, JSON.stringify(sorting));
+        } catch {
+            // ignore
+        }
+    }, [sorting]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(viewModeStorageKey, viewMode);
+        } catch {
+            // ignore
+        }
+    }, [viewMode]);
 
     useEffect(() => {
         model.directoryKeyDownHandler = (waveEvent: WaveKeyboardEvent): boolean => {
@@ -705,7 +869,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                 return true;
             }
             if (isCharacterKeyEvent(waveEvent)) {
-                setSearchText((current) => current + waveEvent.key);
+                setSearchText((current) => current + waveEvent.key.toLowerCase());
                 return true;
             }
             return false;
@@ -713,7 +877,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         return () => {
             model.directoryKeyDownHandler = null;
         };
-    }, [filteredData, selectedPath, searchText]);
+    }, [filteredData, selectedPath, searchText, setSearchText]);
 
     useEffect(() => {
         if (filteredData.length != 0 && focusIndex > filteredData.length - 1) {
@@ -732,41 +896,60 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         middleware: [offset(({ rects }) => -rects.reference.height / 2 - rects.floating.height / 2)],
     });
 
-    const handleDropCopy = useCallback(
-        async (data: CommandFileCopyData, isDir: boolean) => {
+    const handleDropOperation = useCallback(
+        async (operation: DragDropOperation, data: CommandFileCopyData, isDir: boolean) => {
             try {
-                await RpcApi.FileCopyCommand(TabRpcClient, data, { timeout: data.opts.timeout });
+                if (isDir) {
+                    data.opts.recursive = true;
+                }
+                if (operation === "move") {
+                    await RpcApi.FileMoveCommand(TabRpcClient, data, { timeout: data.opts.timeout });
+                } else {
+                    await RpcApi.FileCopyCommand(TabRpcClient, data, { timeout: data.opts.timeout });
+                }
             } catch (e) {
-                console.warn("Copy failed:", e);
-                const copyError = `${e}`;
-                const allowRetry = copyError.includes(overwriteError) || copyError.includes(mergeError);
+                console.warn(`${operation} failed:`, e);
+                const opError = `${e}`;
+                const allowRetry = opError.includes(overwriteError) || opError.includes(mergeError);
                 let errorMsg: ErrorMsg;
                 if (allowRetry) {
+                    const overwriteTextKey =
+                        operation === "move" ? "explorer.confirmOverwrite.moveText" : "explorer.confirmOverwrite.copyText";
                     errorMsg = {
-                        status: "Confirm Overwrite File(s)",
-                        text: "This copy operation will overwrite an existing file. Would you like to continue?",
+                        status: i18next.t("explorer.confirmOverwrite.title"),
+                        text: i18next.t(overwriteTextKey),
                         level: "warning",
                         buttons: [
                             {
-                                text: "Delete Then Copy",
-                                onClick: async () => {
-                                    data.opts.overwrite = true;
-                                    await handleDropCopy(data, isDir);
+                                text:
+                                    operation === "move"
+                                        ? i18next.t("explorer.confirmOverwrite.deleteThenMove")
+                                        : i18next.t("explorer.confirmOverwrite.deleteThenCopy"),
+                                onClick: () => {
+                                    fireAndForget(async () => {
+                                        data.opts.overwrite = true;
+                                        await handleDropOperation(operation, data, isDir);
+                                    });
                                 },
                             },
                             {
-                                text: "Sync",
-                                onClick: async () => {
-                                    data.opts.merge = true;
-                                    await handleDropCopy(data, isDir);
+                                text: i18next.t("explorer.confirmOverwrite.sync"),
+                                onClick: () => {
+                                    fireAndForget(async () => {
+                                        data.opts.merge = true;
+                                        await handleDropOperation(operation, data, isDir);
+                                    });
                                 },
                             },
                         ],
                     };
                 } else {
                     errorMsg = {
-                        status: "Copy Failed",
-                        text: copyError,
+                        status:
+                            operation === "move"
+                                ? i18next.t("explorer.operationFailed.moveTitle")
+                                : i18next.t("explorer.operationFailed.copyTitle"),
+                        text: opError,
                         level: "error",
                     };
                 }
@@ -774,7 +957,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
             }
             model.refreshCallback();
         },
-        [model.refreshCallback]
+        [model.refreshCallback, setErrorMsg]
     );
 
     const [, drop] = useDrop(
@@ -801,12 +984,51 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                         desturi,
                         opts,
                     };
-                    await handleDropCopy(data, draggedFile.isDir);
+                    if (draggedFile.isDir) {
+                        data.opts.recursive = true;
+                    }
+
+                    const operation = determineDragDropOperation(data.srcuri, data.desturi);
+                    const srcInfo = parseWshUri(data.srcuri);
+                    const destInfo = parseWshUri(data.desturi);
+                    if (draggedFile.isDir && srcInfo && destInfo && isPathEqualOrDescendant(srcInfo.path, destInfo.path)) {
+                        setErrorMsg({
+                            status: i18next.t("explorer.dnd.invalidTarget.title"),
+                            text: i18next.t("explorer.dnd.invalidTarget.text"),
+                            level: "error",
+                        });
+                        return;
+                    }
+
+                    const confirmTitleKey =
+                        operation === "move" ? "explorer.confirm.move.title" : "explorer.confirm.copy.title";
+                    const confirmTextKey =
+                        operation === "move" ? "explorer.confirm.move.text" : "explorer.confirm.copy.text";
+                    setErrorMsg({
+                        status: i18next.t(confirmTitleKey),
+                        text: i18next.t(confirmTextKey, { name: draggedFile.relName, dest: dirPath }),
+                        level: "warning",
+                        showDismiss: false,
+                        buttons: [
+                            {
+                                text: i18next.t("common.cancel"),
+                                onClick: () => {},
+                            },
+                            {
+                                text: i18next.t("common.ok"),
+                                onClick: () => {
+                                    fireAndForget(async () => {
+                                        await handleDropOperation(operation, data, draggedFile.isDir);
+                                    });
+                                },
+                            },
+                        ],
+                    });
                 }
             },
             // TODO: mabe add a hover option?
         }),
-        [dirPath, model.formatRemoteUri, model.refreshCallback]
+        [dirPath, handleDropOperation, model.formatRemoteUri, setErrorMsg]
     );
 
     useEffect(() => {
@@ -859,7 +1081,94 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         (e: any) => {
             e.preventDefault();
             e.stopPropagation();
+            const sortId = sorting?.[0]?.id ?? "name";
+            const sortDesc = sorting?.[0]?.desc ?? false;
             const menu: ContextMenuItem[] = [
+                {
+                    label: i18next.t("explorer.context.view"),
+                    submenu: [
+                        {
+                            label: i18next.t("explorer.view.details"),
+                            type: "radio",
+                            checked: viewMode === "details",
+                            click: () => setViewMode("details"),
+                        },
+                        {
+                            label: i18next.t("explorer.view.list"),
+                            type: "radio",
+                            checked: viewMode === "list",
+                            click: () => setViewMode("list"),
+                        },
+                        {
+                            type: "separator",
+                        },
+                        {
+                            label: i18next.t("explorer.view.smallIcons"),
+                            type: "radio",
+                            checked: viewMode === "smallIcons",
+                            click: () => setViewMode("smallIcons"),
+                        },
+                        {
+                            label: i18next.t("explorer.view.mediumIcons"),
+                            type: "radio",
+                            checked: viewMode === "mediumIcons",
+                            click: () => setViewMode("mediumIcons"),
+                        },
+                        {
+                            label: i18next.t("explorer.view.largeIcons"),
+                            type: "radio",
+                            checked: viewMode === "largeIcons",
+                            click: () => setViewMode("largeIcons"),
+                        },
+                    ],
+                },
+                {
+                    label: i18next.t("explorer.context.sortBy"),
+                    submenu: [
+                        {
+                            label: i18next.t("explorer.sort.name"),
+                            type: "radio",
+                            checked: sortId === "name",
+                            click: () => setSorting([{ id: "name", desc: sortDesc }]),
+                        },
+                        {
+                            label: i18next.t("explorer.sort.dateModified"),
+                            type: "radio",
+                            checked: sortId === "modtime",
+                            click: () => setSorting([{ id: "modtime", desc: sortDesc }]),
+                        },
+                        {
+                            label: i18next.t("explorer.sort.type"),
+                            type: "radio",
+                            checked: sortId === "mimetype",
+                            click: () => setSorting([{ id: "mimetype", desc: sortDesc }]),
+                        },
+                        {
+                            label: i18next.t("explorer.sort.size"),
+                            type: "radio",
+                            checked: sortId === "size",
+                            click: () => setSorting([{ id: "size", desc: sortDesc }]),
+                        },
+                        {
+                            type: "separator",
+                        },
+                        {
+                            label: i18next.t("explorer.sort.ascending"),
+                            type: "radio",
+                            checked: !sortDesc,
+                            click: () => setSorting([{ id: sortId, desc: false }]),
+                        },
+                        {
+                            label: i18next.t("explorer.sort.descending"),
+                            type: "radio",
+                            checked: sortDesc,
+                            click: () => setSorting([{ id: sortId, desc: true }]),
+                        },
+                    ],
+                },
+                {
+                    type: "separator",
+                },
                 {
                     label: i18next.t("preview.entryManager.newFile"),
                     click: () => {
@@ -872,22 +1181,59 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                         newDirectory();
                     },
                 },
-                {
-                    type: "separator",
-                },
             ];
             addOpenMenuItems(menu, conn, finfo);
 
+            if (dirPath) {
+                const dirName = dirPath.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1);
+                menu.push(
+                    {
+                        type: "separator",
+                    },
+                    {
+                        label: i18next.t("favorites.addCurrentFolder"),
+                        click: () => {
+                            const favoritesModel = FavoritesModel.getInstance(model.tabModel.tabId);
+                            favoritesModel.addFavorite(dirPath, dirName);
+                            window.dispatchEvent(new Event("favorites-updated"));
+                        },
+                    },
+                );
+                if (!blockData?.meta?.["preview:explorer"]) {
+                    menu.push({
+                        label: i18next.t("explorer.openView"),
+                        click: () =>
+                            fireAndForget(async () => {
+                                const blockDef: BlockDef = {
+                                    meta: {
+                                        view: "preview",
+                                        file: dirPath,
+                                        connection: conn,
+                                        "preview:explorer": true,
+                                    },
+                                };
+                                await createBlock(blockDef);
+                            }),
+                    });
+                }
+            }
+
             ContextMenuModel.showContextMenu(menu, e);
         },
-        [setRefreshVersion, conn, newFile, newDirectory, dirPath]
+        [blockData?.meta, conn, dirPath, newDirectory, newFile, setSorting, sorting, viewMode]
     );
 
     return (
         <Fragment>
             <div
                 ref={refs.setReference}
-                className="dir-table-container"
+                className={clsx(
+                    "dir-table-container",
+                    viewMode === "list" && "dir-view-list",
+                    viewMode === "smallIcons" && "dir-view-icons dir-view-icons-sm",
+                    viewMode === "mediumIcons" && "dir-view-icons dir-view-icons-md",
+                    viewMode === "largeIcons" && "dir-view-icons dir-view-icons-lg"
+                )}
                 onChangeCapture={(e) => {
                     const event = e as React.ChangeEvent<HTMLInputElement>;
                     if (!entryManagerProps) {
@@ -902,6 +1248,9 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                     model={model}
                     data={filteredData}
                     search={searchText}
+                    viewMode={viewMode}
+                    sorting={sorting}
+                    setSorting={setSorting}
                     focusIndex={focusIndex}
                     setFocusIndex={setFocusIndex}
                     setSearch={setSearchText}

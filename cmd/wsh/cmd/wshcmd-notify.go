@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
@@ -35,9 +36,12 @@ func notifyRun(cmd *cobra.Command, args []string) (rtnErr error) {
 	}()
 	message := args[0]
 	notificationOptions := &wshrpc.WaveNotificationOptions{
-		Title:  notifyTitle,
-		Body:   message,
-		Silent: notifySilent,
+		Title:       notifyTitle,
+		Body:        message,
+		Silent:      notifySilent,
+		WorkspaceId: os.Getenv("WAVETERM_WORKSPACEID"),
+		TabId:       os.Getenv("WAVETERM_TABID"),
+		BlockId:     os.Getenv("WAVETERM_BLOCKID"),
 	}
 	err := wshclient.NotifyCommand(RpcClient, *notificationOptions, &wshrpc.RpcOpts{Timeout: 2000, Route: wshutil.ElectronRoute})
 	if err != nil {

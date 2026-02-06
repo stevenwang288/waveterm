@@ -14,43 +14,93 @@ export interface FavoritesData {
     lastUpdated: number;
 }
 
-const STORAGE_KEY = "waveterm-favorites";
-const DEFAULT_FAVORITES: FavoritesData = {
-    items: [],
-    lastUpdated: Date.now(),
-};
+const STORAGE_KEY_PREFIX = "waveterm-favorites";
+const GLOBAL_SCOPE_ID = "global";
+
+function makeStorageKey(scopeId?: string): string {
+    const effectiveScopeId = scopeId && scopeId.trim() ? scopeId.trim() : GLOBAL_SCOPE_ID;
+    if (effectiveScopeId === GLOBAL_SCOPE_ID) {
+        return STORAGE_KEY_PREFIX;
+    }
+    return `${STORAGE_KEY_PREFIX}:${effectiveScopeId}`;
+}
+
+function makeDefaultFavorites(): FavoritesData {
+    return { items: [], lastUpdated: Date.now() };
+}
+
+function defaultLabelForPath(path: string): string {
+    if (!path) {
+        return "";
+    }
+    const trimmed = path.replace(/[\\/]+$/, "");
+    if (!trimmed) {
+        return path;
+    }
+    const parts = trimmed.split(/[\\/]/);
+    return parts[parts.length - 1] || trimmed || path;
+}
 
 export class FavoritesModel {
-    private static instance: FavoritesModel;
+    private static instances: Map<string, FavoritesModel> = new Map();
+
+    private scopeId: string;
+    private storageKey: string;
     private data: FavoritesData;
 
-    private constructor() {
+    private constructor(scopeId: string) {
+        this.scopeId = scopeId && scopeId.trim() ? scopeId.trim() : GLOBAL_SCOPE_ID;
+        this.storageKey = makeStorageKey(this.scopeId);
         this.data = this.loadFromStorage();
     }
 
-    static getInstance(): FavoritesModel {
-        if (!FavoritesModel.instance) {
-            FavoritesModel.instance = new FavoritesModel();
+    static getInstance(scopeId?: string): FavoritesModel {
+        const effectiveScopeId = scopeId && scopeId.trim() ? scopeId.trim() : GLOBAL_SCOPE_ID;
+        const storageKey = makeStorageKey(effectiveScopeId);
+        const existing = FavoritesModel.instances.get(storageKey);
+        if (existing) {
+            return existing;
         }
-        return FavoritesModel.instance;
+        const instance = new FavoritesModel(effectiveScopeId);
+        FavoritesModel.instances.set(storageKey, instance);
+        return instance;
     }
 
     private loadFromStorage(): FavoritesData {
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
+            const stored = localStorage.getItem(this.storageKey);
             if (stored) {
                 return JSON.parse(stored);
+            }
+
+            // Migration/fallback: if this is a scoped favorites list and no data exists yet,
+            // seed it from the global favorites so users don't "lose" existing items.
+            if (this.scopeId !== GLOBAL_SCOPE_ID) {
+                const globalStored = localStorage.getItem(makeStorageKey(GLOBAL_SCOPE_ID));
+                if (globalStored) {
+                    const parsed = JSON.parse(globalStored) as FavoritesData;
+                    const seeded: FavoritesData = {
+                        items: JSON.parse(JSON.stringify(parsed?.items ?? [])),
+                        lastUpdated: Date.now(),
+                    };
+                    try {
+                        localStorage.setItem(this.storageKey, JSON.stringify(seeded));
+                    } catch {
+                        // ignore
+                    }
+                    return seeded;
+                }
             }
         } catch (e) {
             console.error("Failed to load favorites from storage:", e);
         }
-        return DEFAULT_FAVORITES;
+        return makeDefaultFavorites();
     }
 
     private saveToStorage(): void {
         try {
             this.data.lastUpdated = Date.now();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
+            localStorage.setItem(this.storageKey, JSON.stringify(this.data));
         } catch (e) {
             console.error("Failed to save favorites to storage:", e);
         }
@@ -62,7 +112,7 @@ export class FavoritesModel {
 
     addFavorite(path: string, label?: string, parentId?: string): void {
         const id = `fav-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const displayLabel = label || path.split("/").pop() || path;
+        const displayLabel = label || defaultLabelForPath(path) || path;
 
         const newItem: FavoriteItem = {
             id,
@@ -151,7 +201,7 @@ export class FavoritesModel {
     }
 
     clear(): void {
-        this.data = { ...DEFAULT_FAVORITES };
+        this.data = makeDefaultFavorites();
         this.saveToStorage();
     }
 }

@@ -478,6 +478,12 @@ type WaveNotificationOptions struct {
 	Title  string `json:"title,omitempty"`
 	Body   string `json:"body,omitempty"`
 	Silent bool   `json:"silent,omitempty"`
+
+	// Optional context for linking a notification back to the originating UI.
+	// When provided, clients may focus the correct window/tab/block when the user clicks the notification.
+	WorkspaceId string `json:"workspaceid,omitempty"`
+	TabId       string `json:"tabid,omitempty"`
+	BlockId     string `json:"blockid,omitempty"`
 }
 
 type VDomUrlRequestData struct {

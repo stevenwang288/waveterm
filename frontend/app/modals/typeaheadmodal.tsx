@@ -192,11 +192,16 @@ const TypeAheadModal = ({
     }, []);
 
     useLayoutEffect(() => {
-        if (anchorRef.current && modalRef.current) {
-            const parentElement = anchorRef.current.closest(".block-frame-default-header");
-            modalRef.current.style.top = `${parentElement?.getBoundingClientRect().height}px`;
+        if (!blockRef?.current || !anchorRef.current || !modalRef.current) {
+            return;
         }
-    }, []);
+
+        const blockRect = blockRef.current.getBoundingClientRect();
+        const headerElement = anchorRef.current.closest(".block-frame-default-header") as HTMLElement | null;
+        const anchorRect = (headerElement ?? anchorRef.current).getBoundingClientRect();
+        const topPosition = Math.max(0, anchorRect.bottom - blockRect.top);
+        modalRef.current.style.top = `${topPosition}px`;
+    }, [width, height]);
 
     const renderBackdrop = (onClick) => <div className="type-ahead-modal-backdrop" onClick={onClick}></div>;
 

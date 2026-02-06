@@ -121,6 +121,7 @@ export class PreviewModel implements ViewModel {
     blockId: string;
     nodeModel: BlockNodeModel;
     tabModel: TabModel;
+    connBtnRef?: React.RefObject<HTMLDivElement>;
     noPadding?: Atom<boolean>;
     blockAtom: Atom<Block>;
     viewIcon: Atom<string | IconButtonDecl>;
@@ -129,6 +130,7 @@ export class PreviewModel implements ViewModel {
     preIconButton: Atom<IconButtonDecl>;
     endIconButtons: Atom<IconButtonDecl[]>;
     hideViewName: Atom<boolean>;
+    noHeader?: Atom<boolean>;
     previewTextRef: React.RefObject<HTMLDivElement>;
     editMode: Atom<boolean>;
     canPreview: PrimitiveAtom<boolean>;
@@ -185,6 +187,7 @@ export class PreviewModel implements ViewModel {
         this.openFileModalGiveFocusRef = createRef();
         this.manageConnection = atom(true);
         this.blockAtom = WOS.getWaveObjectAtom<Block>(`block:${blockId}`);
+        this.connBtnRef = createRef();
         this.markdownShowToc = atom(false);
         this.filterOutNowsh = atom(true);
         this.monacoRef = createRef();
@@ -222,6 +225,15 @@ export class PreviewModel implements ViewModel {
         });
         this.viewName = atom(i18next.t("block.viewName.preview"));
         this.hideViewName = atom(true);
+        this.noHeader = atom((get) => {
+            const blockData = get(this.blockAtom);
+            const isExplorerMode = !!blockData?.meta?.["preview:explorer"];
+            if (!isExplorerMode) {
+                return false;
+            }
+            const mimeType = jotaiLoadableValue(get(this.fileMimeTypeLoadable), null);
+            return mimeType == null || mimeType === "directory";
+        });
         this.viewText = atom((get) => {
             let headerPath = get(this.metaFilePath);
             const connStatus = get(this.connStatus);
@@ -530,6 +542,10 @@ export class PreviewModel implements ViewModel {
             return { errorStr: "CSV File Too Large to Preview (1 MB Max)" };
         }
         if (mimeType == "directory") {
+            const blockData = getFn(this.blockAtom);
+            if (blockData?.meta?.["preview:explorer"]) {
+                return { specializedView: "explorer-directory" };
+            }
             return { specializedView: "directory" };
         }
         if (mimeType == "text/csv") {

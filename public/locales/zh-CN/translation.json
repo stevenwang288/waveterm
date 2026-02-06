@@ -47,6 +47,7 @@
   },
   "common": {
     "loading": "加载中...",
+    "open": "打开",
     "save": "保存",
     "saving": "保存中...",
     "cancel": "取消",
@@ -60,13 +61,93 @@
     "deleting": "删除中...",
     "adding": "添加中...",
     "copy": "复制",
+    "copied": "已复制",
     "reset": "重置",
     "retry": "重试",
     "default": "默认",
     "defaultWithValue": "默认（{{value}}）",
     "on": "开启",
     "off": "关闭",
-    "moreOptions": "更多选项"
+    "moreOptions": "更多选项",
+    "closeWindow": "????",
+    "confirm": "??",
+    "confirmQuitMessage": "????? {{appName}} ??",
+    "confirmQuitTitle": "????",
+    "deleteWorkspace": "?????",
+    "dismiss": "??",
+    "learnMore": "????",
+    "quit": "??"
+  },
+  "favorites": {
+    "title": "收藏夹",
+    "hint": "在文件列表里右键选择“添加到收藏夹”",
+    "copyFullPath": "复制完整路径",
+    "add": "添加到收藏夹",
+    "addCurrentFolder": "添加当前文件夹到收藏夹",
+    "remove": "从收藏夹移除"
+  },
+  "explorer": {
+    "thisPC": "此电脑",
+    "quickAccess": "快捷访问",
+    "back": "后退",
+    "forward": "前进",
+    "up": "上一级",
+    "address": "地址",
+    "search": "搜索",
+    "details": "详细信息",
+    "toggleSidebar": "显示/隐藏侧边栏",
+    "toggleHidden": "显示/隐藏隐藏文件",
+    "openView": "打开资源管理器视图",
+    "confirm": {
+      "copy": {
+        "title": "确认复制",
+        "text": "复制“{{name}}”到“{{dest}}”，是否继续？"
+      },
+      "move": {
+        "title": "确认移动",
+        "text": "移动“{{name}}”到“{{dest}}”，是否继续？"
+      }
+    },
+    "confirmOverwrite": {
+      "title": "确认覆盖文件",
+      "copyText": "此复制操作将覆盖现有文件。是否继续？",
+      "moveText": "此移动操作将覆盖现有文件。是否继续？",
+      "deleteThenCopy": "删除后复制",
+      "deleteThenMove": "删除后移动",
+      "sync": "合并"
+    },
+    "operationFailed": {
+      "copyTitle": "复制失败",
+      "moveTitle": "移动失败"
+    },
+    "dnd": {
+      "invalidTarget": {
+        "title": "无效的目标位置",
+        "text": "不能把文件夹复制或移动到它自身内部。"
+      }
+    },
+    "context": {
+      "view": "查看",
+      "sortBy": "排序方式"
+    },
+    "view": {
+      "details": "详细信息",
+      "list": "列表",
+      "smallIcons": "小图标",
+      "mediumIcons": "中等图标",
+      "largeIcons": "大图标"
+    },
+    "sort": {
+      "name": "名称",
+      "dateModified": "修改日期",
+      "type": "类型",
+      "size": "大小",
+      "ascending": "升序",
+      "descending": "降序"
+    },
+    "type": "类型",
+    "size": "大小",
+    "modified": "修改时间"
   },
   "onboarding": {
     "welcome": "欢迎使用 Wave Terminal",
@@ -252,6 +333,7 @@
     "edit": "编辑工作区",
     "current": "这是当前工作区",
     "isOpen": "该工作区已打开",
+    "noActiveTab": "没有活动标签页",
     "menu": {
       "settings": "设置",
       "tips": "提示",
@@ -263,7 +345,9 @@
     "runningDevBuild": "正在运行 Wave 开发构建",
     "apps": "应用",
     "noLocalAppsFound": "未找到本地应用",
-    "localWaveAppsTooltip": "本地 WaveApp"
+    "localWaveAppsTooltip": "本地 WaveApp",
+    "confirmCloseWindowUnsavedTabs": "????????????????????????\\n\\n????",
+    "confirmDeleteWorkspace": "?????????????\\n\\n????"
   },
   "about": {
     "title": "Wave Terminal",
@@ -347,7 +431,16 @@
     "errorConnectingTo": "连接到 {{conn}} 时出错",
     "errorConnectingToWithError": "连接到 {{conn}} 时出错（{{error}}）",
     "disconnectedFrom": "已从 {{conn}} 断开",
-    "wshNotInstalled": "该连接未安装 wsh"
+    "wshNotInstalled": "该连接未安装 wsh",
+    "gitBash": "Git Bash"
+  },
+  "connStatus": {
+    "disconnected": "已从 {{connName}} 断开连接",
+    "connecting": "正在连接 {{connName}}…",
+    "reconnect": "重新连接",
+    "errorLine": "错误：{{error}}",
+    "wshErrorLine": "WSH 错误：{{error}}",
+    "disableWshAlways": "对此连接禁用 WSH"
   },
   "suggestion": {
     "noSuggestions": "暂无建议"
@@ -383,6 +476,19 @@
       "downloads": "下载",
       "documents": "文档",
       "root": "根目录"
+    },
+    "directory": {
+      "columns": {
+        "name": "名称",
+        "perm": "权限",
+        "lastModified": "修改日期",
+        "type": "类型",
+        "size": "大小"
+      },
+      "search": {
+        "typeToSearch": "输入以搜索",
+        "searchingFor": "正在搜索 “{{search}}”"
+      }
     }
   },
   "aipanel": {
@@ -481,7 +587,13 @@
       "confirmWarning": "本次编辑以及之后的所有修改都将丢失。",
       "confirmRestore": "确认还原",
       "restoring": "还原中..."
-    }
+    },
+    "aiThinking": "AI ????...",
+    "maxTokensOption": "{{tokens}}",
+    "maxTokensOptionDevTesting": "{{tokens}}??????",
+    "maxTokensOptionPro": "{{tokens}}????",
+    "noTextContent": "???????",
+    "waitingForToolApprovals": "???????..."
   },
   "block": {
     "settings": "设置",
@@ -855,6 +967,28 @@
     "installingAction": "安装中...",
     "errorTitle": "更新出错",
     "errorMessage": "更新过程中发生错误。",
-    "retryUpdate": "重试更新"
+    "retryUpdate": "重试更新",
+    "applicationUpdateTitle": "????",
+    "downloadedDetail": "???????????????????",
+    "later": "??",
+    "noUpdatesAvailable": "?????????",
+    "restart": "??"
+  },
+  "waveai": {
+    "history": {
+      "clear": "??????"
+    },
+    "presets": {
+      "add": "?? AI ??...",
+      "selectTitle": "?? AI ??"
+    },
+    "provider": {
+      "localModel": "?????? @ {{baseUrl}}?{{model}}?",
+      "openAiDefaultEndpoint": "OpenAI ????",
+      "remoteAnthropic": "???? Anthropic API?{{model}}?",
+      "remoteModel": "?????? @ {{baseUrl}}?{{model}}?",
+      "remotePerplexity": "???? Perplexity API?{{model}}?",
+      "waveProxy": "?? Wave ? AI ???{{model}}?"
+    }
   }
 }

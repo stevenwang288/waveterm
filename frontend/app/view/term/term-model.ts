@@ -823,10 +823,9 @@ export class TermViewModel implements ViewModel {
         menu.push({
             label: "收藏",
             click: () => {
-                const currentPath = globalStore.get(this.nodeModel.blockMetaAtom)?.meta?.["dir"] || 
-                                   globalStore.get(this.nodeModel.blockMetaAtom)?.meta?.["cwd"] ||
-                                   "~";
-                const favoritesModel = FavoritesModel.getInstance();
+                const blockData = globalStore.get(this.blockAtom);
+                const currentPath = blockData?.meta?.["cmd:cwd"] || "~";
+                const favoritesModel = FavoritesModel.getInstance(this.tabModel.tabId);
                 favoritesModel.addFavorite(currentPath);
                 window.dispatchEvent(new Event("favorites-updated"));
             },

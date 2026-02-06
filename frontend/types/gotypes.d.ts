@@ -1954,6 +1954,9 @@ declare global {
         title?: string;
         body?: string;
         silent?: boolean;
+        workspaceid?: string;
+        tabid?: string;
+        blockid?: string;
     };
 
     // waveobj.WaveObj

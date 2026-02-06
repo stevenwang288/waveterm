@@ -324,6 +324,9 @@ declare global {
 
         noHeader?: jotai.Atom<boolean>;
 
+        // Optional connection button anchor ref used by connection modals.
+        connBtnRef?: React.RefObject<HTMLDivElement>;
+
         // Whether the block manages its own connection (e.g., for remote access).
         manageConnection?: jotai.Atom<boolean>;
 
