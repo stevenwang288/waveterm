@@ -117,6 +117,18 @@ function PreviewView({
         setErrorMsg(null);
     }, [connection, fileInfo]);
 
+    useEffect(() => {
+        const handleNavigateToPath = (event: any) => {
+            const path = event?.detail?.path;
+            if (typeof path === "string" && path.length > 0) {
+                model.goHistory(path);
+            }
+        };
+
+        window.addEventListener("navigate-to-path", handleNavigateToPath as EventListener);
+        return () => window.removeEventListener("navigate-to-path", handleNavigateToPath as EventListener);
+    }, [model]);
+
     if (connStatus?.status != "connected") {
         return null;
     }

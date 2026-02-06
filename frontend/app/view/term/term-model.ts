@@ -3,6 +3,7 @@
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
+import { FavoritesModel } from "@/app/store/favorites-model";
 import { appHandleKeyDown } from "@/app/store/keymodel";
 import type { TabModel } from "@/app/store/tab-model";
 import { waveEventSubscribe } from "@/app/store/wps";
@@ -824,6 +825,19 @@ export class TermViewModel implements ViewModel {
                 getApi().nativePaste();
             },
         });
+
+        const blockData = globalStore.get(this.blockAtom);
+        const cwd = blockData?.meta?.["cmd:cwd"];
+        if (cwd != null) {
+            menu.push({
+                label: "Add CWD to Favorites",
+                click: () => {
+                    const favoritesModel = FavoritesModel.getInstance();
+                    favoritesModel.addFavorite(cwd);
+                    window.dispatchEvent(new Event("favorites-updated"));
+                },
+            });
+        }
 
         menu.push({ type: "separator" });
 

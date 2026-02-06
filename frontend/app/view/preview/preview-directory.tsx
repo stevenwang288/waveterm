@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
+import { FavoritesModel } from "@/app/store/favorites-model";
 import { atoms, getApi, globalStore } from "@/app/store/global";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -411,6 +412,17 @@ function TableBody({
             ];
             addOpenMenuItems(menu, conn, finfo);
             menu.push(
+                {
+                    type: "separator",
+                },
+                {
+                    label: "Add to Favorites",
+                    click: () => {
+                        const favoritesModel = FavoritesModel.getInstance();
+                        favoritesModel.addFavorite(finfo.path, fileName);
+                        window.dispatchEvent(new Event("favorites-updated"));
+                    },
+                },
                 {
                     type: "separator",
                 },

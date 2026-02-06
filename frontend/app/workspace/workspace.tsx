@@ -7,7 +7,7 @@ import { CenteredDiv } from "@/app/element/quickelems";
 import { ModalsRenderer } from "@/app/modals/modalsrenderer";
 import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
-import { Widgets } from "@/app/workspace/widgets";
+import { RightSidebar } from "@/app/workspace/right-sidebar";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms, getApi } from "@/store/global";
 import { useAtomValue } from "jotai";
@@ -79,7 +79,7 @@ const WorkspaceElem = memo(() => {
                             ) : (
                                 <div className="flex flex-row h-full">
                                     <TabContent key={tabId} tabId={tabId} />
-                                    <Widgets />
+                                    <RightSidebar />
                                 </div>
                             )}
                         </Panel>
