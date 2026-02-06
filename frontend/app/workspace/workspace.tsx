@@ -7,7 +7,8 @@ import { CenteredDiv } from "@/app/element/quickelems";
 import { ModalsRenderer } from "@/app/modals/modalsrenderer";
 import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
-import { RightSidebar } from "@/app/workspace/right-sidebar";
+import { FavoritesBar } from "@/app/workspace/favorites-bar";
+import { Widgets } from "@/app/workspace/widgets";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms, getApi } from "@/store/global";
 import { useAtomValue } from "jotai";
@@ -54,6 +55,7 @@ const WorkspaceElem = memo(() => {
     return (
         <div className="flex flex-col w-full flex-grow overflow-hidden">
             <TabBar key={ws.oid} workspace={ws} />
+            <FavoritesBar />
             <div ref={panelContainerRef} className="flex flex-row flex-grow overflow-hidden">
                 <ErrorBoundary key={tabId}>
                     <PanelGroup
@@ -79,7 +81,7 @@ const WorkspaceElem = memo(() => {
                             ) : (
                                 <div className="flex flex-row h-full">
                                     <TabContent key={tabId} tabId={tabId} />
-                                    <RightSidebar />
+                                    <Widgets />
                                 </div>
                             )}
                         </Panel>
