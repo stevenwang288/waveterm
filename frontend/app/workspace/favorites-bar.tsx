@@ -57,31 +57,33 @@ const FavoritesBar = memo(() => {
         [favoritesModel, openFavorite]
     );
 
-    if (state.items.length === 0) {
-        return null;
-    }
-
     return (
         <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-950 border-b border-zinc-800 select-none">
             <div className="text-yellow-500 text-xs">
                 <i className="fas fa-star" />
             </div>
             <div className="flex-1 overflow-x-auto whitespace-nowrap scrollbar-hide-until-hover">
-                {state.items.map((item) => (
-                    <span
-                        key={item.id}
-                        className={clsx(
-                            "inline-flex items-center gap-1.5 px-2 py-1 mr-2 rounded",
-                            "bg-zinc-900 text-secondary hover:bg-zinc-800 hover:text-primary cursor-pointer text-xs"
-                        )}
-                        onClick={() => openFavorite(item.path)}
-                        onContextMenu={(e) => showItemContextMenu(e, item)}
-                        title={item.path}
-                    >
-                        <i className="fas fa-folder-open text-zinc-400" />
-                        <span className="max-w-[240px] truncate align-middle">{item.label}</span>
+                {state.items.length === 0 ? (
+                    <span className="text-xs text-secondary">
+                        Right-click a file/folder in the file browser and choose “Add to Favorites”.
                     </span>
-                ))}
+                ) : (
+                    state.items.map((item) => (
+                        <span
+                            key={item.id}
+                            className={clsx(
+                                "inline-flex items-center gap-1.5 px-2 py-1 mr-2 rounded",
+                                "bg-zinc-900 text-secondary hover:bg-zinc-800 hover:text-primary cursor-pointer text-xs"
+                            )}
+                            onClick={() => openFavorite(item.path)}
+                            onContextMenu={(e) => showItemContextMenu(e, item)}
+                            title={item.path}
+                        >
+                            <i className="fas fa-folder-open text-zinc-400" />
+                            <span className="max-w-[240px] truncate align-middle">{item.label}</span>
+                        </span>
+                    ))
+                )}
             </div>
         </div>
     );
