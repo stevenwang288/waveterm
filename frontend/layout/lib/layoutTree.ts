@@ -42,7 +42,7 @@ export const DEFAULT_MAX_CHILDREN = 5;
  */
 export function computeMoveNode(layoutState: LayoutTreeState, computeInsertAction: LayoutTreeComputeMoveNodeAction) {
     const rootNode = layoutState.rootNode;
-    const { nodeId, nodeToMoveId, direction } = computeInsertAction;
+    const { nodeId, nodeToMoveId, nodeToMove: nodeToMoveOverride, direction } = computeInsertAction;
     if (!nodeId || !nodeToMoveId) {
         console.warn("either nodeId or nodeToMoveId not set", nodeId, nodeToMoveId);
         return;
@@ -70,7 +70,7 @@ export function computeMoveNode(layoutState: LayoutTreeState, computeInsertActio
 
     // TODO: this should not be necessary. The drag layer is having trouble tracking changes to the LayoutNode fields, so I need to grab the node again here to get the latest data.
     const node = findNode(rootNode, nodeId);
-    const nodeToMove = findNode(rootNode, nodeToMoveId);
+    const nodeToMove = findNode(rootNode, nodeToMoveId) ?? nodeToMoveOverride;
 
     if (!node || !nodeToMove) {
         console.warn("node or nodeToMove not set", nodeId, nodeToMoveId);
