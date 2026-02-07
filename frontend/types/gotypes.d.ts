@@ -1085,6 +1085,7 @@ declare global {
         "web:useragenttype"?: string;
         "markdown:fontsize"?: number;
         "markdown:fixedfontsize"?: number;
+        "preview:explorer"?: boolean;
         "tsunami:*"?: boolean;
         "tsunami:sdkreplacepath"?: string;
         "tsunami:apppath"?: string;
@@ -1282,6 +1283,7 @@ declare global {
         "markdown:fontsize"?: number;
         "markdown:fixedfontsize"?: number;
         "preview:showhiddenfiles"?: boolean;
+        "preview:explorer"?: boolean;
         "tab:preset"?: string;
         "widget:*"?: boolean;
         "widget:showhelp"?: boolean;

@@ -252,6 +252,7 @@ const AIPanelComponentInner = memo(() => {
     const [isDragOver, setIsDragOver] = useState(false);
     const [isReactDndDragOver, setIsReactDndDragOver] = useState(false);
     const [initialLoadDone, setInitialLoadDone] = useState(false);
+    const { t } = useTranslation();
     const model = WaveAIModel.getInstance();
     const containerRef = useRef<HTMLDivElement>(null);
     const isLayoutMode = jotai.useAtomValue(atoms.controlShiftDelayAtom);
