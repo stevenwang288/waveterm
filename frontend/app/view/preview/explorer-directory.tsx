@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { createBlock, globalStore } from "@/app/store/global";
+import { createBlock, getApi, globalStore } from "@/app/store/global";
 import { FavoritesModel } from "@/app/store/favorites-model";
 import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -295,7 +295,8 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         }
     });
     const [treeNodes, setTreeNodes] = useState<Record<string, TreeNodeState>>({});
-    const normalizedCurrentPath = useMemo(() => normalizeExplorerPath(currentPath), [currentPath]);
+    const normalizedFocusPath = useMemo(() => normalizeExplorerPath(selectedPath || currentPath), [selectedPath, currentPath]);
+    const isLocalExplorer = explorerStateScope === "local";
 
     const flashCopiedToast = useCallback(() => {
         setShowCopiedToast(true);
@@ -317,20 +318,49 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         };
     }, []);
 
+    const quickAccessPathMap = useMemo(() => {
+        if (!isLocalExplorer) {
+            return null;
+        }
+        const api = getApi();
+        const resolvePath = (name: string, fallback: string) => {
+            const path = api.getSystemPath(name);
+            return isBlank(path) ? fallback : path;
+        };
+        return {
+            home: api.getHomeDir() || "~",
+            desktop: resolvePath("desktop", "~/Desktop"),
+            downloads: resolvePath("downloads", "~/Downloads"),
+            documents: resolvePath("documents", "~/Documents"),
+        };
+    }, [isLocalExplorer]);
+
     const quickAccessItems: ExplorerItem[] = useMemo(
         () => {
             const items: ExplorerItem[] = [
-                { icon: "house", label: t("preview.bookmarks.home"), path: "~" },
-                { icon: "desktop", label: t("preview.bookmarks.desktop"), path: "~/Desktop" },
-                { icon: "download", label: t("preview.bookmarks.downloads"), path: "~/Downloads" },
-                { icon: "file-lines", label: t("preview.bookmarks.documents"), path: "~/Documents" },
+                { icon: "house", label: t("preview.bookmarks.home"), path: quickAccessPathMap?.home || "~" },
+                {
+                    icon: "desktop",
+                    label: t("preview.bookmarks.desktop"),
+                    path: quickAccessPathMap?.desktop || "~/Desktop",
+                },
+                {
+                    icon: "download",
+                    label: t("preview.bookmarks.downloads"),
+                    path: quickAccessPathMap?.downloads || "~/Downloads",
+                },
+                {
+                    icon: "file-lines",
+                    label: t("preview.bookmarks.documents"),
+                    path: quickAccessPathMap?.documents || "~/Documents",
+                },
             ];
             if (PLATFORM !== PlatformWindows) {
                 items.push({ icon: "hard-drive", label: t("preview.bookmarks.root"), path: "/" });
             }
             return items;
         },
-        [t]
+        [quickAccessPathMap, t]
     );
 
     const breadcrumbSegments = useMemo(() => getBreadcrumbSegments(currentPath), [currentPath]);
@@ -705,10 +735,10 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     );
 
     useEffect(() => {
-        if (isBlank(normalizedCurrentPath)) {
+        if (isBlank(normalizedFocusPath)) {
             return;
         }
-        const segments = getBreadcrumbSegments(normalizedCurrentPath);
+        const segments = getBreadcrumbSegments(normalizedFocusPath);
         if (segments.length <= 1) {
             return;
         }
@@ -733,7 +763,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         for (const p of toExpand) {
             loadTreeChildren(p);
         }
-    }, [loadTreeChildren, normalizedCurrentPath]);
+    }, [loadTreeChildren, normalizedFocusPath]);
 
     useEffect(() => {
         const expandedPaths = Array.from(expandedTreePaths.values());
@@ -916,8 +946,8 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             const keyPath = normalizeExplorerPath(item.path);
             const nodeState = treeNodes[keyPath];
             const isExpanded = expandedTreePaths.has(keyPath);
-            const isActive = isSameExplorerPath(keyPath, normalizedCurrentPath);
-            const isInPath = isExplorerPathAncestor(keyPath, normalizedCurrentPath);
+            const isActive = isSameExplorerPath(keyPath, normalizedFocusPath);
+            const isInPath = isExplorerPathAncestor(keyPath, normalizedFocusPath);
             const isLoading = nodeState?.loading || (isExpanded && nodeState?.children == null && !nodeState?.error);
             const childItems = nodeState?.children ?? [];
             const indent = 8 + depth * 12;
@@ -932,9 +962,9 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                         className={clsx(
                             "flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer select-none",
                             isActive
-                                ? "bg-hover text-primary"
+                                ? "bg-blue-500/20 text-blue-300"
                                 : isInPath
-                                  ? "text-primary/80 hover:bg-hover hover:text-primary"
+                                  ? "text-blue-300/90 hover:bg-hover hover:text-blue-200"
                                   : "text-secondary hover:bg-hover hover:text-primary"
                         )}
                         onClick={() => navigate(item.path)}
@@ -996,7 +1026,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             {!sidebarHidden && (
                 <>
                     <div
-                        className="shrink-0 bg-zinc-950 border-r border-zinc-800 overflow-y-auto"
+                        className="shrink-0 pt-11 bg-zinc-950 border-r border-zinc-800 overflow-y-auto"
                         style={{ width: sidebarWidth }}
                     >
                         <button
@@ -1055,7 +1085,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                 </>
             )}
 
-            <div className="relative flex flex-col flex-1 overflow-hidden">
+            <div className="relative flex flex-col flex-1 overflow-y-hidden overflow-x-visible">
                 {showCopiedToast && (
                     <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
                         <div className="px-2 py-1 rounded bg-zinc-800/95 border border-zinc-700 text-xs text-primary shadow">
@@ -1063,7 +1093,10 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                         </div>
                     </div>
                 )}
-                <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-950 border-b border-zinc-800">
+                <div
+                    className="relative z-20 flex items-center gap-2 px-2 py-1.5 bg-zinc-950 border-b border-zinc-800"
+                    style={sidebarHidden ? undefined : { marginLeft: -(sidebarWidth + 4) }}
+                >
                     <div className="flex items-center gap-1 shrink-0">
                         <button
                             className={clsx(

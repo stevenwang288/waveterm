@@ -90,6 +90,7 @@ declare global {
         getDataDir: () => string; // get-data-dir
         getConfigDir: () => string; // get-config-dir
         getHomeDir: () => string; // get-home-dir
+        getSystemPath: (name: string) => string; // get-system-path
         getWebviewPreload: () => string; // get-webview-preload
         getAboutModalDetails: () => AboutModalDetails; // get-about-modal-details
         getZoomFactor: () => number; // get-zoom-factor

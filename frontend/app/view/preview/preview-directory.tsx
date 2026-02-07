@@ -510,21 +510,19 @@ function TableBody({
             ];
             addOpenMenuItems(menu, conn, finfo);
 
-            if (finfo.isdir) {
-                menu.push(
-                    {
-                        type: "separator",
+            menu.push(
+                {
+                    type: "separator",
+                },
+                {
+                    label: i18next.t("favorites.add"),
+                    click: () => {
+                        const favoritesModel = FavoritesModel.getInstance(model.tabModel.tabId);
+                        favoritesModel.addFavorite(finfo.path, fileName);
+                        window.dispatchEvent(new Event("favorites-updated"));
                     },
-                    {
-                        label: i18next.t("favorites.add"),
-                        click: () => {
-                            const favoritesModel = FavoritesModel.getInstance(model.tabModel.tabId);
-                            favoritesModel.addFavorite(finfo.path, fileName);
-                            window.dispatchEvent(new Event("favorites-updated"));
-                        },
-                    }
-                );
-            }
+                }
+            );
 
             menu.push(
                 {

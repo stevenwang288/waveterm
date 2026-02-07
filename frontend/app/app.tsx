@@ -29,6 +29,7 @@ import { Fragment, useEffect, useState } from "react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { AppBackground } from "./app-bg";
+import { initLogoColorFromStorage } from "./element/logo-color";
 import { CenteredDiv } from "./element/quickelems";
 import { NotificationBubbles } from "./notification/notificationbubbles";
 import { useTranslation } from "react-i18next";
@@ -45,6 +46,7 @@ const focusLog = debug("wave:focus");
 const App = ({ onFirstRender }: { onFirstRender: () => void }) => {
     const tabId = useAtomValue(atoms.staticTabId);
     useEffect(() => {
+        initLogoColorFromStorage();
         onFirstRender();
     }, []);
     return (

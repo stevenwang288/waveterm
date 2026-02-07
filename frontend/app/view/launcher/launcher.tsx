@@ -3,7 +3,7 @@
 
 import type { BlockNodeModel } from "@/app/block/blocktypes";
 import type { TabModel } from "@/app/store/tab-model";
-import logoUrl from "@/app/asset/logo.svg?url";
+import Logo from "@/app/asset/logo.svg?react";
 import { atoms, globalStore, replaceBlock } from "@/app/store/global";
 import { checkKeyPressed, keydownWrapper } from "@/util/keyutil";
 import { isBlank, makeIconClass } from "@/util/util";
@@ -228,7 +228,7 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
             {/* Logo */}
             {showLogo && (
                 <div className="mb-6" style={{ width: logoWidth, maxWidth: 300 }}>
-                    <img src={logoUrl} className="w-full h-auto filter grayscale brightness-70 opacity-70" alt={t("launcher.logoAlt")} />
+                    <Logo className="w-full h-auto opacity-80" aria-label={t("launcher.logoAlt")} />
                 </div>
             )}
 

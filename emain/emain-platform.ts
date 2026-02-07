@@ -205,6 +205,13 @@ ipcMain.on("get-config-dir", (event) => {
 ipcMain.on("get-home-dir", (event) => {
     event.returnValue = app.getPath("home");
 });
+ipcMain.on("get-system-path", (event, name: string) => {
+    try {
+        event.returnValue = app.getPath(name as any);
+    } catch {
+        event.returnValue = "";
+    }
+});
 
 /**
  * Gets the value of the XDG_CURRENT_DESKTOP environment variable. If ORIGINAL_XDG_CURRENT_DESKTOP is set, it will be returned instead.

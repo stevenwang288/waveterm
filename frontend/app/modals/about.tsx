@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Logo from "@/app/asset/logo.svg";
+import { DEFAULT_LOGO_COLOR, LOGO_COLOR_PRESETS, getStoredLogoColor, setStoredLogoColor } from "@/app/element/logo-color";
 import { modalsModel } from "@/app/store/modalmodel";
 import { Modal } from "./modal";
 
@@ -16,7 +17,18 @@ const AboutModal = ({}: AboutModalProps) => {
     const currentDate = new Date();
     const [details] = useState(() => getApi().getAboutModalDetails());
     const [updaterChannel] = useState(() => getApi().getUpdaterChannel());
+    const [logoColor, setLogoColor] = useState(() => getStoredLogoColor() ?? DEFAULT_LOGO_COLOR);
     const { t } = useTranslation();
+
+    const applyLogoColor = (color: string) => {
+        const appliedColor = setStoredLogoColor(color);
+        setLogoColor(appliedColor);
+    };
+
+    const resetLogoColor = () => {
+        const appliedColor = setStoredLogoColor(null);
+        setLogoColor(appliedColor);
+    };
 
     return (
         <Modal className="pt-[34px] pb-[34px]" onClose={() => modalsModel.popModal()}>
@@ -28,11 +40,44 @@ const AboutModal = ({}: AboutModalProps) => {
                         <Trans i18nKey="about.description" components={[<br key="br" />]} />
                     </div>
                 </div>
+                <div className="flex flex-col items-center gap-2 self-stretch w-full">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-secondary">Logo Color</div>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="color"
+                            value={logoColor}
+                            onChange={(e) => applyLogoColor(e.target.value)}
+                            aria-label="Logo Color"
+                            className="h-8 w-10 p-0 border border-border rounded cursor-pointer bg-transparent"
+                        />
+                        <span className="text-xs uppercase text-secondary">{logoColor}</span>
+                        <button
+                            type="button"
+                            onClick={resetLogoColor}
+                            className="px-2 py-1 text-xs rounded border border-border hover:bg-hoverbg transition-colors"
+                        >
+                            {t("common.reset")}
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {LOGO_COLOR_PRESETS.map((preset) => (
+                            <button
+                                key={preset.label}
+                                type="button"
+                                title={preset.label}
+                                aria-label={preset.label}
+                                onClick={() => applyLogoColor(preset.value)}
+                                className="h-6 w-6 rounded border border-border hover:scale-105 transition-transform"
+                                style={{ backgroundColor: preset.value }}
+                            />
+                        ))}
+                    </div>
+                </div>
                 <div className="items-center gap-4 self-stretch w-full text-center">
-                    {t("about.clientVersion", { 
-                        version: details.version, 
-                        dev: isDev() ? "dev-" : "", 
-                        buildTime: details.buildTime 
+                    {t("about.clientVersion", {
+                        version: details.version,
+                        dev: isDev() ? "dev-" : "",
+                        buildTime: details.buildTime,
                     })}
                     <br />
                     {t("about.updateChannel", { channel: updaterChannel })}
