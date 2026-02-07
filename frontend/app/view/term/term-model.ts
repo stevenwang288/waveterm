@@ -1,4 +1,4 @@
-// Copyright 2026, Command Line Inc.
+﻿// Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
@@ -43,6 +43,15 @@ import * as React from "react";
 import { getBlockingCommand } from "./shellblocking";
 import { computeTheme, DefaultTermTheme } from "./termutil";
 import { TermWrap } from "./termwrap";
+
+const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
+    { label: "Codex", command: "codex" },
+    { label: "Claude", command: "claude" },
+    { label: "Gemini", command: "gemini" },
+    { label: "Amp", command: "amp" },
+    { label: "IFlow", command: "iflow" },
+    { label: "OpenCode", command: "opencode" },
+];
 
 export class TermViewModel implements ViewModel {
     viewType: string;
@@ -821,14 +830,39 @@ export class TermViewModel implements ViewModel {
         }
 
         menu.push({
-            label: "收藏",
+            label: i18next.t("favorites.add"),
             click: () => {
                 const blockData = globalStore.get(this.blockAtom);
                 const currentPath = blockData?.meta?.["cmd:cwd"] || "~";
-                const favoritesModel = FavoritesModel.getInstance(this.tabModel.tabId);
-                favoritesModel.addFavorite(currentPath);
+                const connection = blockData?.meta?.connection;
+                const favoritesModel = FavoritesModel.getInstance();
+                favoritesModel.addFavorite(currentPath, undefined, undefined, connection);
                 window.dispatchEvent(new Event("favorites-updated"));
             },
+        });
+
+        const blockData = globalStore.get(this.blockAtom);
+        const currentPath = blockData?.meta?.["cmd:cwd"] || "~";
+        const connection = blockData?.meta?.connection;
+        const openAiSubmenu: ContextMenuItem[] = AI_LAUNCH_COMMANDS.map((item) => ({
+            label: i18next.t("preview.openAiHere", { ai: item.label }),
+            click: () => {
+                const meta: Record<string, any> = {
+                    controller: "shell",
+                    view: "term",
+                    "cmd:cwd": currentPath,
+                    "cmd:initscript": `${item.command}\n`,
+                };
+                if (connection) {
+                    meta.connection = connection;
+                }
+                createBlock({ meta });
+            },
+        }));
+
+        menu.push({
+            label: i18next.t("preview.openWithAi"),
+            submenu: openAiSubmenu,
         });
 
         menu.push({ type: "separator" });
@@ -1219,3 +1253,4 @@ export function getAllBasicTermModels(): TermViewModel[] {
     }
     return termModels;
 }
+

@@ -7,7 +7,7 @@ import type { TabModel } from "@/app/store/tab-model";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { getConnStatusAtom, getOverrideConfigAtom, getSettingsKeyAtom, globalStore, refocusNode } from "@/store/global";
+import { getApi, getConnStatusAtom, getOverrideConfigAtom, getSettingsKeyAtom, globalStore, refocusNode } from "@/store/global";
 import * as services from "@/store/services";
 import * as WOS from "@/store/wos";
 import { goHistory, goHistoryBack, goHistoryForward } from "@/util/historyutil";
@@ -132,6 +132,7 @@ export class PreviewModel implements ViewModel {
     hideViewName: Atom<boolean>;
     noHeader?: Atom<boolean>;
     previewTextRef: React.RefObject<HTMLDivElement>;
+    addressBarInputRef: React.RefObject<HTMLInputElement>;
     editMode: Atom<boolean>;
     canPreview: PrimitiveAtom<boolean>;
     specializedView: Atom<Promise<{ specializedView?: string; errorStr?: string }>>;
@@ -167,6 +168,8 @@ export class PreviewModel implements ViewModel {
     showHiddenFiles: PrimitiveAtom<boolean>;
     refreshVersion: PrimitiveAtom<number>;
     directorySearchActive: PrimitiveAtom<boolean>;
+    addressBarEditing: PrimitiveAtom<boolean>;
+    addressBarInput: PrimitiveAtom<string>;
     refreshCallback: () => void;
     directoryKeyDownHandler: (waveEvent: WaveKeyboardEvent) => boolean;
     codeEditKeyDownHandler: (waveEvent: WaveKeyboardEvent) => boolean;
@@ -181,6 +184,9 @@ export class PreviewModel implements ViewModel {
         this.refreshVersion = atom(0);
         this.directorySearchActive = atom(false);
         this.previewTextRef = createRef();
+        this.addressBarInputRef = createRef();
+        this.addressBarEditing = atom(false);
+        this.addressBarInput = atom("");
         this.openFileModal = atom(false);
         this.openFileModalDelay = atom(false);
         this.openFileError = atom(null) as PrimitiveAtom<string>;
@@ -225,17 +231,11 @@ export class PreviewModel implements ViewModel {
         });
         this.viewName = atom(i18next.t("block.viewName.preview"));
         this.hideViewName = atom(true);
-        this.noHeader = atom((get) => {
-            const blockData = get(this.blockAtom);
-            const isExplorerMode = !!blockData?.meta?.["preview:explorer"];
-            if (!isExplorerMode) {
-                return false;
-            }
-            const mimeType = jotaiLoadableValue(get(this.fileMimeTypeLoadable), null);
-            return mimeType == null || mimeType === "directory";
-        });
+        this.noHeader = atom(false);
         this.viewText = atom((get) => {
             let headerPath = get(this.metaFilePath);
+            const connName = get(this.connectionImmediate);
+            const isLocalConnection = isBlank(connName) || connName === "local";
             const connStatus = get(this.connStatus);
             if (connStatus?.status != "connected") {
                 return [
@@ -251,21 +251,55 @@ export class PreviewModel implements ViewModel {
             const loadableFileInfo = get(this.loadableFileInfo);
             if (loadableFileInfo.state == "hasData") {
                 headerPath = loadableFileInfo.data?.path;
-                if (headerPath == "~") {
-                    headerPath = `~ (${loadableFileInfo.data?.dir + "/" + loadableFileInfo.data?.name})`;
+                if (headerPath == "~" && !isBlank(loadableFileInfo.data?.dir) && !isBlank(loadableFileInfo.data?.name)) {
+                    headerPath = `${loadableFileInfo.data?.dir}/${loadableFileInfo.data?.name}`;
                 }
             }
             if (!isBlank(headerPath) && headerPath != "/" && headerPath.endsWith("/")) {
                 headerPath = headerPath.slice(0, -1);
             }
+            if (isLocalConnection && !isBlank(headerPath)) {
+                headerPath = headerPath.replace(/\//g, "\\");
+            }
+            const addressBarEditing = get(this.addressBarEditing);
+            const addressBarInput = get(this.addressBarInput);
             const viewTextChildren: HeaderElem[] = [
-                {
-                    elemtype: "text",
-                    text: headerPath,
-                    ref: this.previewTextRef,
-                    className: "preview-filename",
-                    onClick: () => this.toggleOpenFileModal(),
-                },
+                addressBarEditing
+                    ? {
+                          elemtype: "input",
+                          value: addressBarInput,
+                          ref: this.addressBarInputRef,
+                          className: "preview-filename-input",
+                          onChange: (e) => {
+                              globalStore.set(this.addressBarInput, e.target.value);
+                          },
+                          onFocus: (e) => {
+                              e.target.select();
+                          },
+                          onKeyDown: (e) => {
+                              if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  fireAndForget(() => this.commitAddressBarPath());
+                                  return;
+                              }
+                              if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  globalStore.set(this.addressBarEditing, false);
+                              }
+                          },
+                          onBlur: () => {
+                              globalStore.set(this.addressBarEditing, false);
+                          },
+                      }
+                    : {
+                          elemtype: "text",
+                          text: headerPath,
+                          ref: this.previewTextRef,
+                          className: "preview-filename",
+                          onClick: () => fireAndForget(() => this.enterAddressBarEditMode()),
+                      },
             ];
             let saveClassName = "grey";
             if (get(this.newFileContent) !== null) {
@@ -347,6 +381,49 @@ export class PreviewModel implements ViewModel {
                 return [
                     {
                         elemtype: "iconbutton",
+                        icon: "arrow-left",
+                        title: i18next.t("explorer.back"),
+                        click: () => fireAndForget(() => this.goHistoryBack()),
+                    },
+                    {
+                        elemtype: "iconbutton",
+                        icon: "arrow-right",
+                        title: i18next.t("explorer.forward"),
+                        click: () => fireAndForget(() => this.goHistoryForward()),
+                    },
+                    {
+                        elemtype: "iconbutton",
+                        icon: "arrow-up",
+                        title: i18next.t("explorer.up"),
+                        click: () => fireAndForget(() => this.goParentDirectory({})),
+                    },
+                    {
+                        elemtype: "iconbutton",
+                        icon: "table-cells-large",
+                        title: i18next.t("explorer.context.view"),
+                        click: (event) => {
+                            const quickViewModes: Array<{ mode: string; label: string }> = [
+                                { mode: "details", label: i18next.t("explorer.view.details") },
+                                { mode: "list", label: i18next.t("explorer.view.list") },
+                                { mode: "smallIcons", label: i18next.t("explorer.view.smallIcons") },
+                                { mode: "mediumIcons", label: i18next.t("explorer.view.mediumIcons") },
+                                { mode: "largeIcons", label: i18next.t("explorer.view.largeIcons") },
+                            ];
+                            const menu: ContextMenuItem[] = quickViewModes.map((item) => ({
+                                label: item.label,
+                                click: () => this.setDirectoryViewMode(item.mode),
+                            }));
+                            ContextMenuModel.showContextMenu(menu, event);
+                        },
+                    },
+                    {
+                        elemtype: "iconbutton",
+                        icon: "copy",
+                        title: i18next.t("preview.copyFullPath"),
+                        click: () => fireAndForget(() => this.copyCurrentPathToClipboard()),
+                    },
+                    {
+                        elemtype: "iconbutton",
                         icon: showHiddenFiles ? "eye" : "eye-slash",
                         click: () => {
                             globalStore.set(this.showHiddenFiles, (prev) => !prev);
@@ -360,6 +437,12 @@ export class PreviewModel implements ViewModel {
                 ] as IconButtonDecl[];
             } else if (!isCeView && isMarkdownLike(mimeType)) {
                 return [
+                    {
+                        elemtype: "iconbutton",
+                        icon: "copy",
+                        title: i18next.t("preview.copyFullPath"),
+                        click: () => fireAndForget(() => this.copyCurrentPathToClipboard()),
+                    },
                     {
                         elemtype: "iconbutton",
                         icon: "book",
@@ -376,6 +459,12 @@ export class PreviewModel implements ViewModel {
             } else if (!isCeView && mimeType) {
                 // For all other file types (text, code, etc.), add refresh button
                 return [
+                    {
+                        elemtype: "iconbutton",
+                        icon: "copy",
+                        title: i18next.t("preview.copyFullPath"),
+                        click: () => fireAndForget(() => this.copyCurrentPathToClipboard()),
+                    },
                     {
                         elemtype: "iconbutton",
                         icon: "arrows-rotate",
@@ -417,11 +506,15 @@ export class PreviewModel implements ViewModel {
                 return null;
             }
             try {
-                const statFile = await RpcApi.FileInfoCommand(TabRpcClient, {
-                    info: {
-                        path,
+                const statFile = await RpcApi.FileInfoCommand(
+                    TabRpcClient,
+                    {
+                        info: {
+                            path,
+                        },
                     },
-                });
+                    { timeout: 30000 }
+                );
                 return statFile;
             } catch (e) {
                 const errorStatus: ErrorMsg = {
@@ -447,11 +540,15 @@ export class PreviewModel implements ViewModel {
                 return null;
             }
             try {
-                const file = await RpcApi.FileReadCommand(TabRpcClient, {
-                    info: {
-                        path,
+                const file = await RpcApi.FileReadCommand(
+                    TabRpcClient,
+                    {
+                        info: {
+                            path,
+                        },
                     },
-                });
+                    { timeout: 45000 }
+                );
                 return file;
             } catch (e) {
                 const errorStatus: ErrorMsg = {
@@ -542,10 +639,6 @@ export class PreviewModel implements ViewModel {
             return { errorStr: "CSV File Too Large to Preview (1 MB Max)" };
         }
         if (mimeType == "directory") {
-            const blockData = getFn(this.blockAtom);
-            if (blockData?.meta?.["preview:explorer"]) {
-                return { specializedView: "explorer-directory" };
-            }
             return { specializedView: "directory" };
         }
         if (mimeType == "text/csv") {
@@ -708,6 +801,83 @@ export class PreviewModel implements ViewModel {
         }
     }
 
+    setDirectoryViewMode(mode: string) {
+        window.dispatchEvent(
+            new CustomEvent("preview-directory-view-mode", {
+                detail: { blockId: this.blockId, mode },
+            })
+        );
+    }
+
+    async resolveCurrentPath(windowsStyle = false): Promise<string> {
+        const fileInfo = await globalStore.get(this.statFile);
+        let path = fileInfo?.path ?? "";
+        if (path === "~" && !isBlank(fileInfo?.dir) && !isBlank(fileInfo?.name)) {
+            path = `${fileInfo?.dir}/${fileInfo?.name}`;
+        }
+        if (isBlank(path)) {
+            path = globalStore.get(this.metaFilePath) ?? "";
+        }
+        const conn = await globalStore.get(this.connection);
+        const isLocalConnection = isBlank(conn) || conn === "local";
+        if (isLocalConnection && !isBlank(path)) {
+            const homeDir = getApi().getHomeDir()?.trim();
+            if (!isBlank(homeDir)) {
+                const normalizedHomeDir = homeDir.replace(/\\/g, "/");
+                if (path === "~") {
+                    path = normalizedHomeDir;
+                } else if (path.startsWith("~/") || path.startsWith("~\\")) {
+                    const suffix = path.slice(2).replace(/^[/\\]+/, "");
+                    path = `${normalizedHomeDir}/${suffix}`;
+                }
+            }
+        }
+        if (windowsStyle && isLocalConnection && !isBlank(path)) {
+            path = path.replace(/\//g, "\\");
+        }
+        return path;
+    }
+
+    async enterAddressBarEditMode() {
+        const resolvedPath = await this.resolveCurrentPath(true);
+        if (isBlank(resolvedPath)) {
+            return;
+        }
+        globalStore.set(this.addressBarInput, resolvedPath);
+        globalStore.set(this.addressBarEditing, true);
+        setTimeout(() => {
+            this.addressBarInputRef.current?.focus();
+            this.addressBarInputRef.current?.select();
+        }, 0);
+    }
+
+    async commitAddressBarPath() {
+        const inputPath = (globalStore.get(this.addressBarInput) ?? "").trim();
+        if (isBlank(inputPath)) {
+            globalStore.set(this.addressBarEditing, false);
+            return;
+        }
+        const conn = await globalStore.get(this.connection);
+        const isLocalConnection = isBlank(conn) || conn === "local";
+        const normalizedInputPath = isLocalConnection ? inputPath.replace(/\\/g, "/") : inputPath;
+        globalStore.set(this.addressBarEditing, false);
+        await this.goHistory(normalizedInputPath);
+    }
+
+    async copyCurrentPathToClipboard() {
+        const filePath = await this.resolveCurrentPath(true);
+        if (isBlank(filePath)) {
+            return;
+        }
+        const conn = await globalStore.get(this.connection);
+        const isLocalConnection = isBlank(conn) || conn === "local";
+        if (!isLocalConnection && conn) {
+            await navigator.clipboard.writeText(formatRemoteUri(filePath, conn));
+        } else {
+            await navigator.clipboard.writeText(filePath);
+        }
+    }
+
     isSpecializedView(sv: string): boolean {
         const loadableSV = globalStore.get(this.loadableSpecializedView);
         return loadableSV.state == "hasData" && loadableSV.data.specializedView == sv;
@@ -720,21 +890,7 @@ export class PreviewModel implements ViewModel {
         const menuItems: ContextMenuItem[] = [];
         menuItems.push({
             label: i18next.t("preview.copyFullPath"),
-            click: () =>
-                fireAndForget(async () => {
-                    const filePath = await globalStore.get(this.statFilePath);
-                    if (filePath == null) {
-                        return;
-                    }
-                    const conn = await globalStore.get(this.connection);
-                    if (conn) {
-                        // remote path
-                        await navigator.clipboard.writeText(formatRemoteUri(filePath, conn));
-                    } else {
-                        // local path
-                        await navigator.clipboard.writeText(filePath);
-                    }
-                }),
+            click: () => fireAndForget(() => this.copyCurrentPathToClipboard()),
         });
         menuItems.push({
             label: i18next.t("preview.copyFileName"),

@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Logo from "@/app/asset/logo.svg";
+import {
+    ACCENT_COLOR_PRESETS,
+    DEFAULT_ACCENT_COLOR,
+    getStoredAccentColor,
+    setStoredAccentColor,
+} from "@/app/element/accent-color";
 import { DEFAULT_LOGO_COLOR, LOGO_COLOR_PRESETS, getStoredLogoColor, setStoredLogoColor } from "@/app/element/logo-color";
 import { modalsModel } from "@/app/store/modalmodel";
 import { Modal } from "./modal";
@@ -17,6 +23,7 @@ const AboutModal = ({}: AboutModalProps) => {
     const currentDate = new Date();
     const [details] = useState(() => getApi().getAboutModalDetails());
     const [updaterChannel] = useState(() => getApi().getUpdaterChannel());
+    const [accentColor, setAccentColor] = useState(() => getStoredAccentColor() ?? DEFAULT_ACCENT_COLOR);
     const [logoColor, setLogoColor] = useState(() => getStoredLogoColor() ?? DEFAULT_LOGO_COLOR);
     const { t } = useTranslation();
 
@@ -25,9 +32,19 @@ const AboutModal = ({}: AboutModalProps) => {
         setLogoColor(appliedColor);
     };
 
+    const applyAccentColor = (color: string) => {
+        const appliedColor = setStoredAccentColor(color);
+        setAccentColor(appliedColor);
+    };
+
     const resetLogoColor = () => {
         const appliedColor = setStoredLogoColor(null);
         setLogoColor(appliedColor);
+    };
+
+    const resetAccentColor = () => {
+        const appliedColor = setStoredAccentColor(null);
+        setAccentColor(appliedColor);
     };
 
     return (
@@ -41,13 +58,46 @@ const AboutModal = ({}: AboutModalProps) => {
                     </div>
                 </div>
                 <div className="flex flex-col items-center gap-2 self-stretch w-full">
-                    <div className="text-[11px] uppercase tracking-[0.12em] text-secondary">Logo Color</div>
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-secondary">{t("about.accentColor")}</div>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="color"
+                            value={accentColor}
+                            onChange={(e) => applyAccentColor(e.target.value)}
+                            aria-label={t("about.accentColor")}
+                            className="h-8 w-10 p-0 border border-border rounded cursor-pointer bg-transparent"
+                        />
+                        <span className="text-xs uppercase text-secondary">{accentColor}</span>
+                        <button
+                            type="button"
+                            onClick={resetAccentColor}
+                            className="px-2 py-1 text-xs rounded border border-border hover:bg-hoverbg transition-colors"
+                        >
+                            {t("common.reset")}
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {ACCENT_COLOR_PRESETS.map((preset) => (
+                            <button
+                                key={`accent-${preset.label}`}
+                                type="button"
+                                title={preset.label}
+                                aria-label={preset.label}
+                                onClick={() => applyAccentColor(preset.value)}
+                                className="h-6 w-6 rounded border border-border hover:scale-105 transition-transform"
+                                style={{ backgroundColor: preset.value }}
+                            />
+                        ))}
+                    </div>
+                </div>
+                <div className="flex flex-col items-center gap-2 self-stretch w-full">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-secondary">{t("about.logoColor")}</div>
                     <div className="flex items-center gap-3">
                         <input
                             type="color"
                             value={logoColor}
                             onChange={(e) => applyLogoColor(e.target.value)}
-                            aria-label="Logo Color"
+                            aria-label={t("about.logoColor")}
                             className="h-8 w-10 p-0 border border-border rounded cursor-pointer bg-transparent"
                         />
                         <span className="text-xs uppercase text-secondary">{logoColor}</span>

@@ -6,6 +6,7 @@ import { FastAverageColor } from "fast-average-color";
 import fs from "fs";
 import * as child_process from "node:child_process";
 import * as path from "path";
+import { promisify } from "node:util";
 import { PNG } from "pngjs";
 import { Readable } from "stream";
 import { RpcApi } from "../frontend/app/store/wshclientapi";
@@ -26,6 +27,68 @@ const electronApp = electron.app;
 
 let webviewFocusId: number = null;
 let webviewKeys: string[] = [];
+const execFileAsync = promisify(child_process.execFile);
+
+const allowedGitSubcommands = new Set([
+    "status",
+    "diff",
+    "rev-parse",
+    "branch",
+    "log",
+    "show",
+    "remote",
+    "symbolic-ref",
+    "add",
+    "restore",
+    "commit",
+    "push",
+]);
+
+function isAllowedGitArgs(args: string[]): boolean {
+    if (!Array.isArray(args) || args.length === 0) {
+        return false;
+    }
+    const subcmd = args[0];
+    if (!allowedGitSubcommands.has(subcmd)) {
+        return false;
+    }
+    for (const arg of args) {
+        if (typeof arg !== "string") {
+            return false;
+        }
+        if (arg.includes("\0")) {
+            return false;
+        }
+    }
+    return true;
+}
+
+async function runGitCommand(cwd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+    if (!cwd || !path.isAbsolute(cwd)) {
+        return { code: 2, stdout: "", stderr: "Invalid git cwd" };
+    }
+    if (!isAllowedGitArgs(args)) {
+        return { code: 2, stdout: "", stderr: "Unsupported git args" };
+    }
+    try {
+        const result = await execFileAsync("git", args, {
+            cwd,
+            windowsHide: true,
+            maxBuffer: 4 * 1024 * 1024,
+        });
+        return {
+            code: 0,
+            stdout: result.stdout ?? "",
+            stderr: result.stderr ?? "",
+        };
+    } catch (error: any) {
+        return {
+            code: typeof error?.code === "number" ? error.code : 1,
+            stdout: error?.stdout ?? "",
+            stderr: error?.stderr ?? String(error),
+        };
+    }
+}
 
 export function openBuilderWindow(appId?: string) {
     const normalizedAppId = appId || "";
@@ -363,6 +426,10 @@ export function initIpcHandlers() {
             console.error("Failed to clear cookies and storage:", e);
             throw e;
         }
+    });
+
+    electron.ipcMain.handle("git-run", async (_event, cwd: string, args: string[]) => {
+        return runGitCommand(cwd, args);
     });
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {

@@ -80,11 +80,13 @@
   },
   "favorites": {
     "title": "Favorites",
-    "hint": "Right-click a folder and choose “Add to Favorites”.",
+    "hint": "Right-click a folder and choose \"Add to Favorites\"",
     "copyFullPath": "Copy Full Path",
     "add": "Add to Favorites",
     "addCurrentFolder": "Add current folder to Favorites",
-    "remove": "Remove from Favorites"
+    "remove": "Remove from Favorites",
+    "addCategory": "New Category",
+    "enterCategoryName": "Enter category name:"
   },
   "explorer": {
     "thisPC": "This PC",
@@ -335,6 +337,7 @@
     "isOpen": "This workspace is open",
     "noActiveTab": "No active tab",
     "menu": {
+      "appearance": "Appearance",
       "settings": "Settings",
       "tips": "Tips",
       "secrets": "Secrets",
@@ -347,7 +350,11 @@
     "noLocalAppsFound": "No local apps found",
     "localWaveAppsTooltip": "Local WaveApps",
     "confirmCloseWindowUnsavedTabs": "Window has unsaved tabs, closing window will delete existing tabs.\\n\\nContinue?",
-    "confirmDeleteWorkspace": "Deleting workspace will also delete its contents.\\n\\nContinue?"
+    "confirmDeleteWorkspace": "Deleting workspace will also delete its contents.\\n\\nContinue?",
+    "git": "Git",
+    "explorer": "Explorer",
+    "explorerDescription": "File explorer",
+    "servers": "Servers"
   },
   "about": {
     "title": "Wave Terminal",
@@ -357,7 +364,9 @@
     "github": "Github",
     "website": "Website",
     "acknowledgements": "Acknowledgements",
-    "copyright": "&copy; {{year}} Command Line Inc."
+    "copyright": "&copy; {{year}} Command Line Inc.",
+    "logoColor": "Logo Color",
+    "accentColor": "Accent Color"
   },
   "launcher": {
     "viewName": "Widget Launcher",
@@ -432,7 +441,9 @@
     "errorConnectingTo": "Error connecting to {{conn}}",
     "errorConnectingToWithError": "Error connecting to {{conn}} ({{error}})",
     "disconnectedFrom": "Disconnected from {{conn}}",
-    "wshNotInstalled": "wsh is not installed for this connection"
+    "wshNotInstalled": "wsh is not installed for this connection",
+    "remotes": "Remotes",
+    "noRemoteConnections": "No remote connections"
   },
   "connStatus": {
     "disconnected": "Disconnected from {{connName}}",
@@ -489,7 +500,9 @@
         "typeToSearch": "Type to search",
         "searchingFor": "Searching for “{{search}}”"
       }
-    }
+    },
+    "openWithAi": "Open With AI",
+    "openAiHere": "Open {{ai}} Here"
   },
   "aipanel": {
     "header": "Wave AI",

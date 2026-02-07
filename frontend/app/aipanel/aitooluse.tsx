@@ -37,7 +37,7 @@ const ToolDescLine = memo(({ text }: ToolDescLineProps) => {
 
         const sign = match[1];
         const number = match[2];
-        const colorClass = sign === "+" ? "text-green-600" : "text-red-600";
+        const colorClass = sign === "+" ? "text-accent" : "text-red-600";
         parts.push(
             <span key={match.index} className={colorClass}>
                 {sign}

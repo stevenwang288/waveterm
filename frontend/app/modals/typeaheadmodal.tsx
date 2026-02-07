@@ -132,7 +132,11 @@ const TypeAheadModal = ({
 
         const suggestionItems = suggestionsRef.current.children;
         for (let i = 0; i < suggestionItems.length; i++) {
-            suggestionsTotalHeight += suggestionItems[i].getBoundingClientRect().height;
+            const suggestionItem = suggestionItems.item(i) as HTMLElement | null;
+            if (!suggestionItem) {
+                continue;
+            }
+            suggestionsTotalHeight += suggestionItem.getBoundingClientRect().height;
         }
 
         const totalHeight =
@@ -146,10 +150,15 @@ const TypeAheadModal = ({
     }, [height, suggestions]);
 
     useLayoutEffect(() => {
-        if (!blockRef.current || !modalRef.current) return;
+        const blockElement = blockRef?.current;
+        const modalElement = modalRef.current;
+        const anchorElement = anchorRef?.current;
+        if (!blockElement || !modalElement || !anchorElement) {
+            return;
+        }
 
-        const blockRect = blockRef.current.getBoundingClientRect();
-        const anchorRect = anchorRef.current.getBoundingClientRect();
+        const blockRect = blockElement.getBoundingClientRect();
+        const anchorRect = anchorElement.getBoundingClientRect();
 
         const minGap = 20;
 
@@ -173,9 +182,9 @@ const TypeAheadModal = ({
             leftPosition = minGap;
         }
 
-        modalRef.current.style.width = `${modalWidth}px`;
-        modalRef.current.style.left = `${leftPosition}px`;
-    }, [width]);
+        modalElement.style.width = `${modalWidth}px`;
+        modalElement.style.left = `${leftPosition}px`;
+    }, [width, anchorRef, blockRef]);
 
     useLayoutEffect(() => {
         if (giveFocusRef) {
@@ -192,13 +201,22 @@ const TypeAheadModal = ({
     }, []);
 
     useLayoutEffect(() => {
-        if (!blockRef?.current || !anchorRef.current || !modalRef.current) {
+        if (!blockRef?.current || !modalRef.current) {
+            return;
+        }
+
+        const anchorElement = anchorRef.current;
+        if (!anchorElement) {
             return;
         }
 
         const blockRect = blockRef.current.getBoundingClientRect();
-        const headerElement = anchorRef.current.closest(".block-frame-default-header") as HTMLElement | null;
-        const anchorRect = (headerElement ?? anchorRef.current).getBoundingClientRect();
+        const headerElement = anchorElement.closest(".block-frame-default-header") as HTMLElement | null;
+        const targetElement = headerElement ?? anchorElement;
+        if (!targetElement || !(targetElement as HTMLElement).isConnected) {
+            return;
+        }
+        const anchorRect = targetElement.getBoundingClientRect();
         const topPosition = Math.max(0, anchorRect.bottom - blockRect.top);
         modalRef.current.style.top = `${topPosition}px`;
     }, [width, height]);
@@ -257,11 +275,12 @@ const TypeAheadModal = ({
         </div>
     );
 
-    if (blockRef && blockRef.current == null) {
+    const portalTarget = blockRef?.current ?? null;
+    if (portalTarget == null) {
         return null;
     }
 
-    return ReactDOM.createPortal(renderModal(), blockRef.current);
+    return ReactDOM.createPortal(renderModal(), portalTarget);
 };
 
 export { TypeAheadModal };

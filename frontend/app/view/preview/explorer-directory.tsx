@@ -1,4 +1,4 @@
-// Copyright 2025, Command Line Inc.
+﻿// Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
@@ -14,7 +14,7 @@ import { useAtom, useAtomValue } from "jotai";
 import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SpecializedViewProps } from "./preview";
-import { DirectoryPreview } from "./preview-directory";
+import { DirectoryPreview, type DirectoryViewMode } from "./preview-directory";
 
 type ExplorerItem = {
     icon: string;
@@ -36,6 +36,15 @@ type TreeNodeState = {
     loading?: boolean;
     error?: string;
 };
+
+const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
+    { label: "Codex", command: "codex" },
+    { label: "Claude", command: "claude" },
+    { label: "Gemini", command: "gemini" },
+    { label: "Amp", command: "amp" },
+    { label: "IFlow", command: "iflow" },
+    { label: "OpenCode", command: "opencode" },
+];
 
 function getLeafLabel(path: string): string {
     const trimmed = path.replace(/[\\/]+$/, "");
@@ -170,6 +179,18 @@ function isExplorerPathAncestor(ancestor: string, path: string): boolean {
     return p.startsWith(prefix);
 }
 
+function getExplorerParentPath(path: string): string {
+    const normalized = normalizeExplorerPath(path);
+    if (!normalized) {
+        return "";
+    }
+    const segments = getBreadcrumbSegments(normalized);
+    if (segments.length <= 1) {
+        return normalized;
+    }
+    return normalizeExplorerPath(segments[segments.length - 2]?.path ?? normalized);
+}
+
 function formatBytes(bytes?: number): string {
     if (bytes == null) {
         return "";
@@ -197,7 +218,7 @@ function clampNumber(value: number, min: number, max: number): number {
 
 function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     const { t } = useTranslation();
-    const favoritesModel = useMemo(() => FavoritesModel.getInstance(model.tabModel.tabId), [model.tabModel.tabId]);
+    const favoritesModel = useMemo(() => FavoritesModel.getInstance(), []);
     const [drives, setDrives] = useState<ExplorerItem[]>([]);
     const [drivesLoading, setDrivesLoading] = useState(false);
     const currentFileInfo = useAtomValue(model.statFile);
@@ -208,6 +229,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     const [showHiddenFiles, setShowHiddenFiles] = useAtom(model.showHiddenFiles);
     const [searchText, setSearchText] = useState("");
     const [selectedPath, setSelectedPath] = useState("");
+    const [selectedPathIsDir, setSelectedPathIsDir] = useState<boolean | null>(null);
     const [addressMode, setAddressMode] = useState<"crumbs" | "edit">("crumbs");
     const [addressText, setAddressText] = useState("");
     const addressInputRef = useRef<HTMLInputElement>(null);
@@ -217,6 +239,9 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     const treeRequestSeqRef = useRef<Record<string, number>>({});
     const loadedSidebarSectionsKeyRef = useRef<string | null>(null);
     const loadedTreeExpandedKeyRef = useRef<string | null>(null);
+    const navItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const sidebarScrollRef = useRef<HTMLDivElement | null>(null);
+    const autoLocateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const showDetailsKey = "waveterm-explorer-show-details";
     const [showDetails, setShowDetails] = useState(() => {
         try {
@@ -257,10 +282,28 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             if (!Number.isFinite(parsed)) {
                 return 224;
             }
-            return clampNumber(parsed, 120, 520);
+            return clampNumber(parsed, 120, 320);
         } catch {
             return 224;
         }
+    });
+    const viewModeStorageKey = "waveterm-directory-viewmode";
+    const [viewMode, setViewMode] = useState<DirectoryViewMode>(() => {
+        try {
+            const stored = localStorage.getItem(viewModeStorageKey);
+            if (
+                stored === "details" ||
+                stored === "list" ||
+                stored === "smallIcons" ||
+                stored === "mediumIcons" ||
+                stored === "largeIcons"
+            ) {
+                return stored;
+            }
+        } catch {
+            // ignore
+        }
+        return "details";
     });
     const sidebarSectionsKey = `waveterm-explorer-sidebar-sections:${explorerStateScope}`;
     const [collapsedSections, setCollapsedSections] = useState<Record<"quickAccess" | "thisPC", boolean>>(() => {
@@ -295,7 +338,17 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         }
     });
     const [treeNodes, setTreeNodes] = useState<Record<string, TreeNodeState>>({});
-    const normalizedFocusPath = useMemo(() => normalizeExplorerPath(selectedPath || currentPath), [selectedPath, currentPath]);
+    const normalizedFocusPath = useMemo(() => {
+        const normalizedSelectedPath = normalizeExplorerPath(selectedPath);
+        if (!isBlank(normalizedSelectedPath)) {
+            if (selectedPathIsDir === false) {
+                const parentPath = getExplorerParentPath(normalizedSelectedPath);
+                return normalizeExplorerPath(parentPath || currentPath);
+            }
+            return normalizedSelectedPath;
+        }
+        return normalizeExplorerPath(currentPath);
+    }, [currentPath, selectedPath, selectedPathIsDir]);
     const isLocalExplorer = explorerStateScope === "local";
 
     const flashCopiedToast = useCallback(() => {
@@ -328,38 +381,19 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             return isBlank(path) ? fallback : path;
         };
         return {
-            home: api.getHomeDir() || "~",
+            home: resolvePath("home", "~"),
             desktop: resolvePath("desktop", "~/Desktop"),
-            downloads: resolvePath("downloads", "~/Downloads"),
-            documents: resolvePath("documents", "~/Documents"),
         };
     }, [isLocalExplorer]);
 
     const quickAccessItems: ExplorerItem[] = useMemo(
-        () => {
-            const items: ExplorerItem[] = [
-                { icon: "house", label: t("preview.bookmarks.home"), path: quickAccessPathMap?.home || "~" },
-                {
-                    icon: "desktop",
-                    label: t("preview.bookmarks.desktop"),
-                    path: quickAccessPathMap?.desktop || "~/Desktop",
-                },
-                {
-                    icon: "download",
-                    label: t("preview.bookmarks.downloads"),
-                    path: quickAccessPathMap?.downloads || "~/Downloads",
-                },
-                {
-                    icon: "file-lines",
-                    label: t("preview.bookmarks.documents"),
-                    path: quickAccessPathMap?.documents || "~/Documents",
-                },
-            ];
-            if (PLATFORM !== PlatformWindows) {
-                items.push({ icon: "hard-drive", label: t("preview.bookmarks.root"), path: "/" });
-            }
-            return items;
-        },
+        () => [
+            {
+                icon: "desktop",
+                label: t("preview.bookmarks.desktop"),
+                path: quickAccessPathMap?.desktop || "~/Desktop",
+            },
+        ],
         [quickAccessPathMap, t]
     );
 
@@ -368,6 +402,14 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     useEffect(() => {
         treeNodesRef.current = treeNodes;
     }, [treeNodes]);
+
+    const setNavItemRef = useCallback((path: string, node: HTMLDivElement | null) => {
+        if (node) {
+            navItemRefs.current[path] = node;
+            return;
+        }
+        delete navItemRefs.current[path];
+    }, []);
 
     useLayoutEffect(() => {
         try {
@@ -463,8 +505,9 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     }, [expandedTreePaths, treeExpandedKey]);
 
     useEffect(() => {
-        if (PLATFORM !== PlatformWindows) {
+        if (PLATFORM !== PlatformWindows || !isLocalExplorer) {
             setDrives([]);
+            setDrivesLoading(false);
             return;
         }
         let cancelled = false;
@@ -497,7 +540,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         return () => {
             cancelled = true;
         };
-    }, [model]);
+    }, [isLocalExplorer, model]);
 
     useEffect(() => {
         setTreeNodes({});
@@ -548,14 +591,14 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             if (isBlank(normalized)) {
                 return;
             }
-            favoritesModel.addFavorite(normalized);
+            favoritesModel.addFavorite(normalized, undefined, undefined, connection);
             window.dispatchEvent(new Event("favorites-updated"));
         },
-        [favoritesModel]
+        [connection, favoritesModel]
     );
 
     const openTerminalAtPath = useCallback(
-        (path: string) => {
+        (path: string, cliCommand?: string) => {
             const normalized = normalizeExplorerPath(path);
             if (isBlank(normalized)) {
                 return;
@@ -568,9 +611,65 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             if (!isBlank(connection)) {
                 meta.connection = connection;
             }
+            if (!isBlank(cliCommand)) {
+                meta["cmd:initscript"] = `${cliCommand}\n`;
+            }
             fireAndForget(() => createBlock({ meta }));
         },
         [connection]
+    );
+
+    const formatPathForClipboard = useCallback(
+        (path: string) => {
+            const normalized = normalizeExplorerPath(path);
+            if (isBlank(normalized)) {
+                return normalized;
+            }
+            if (!isLocalExplorer) {
+                return normalized;
+            }
+
+            let resolvedPath = normalized;
+            const homePath = normalizeExplorerPath(quickAccessPathMap?.home ?? "");
+            if (!isBlank(homePath) && (resolvedPath === "~" || resolvedPath.startsWith("~/") || resolvedPath.startsWith("~\\"))) {
+                const suffix = resolvedPath.slice(1).replace(/^[\\/]+/, "");
+                const base = homePath.replace(/[\\/]+$/, "");
+                resolvedPath = isBlank(suffix) ? homePath : `${base}/${suffix}`;
+            }
+
+            if (isProbablyWindowsPath(resolvedPath)) {
+                return resolvedPath.replace(/\//g, "\\");
+            }
+            return resolvedPath;
+        },
+        [isLocalExplorer, quickAccessPathMap]
+    );
+
+    const buildAiLaunchMenuItems = useCallback(
+        (path: string): ContextMenuItem[] => {
+            const normalized = normalizeExplorerPath(path);
+            if (isBlank(normalized)) {
+                return [];
+            }
+            return AI_LAUNCH_COMMANDS.map((item) => ({
+                label: t("preview.openAiHere", { ai: item.label }),
+                click: () => openTerminalAtPath(normalized, item.command),
+            }));
+        },
+        [openTerminalAtPath, t]
+    );
+
+    const showAiLaunchMenu = useCallback(
+        (e: React.MouseEvent, path: string) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const menuItems = buildAiLaunchMenuItems(path);
+            if (menuItems.length === 0) {
+                return;
+            }
+            ContextMenuModel.showContextMenu(menuItems, e);
+        },
+        [buildAiLaunchMenuItems]
     );
 
     const copyToClipboard = useCallback(
@@ -597,7 +696,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             const menu: ContextMenuItem[] = [
                 {
                     label: t("preview.copyFullPath"),
-                    click: () => copyToClipboard(currentPath),
+                    click: () => copyToClipboard(formatPathForClipboard(currentPath)),
                 },
                 {
                     label: t("favorites.add"),
@@ -607,10 +706,17 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                     label: t("preview.openTerminalHere"),
                     click: () => openTerminalAtPath(currentPath),
                 },
+                {
+                    type: "separator",
+                },
+                {
+                    label: t("preview.openWithAi"),
+                    submenu: buildAiLaunchMenuItems(currentPath),
+                },
             ];
             ContextMenuModel.showContextMenu(menu, e);
         },
-        [addToFavorites, copyToClipboard, currentPath, openTerminalAtPath, t]
+        [addToFavorites, buildAiLaunchMenuItems, copyToClipboard, currentPath, formatPathForClipboard, openTerminalAtPath, t]
     );
 
     const showBlockMenu = useCallback(
@@ -652,7 +758,10 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     const goForward = useCallback(() => fireAndForget(() => model.goHistoryForward()), [model]);
     const goUp = useCallback(() => fireAndForget(() => model.goParentDirectory({})), [model]);
     const refresh = useCallback(() => model.refreshCallback?.(), [model]);
-    const copyCurrentPath = useCallback(() => copyToClipboard(currentPath), [copyToClipboard, currentPath]);
+    const copyCurrentPath = useCallback(
+        () => copyToClipboard(formatPathForClipboard(currentPath)),
+        [copyToClipboard, currentPath, formatPathForClipboard]
+    );
 
     const loadTreeChildren = useCallback(
         (path: string, opts?: { force?: boolean }) => {
@@ -779,6 +888,105 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         }
     }, [expandedTreePaths, loadTreeChildren]);
 
+    useEffect(() => {
+        if (sidebarHidden || isBlank(normalizedFocusPath)) {
+            return;
+        }
+        const shouldOpenThisPc = PLATFORM === PlatformWindows && /^[A-Za-z]:[\\/]/.test(normalizedFocusPath);
+        setCollapsedSections((prev) => {
+            const next = { ...prev };
+            let changed = false;
+            if (next.quickAccess) {
+                next.quickAccess = false;
+                changed = true;
+            }
+            if (shouldOpenThisPc && next.thisPC) {
+                next.thisPC = false;
+                changed = true;
+            }
+            return changed ? next : prev;
+        });
+    }, [normalizedFocusPath, sidebarHidden]);
+
+    const scrollNavItemIntoView = useCallback((node: HTMLDivElement) => {
+        const scrollContainer = sidebarScrollRef.current;
+        if (!scrollContainer) {
+            node.scrollIntoView({ block: "center", inline: "nearest" });
+            return;
+        }
+
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const nodeRect = node.getBoundingClientRect();
+        if (nodeRect.top >= containerRect.top && nodeRect.bottom <= containerRect.bottom) {
+            return;
+        }
+
+        const currentScrollTop = scrollContainer.scrollTop;
+        const nodeOffsetTop = node.offsetTop;
+        const targetScrollTop = Math.max(0, nodeOffsetTop - scrollContainer.clientHeight / 2 + node.clientHeight / 2);
+
+        if (Math.abs(targetScrollTop - currentScrollTop) > 1) {
+            scrollContainer.scrollTo({ top: targetScrollTop, behavior: "auto" });
+        }
+    }, []);
+
+    useLayoutEffect(() => {
+        if (sidebarHidden || isBlank(normalizedFocusPath)) {
+            return;
+        }
+
+        let cancelled = false;
+        let attempts = 0;
+        const maxAttempts = 60;
+
+        const locateNode = (): HTMLDivElement | null => {
+            let node = navItemRefs.current[normalizedFocusPath] ?? null;
+            if (node) {
+                return node;
+            }
+            const pathSegments = getBreadcrumbSegments(normalizedFocusPath)
+                .map((segment) => normalizeExplorerPath(segment.path))
+                .filter(Boolean);
+            for (let i = pathSegments.length - 1; i >= 0; i--) {
+                const segmentPath = pathSegments[i];
+                const segmentNode = navItemRefs.current[segmentPath];
+                if (segmentNode) {
+                    return segmentNode;
+                }
+            }
+            return null;
+        };
+
+        const locateAndScroll = () => {
+            if (cancelled) {
+                return;
+            }
+
+            const node = locateNode();
+            if (node) {
+                scrollNavItemIntoView(node);
+                return;
+            }
+
+            if (attempts >= maxAttempts) {
+                return;
+            }
+
+            attempts += 1;
+            autoLocateTimerRef.current = setTimeout(locateAndScroll, 100);
+        };
+
+        const rafId = window.requestAnimationFrame(locateAndScroll);
+        return () => {
+            cancelled = true;
+            window.cancelAnimationFrame(rafId);
+            if (autoLocateTimerRef.current) {
+                clearTimeout(autoLocateTimerRef.current);
+                autoLocateTimerRef.current = null;
+            }
+        };
+    }, [normalizedFocusPath, scrollNavItemIntoView, sidebarHidden]);
+
     const toggleTreeExpand = useCallback(
         (path: string) => {
             const normalized = normalizeExplorerPath(path);
@@ -813,7 +1021,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             const menu: ContextMenuItem[] = [
                 {
                     label: t("preview.copyFullPath"),
-                    click: () => copyToClipboard(normalized),
+                    click: () => copyToClipboard(formatPathForClipboard(normalized)),
                 },
                 {
                     label: t("favorites.add"),
@@ -822,6 +1030,13 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                 {
                     label: t("preview.openTerminalHere"),
                     click: () => openTerminalAtPath(normalized),
+                },
+                {
+                    type: "separator",
+                },
+                {
+                    label: t("preview.openWithAi"),
+                    submenu: buildAiLaunchMenuItems(normalized),
                 },
             ];
             if (favoriteId) {
@@ -838,7 +1053,15 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             }
             ContextMenuModel.showContextMenu(menu, e);
         },
-        [addToFavorites, copyToClipboard, favoritesModel, openTerminalAtPath, t]
+        [
+            addToFavorites,
+            buildAiLaunchMenuItems,
+            copyToClipboard,
+            favoritesModel,
+            formatPathForClipboard,
+            openTerminalAtPath,
+            t,
+        ]
     );
 
     const detailsPath = selectedPath || currentPath;
@@ -925,7 +1148,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
 
             const onMove = (event: PointerEvent) => {
                 const delta = startX - event.clientX;
-                setSearchWidth(clampNumber(startWidth + delta, 120, 520));
+                setSearchWidth(clampNumber(startWidth + delta, 120, 320));
             };
             const onUp = () => {
                 window.removeEventListener("pointermove", onMove);
@@ -951,18 +1174,33 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             const isLoading = nodeState?.loading || (isExpanded && nodeState?.children == null && !nodeState?.error);
             const childItems = nodeState?.children ?? [];
             const indent = 8 + depth * 12;
-            const iconClassName =
+            const iconClassName = clsx(
+                "fas",
+                `fa-${item.icon}`,
+                "w-4 text-center",
                 item.icon === "star"
-                    ? "fas fa-star text-yellow-500 w-4 text-center"
-                    : clsx("fas", `fa-${item.icon}`, "text-zinc-400 w-4 text-center");
+                    ? "text-yellow-500"
+                    : item.icon === "folder" && isActive
+                      ? "text-blue-300"
+                      : item.icon === "folder" && isInPath
+                        ? "text-blue-400"
+                        : isActive
+                          ? "text-blue-200"
+                          : isInPath
+                            ? "text-blue-300/90"
+                            : "text-zinc-400"
+            );
 
             return (
                 <div key={item.favoriteId ? `fav:${item.favoriteId}` : keyPath}>
                     <div
+                        ref={(node) => setNavItemRef(keyPath, node)}
                         className={clsx(
                             "flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer select-none",
                             isActive
-                                ? "bg-blue-500/20 text-blue-300"
+                                ? "bg-blue-600/60 text-blue-50 ring-1 ring-blue-300/80"
+                                : item.icon === "folder" && isInPath
+                                  ? "bg-blue-700/35 text-blue-100 hover:bg-blue-700/45"
                                 : isInPath
                                   ? "text-blue-300/90 hover:bg-hover hover:text-blue-200"
                                   : "text-secondary hover:bg-hover hover:text-primary"
@@ -1021,14 +1259,34 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         });
     };
 
+    const quickViewModes: Array<{ mode: DirectoryViewMode; label: string; title: string }> = [
+        { mode: "details", label: "D", title: t("explorer.view.details") },
+        { mode: "list", label: "L", title: t("explorer.view.list") },
+        { mode: "smallIcons", label: "S", title: t("explorer.view.smallIcons") },
+        { mode: "mediumIcons", label: "M", title: t("explorer.view.mediumIcons") },
+        { mode: "largeIcons", label: "LG", title: t("explorer.view.largeIcons") },
+    ];
+
     return (
         <div className="flex flex-row h-full overflow-hidden">
             {!sidebarHidden && (
                 <>
                     <div
+                        ref={sidebarScrollRef}
                         className="shrink-0 pt-11 bg-zinc-950 border-r border-zinc-800 overflow-y-auto"
                         style={{ width: sidebarWidth }}
                     >
+                        <div className="px-2 pt-2 pb-1">
+                            <button
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs font-semibold text-secondary hover:bg-hoverbg hover:text-primary"
+                                onClick={(e) => showAiLaunchMenu(e, selectedPath || currentPath)}
+                                title={t("preview.openWithAi")}
+                                type="button"
+                            >
+                                <i className="fas fa-robot text-blue-300 w-4 text-center" />
+                                <span className="truncate">{t("preview.openWithAi")}</span>
+                            </button>
+                        </div>
                         <button
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-secondary uppercase tracking-wider hover:bg-hoverbg"
                             onClick={() => setCollapsedSections((prev) => ({ ...prev, quickAccess: !prev.quickAccess }))}
@@ -1157,6 +1415,14 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                         >
                             <i className="fas fa-star text-sm text-yellow-500" />
                         </button>
+                        <button
+                            className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-500/20 text-red-300 hover:text-red-200"
+                            onClick={() => uxCloseBlock(model.blockId)}
+                            title={t("common.close")}
+                            type="button"
+                        >
+                            <i className="fas fa-xmark text-sm" />
+                        </button>
                     </div>
 
                     <div className="flex-1 min-w-0" onContextMenu={handleAddressContextMenu}>
@@ -1188,7 +1454,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                                     "text-secondary cursor-text overflow-hidden whitespace-nowrap"
                                 )}
                                 onClick={() => {
-                                    copyCurrentPath();
                                     setAddressText(currentPath);
                                     setAddressMode("edit");
                                 }}
@@ -1224,7 +1489,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                         onPointerDown={startSearchResize}
                     />
 
-                    <div className="shrink-0" style={{ width: searchWidth }}>
+                    <div className="min-w-[120px] shrink" style={{ width: searchWidth }}>
                         <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded px-2 py-1">
                             <i className="fas fa-search text-zinc-400 text-xs" />
                             <input
@@ -1250,6 +1515,28 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                                 </button>
                             )}
                         </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-1 bg-zinc-900 border border-zinc-700 rounded p-0.5">
+                        {quickViewModes.map((item) => {
+                            const active = viewMode === item.mode;
+                            return (
+                                <button
+                                    key={item.mode}
+                                    type="button"
+                                    className={clsx(
+                                        "px-2 py-1 rounded text-[11px]",
+                                        active
+                                            ? "bg-blue-600/70 text-blue-50"
+                                            : "text-secondary hover:bg-hoverbg hover:text-primary"
+                                    )}
+                                    title={item.title}
+                                    onClick={() => setViewMode(item.mode)}
+                                >
+                                    {item.label}
+                                </button>
+                            );
+                        })}
                     </div>
 
                     <button
@@ -1281,6 +1568,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                     >
                         <i className="fa fa-ellipsis-vertical text-sm" />
                     </button>
+
                 </div>
 
                 <div className="flex flex-row flex-1 overflow-hidden">
@@ -1289,7 +1577,13 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                             model={model}
                             searchText={searchText}
                             setSearchText={setSearchText}
-                            onSelectedPathChange={setSelectedPath}
+                            viewMode={viewMode}
+                            setViewMode={setViewMode}
+                            showQuickViewControls={false}
+                            onSelectedPathChange={(path, isDir) => {
+                                setSelectedPath(path);
+                                setSelectedPathIsDir(isDir);
+                            }}
                         />
                     </div>
 
@@ -1365,3 +1659,4 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
 ExplorerDirectoryPreview.displayName = "ExplorerDirectoryPreview";
 
 export { ExplorerDirectoryPreview };
+

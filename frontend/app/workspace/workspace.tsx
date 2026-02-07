@@ -7,7 +7,9 @@ import { CenteredDiv } from "@/app/element/quickelems";
 import { ModalsRenderer } from "@/app/modals/modalsrenderer";
 import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
-import { FavoritesBar } from "@/app/workspace/favorites-bar";
+import { FavoritesPanel } from "@/app/workspace/favorites";
+import { GitPanel } from "@/app/workspace/git-panel";
+import { ServersPanel } from "@/app/workspace/servers-panel";
 import { Widgets } from "@/app/workspace/widgets";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms, getApi } from "@/store/global";
@@ -27,6 +29,7 @@ const WorkspaceElem = memo(() => {
     const workspaceLayoutModel = WorkspaceLayoutModel.getInstance();
     const tabId = useAtomValue(atoms.staticTabId);
     const ws = useAtomValue(atoms.workspace);
+    const sidePanelView = useAtomValue(workspaceLayoutModel.panelViewAtom);
     const initialAiPanelPercentage = workspaceLayoutModel.getAIPanelPercentage(window.innerWidth);
     const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
     const aiPanelRef = useRef<ImperativePanelHandle>(null);
@@ -46,8 +49,8 @@ const WorkspaceElem = memo(() => {
 
     useEffect(() => {
         const isVisible = workspaceLayoutModel.getAIPanelVisible();
-        getApi().setWaveAIOpen(isVisible);
-    }, []);
+        getApi().setWaveAIOpen(isVisible && sidePanelView === "ai");
+    }, [sidePanelView]);
 
     useEffect(() => {
         window.addEventListener("resize", workspaceLayoutModel.handleWindowResize);
@@ -57,7 +60,6 @@ const WorkspaceElem = memo(() => {
     return (
         <div className="flex flex-col w-full flex-grow overflow-hidden">
             <TabBar key={ws.oid} workspace={ws} />
-            <FavoritesBar />
             <div ref={panelContainerRef} className="flex flex-row flex-grow overflow-hidden">
                 <ErrorBoundary key={tabId}>
                     <PanelGroup
@@ -73,7 +75,16 @@ const WorkspaceElem = memo(() => {
                             className="overflow-hidden"
                         >
                             <div ref={aiPanelWrapperRef} className="w-full h-full">
-                                {tabId !== "" && <AIPanel />}
+                                {tabId !== "" &&
+                                    (sidePanelView === "ai" ? (
+                                        <AIPanel />
+                                    ) : sidePanelView === "favorites" ? (
+                                        <FavoritesPanel />
+                                    ) : sidePanelView === "servers" ? (
+                                        <ServersPanel />
+                                    ) : (
+                                        <GitPanel />
+                                    ))}
                             </div>
                         </Panel>
                         <PanelResizeHandle className="w-0.5 bg-transparent hover:bg-zinc-500/20 transition-colors" />
@@ -82,10 +93,10 @@ const WorkspaceElem = memo(() => {
                                 <CenteredDiv>{t("workspace.noActiveTab")}</CenteredDiv>
                             ) : (
                                 <div className="flex flex-row h-full">
-                                    <TabContent key={tabId} tabId={tabId} />
-                                    <div className="bg-zinc-950 border-l border-zinc-800">
+                                    <div className="bg-zinc-950 border-r border-zinc-800">
                                         <Widgets />
                                     </div>
+                                    <TabContent key={tabId} tabId={tabId} />
                                 </div>
                             )}
                         </Panel>

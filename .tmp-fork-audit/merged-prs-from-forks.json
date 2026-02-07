@@ -1,0 +1,234 @@
+﻿[
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjEyMDUyOQ==",
+                       "is_bot":  false,
+                       "login":  "thnk2wn",
+                       "name":  "Geoff Hudik"
+                   },
+        "headRefName":  "fix/openai-responses-model-constraints",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjEyMDUyOQ==",
+                                    "name":  "Geoff Hudik",
+                                    "login":  "thnk2wn"
+                                },
+        "mergedAt":  "2026-02-05T02:31:57Z",
+        "number":  2776,
+        "title":  "Add configurable verbosity for OpenAI Responses API",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2776"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjYwNTQ3NA==",
+                       "is_bot":  false,
+                       "login":  "ericmann",
+                       "name":  "Eric Mann"
+                   },
+        "headRefName":  "feature/update-xai-documentation",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjYwNTQ3NA==",
+                                    "name":  "Eric Mann",
+                                    "login":  "ericmann"
+                                },
+        "mergedAt":  "2026-02-01T21:11:55Z",
+        "number":  2819,
+        "title":  "Update Model Mode Docs",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2819"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjc1NDkyMg==",
+                       "is_bot":  false,
+                       "login":  "giraypultar",
+                       "name":  "Giray Pultar"
+                   },
+        "headRefName":  "patch-1",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjc1NDkyMg==",
+                                    "name":  "Giray Pultar",
+                                    "login":  "giraypultar"
+                                },
+        "mergedAt":  "2026-01-28T23:55:59Z",
+        "number":  2777,
+        "title":  "Document OpenAI compatible API provider usage",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2777"
+    },
+    {
+        "author":  {
+                       "id":  "U_kgDODExicw",
+                       "is_bot":  false,
+                       "login":  "gaius-codius",
+                       "name":  ""
+                   },
+        "headRefName":  "feat/osc52-clipboard-support",
+        "headRepositoryOwner":  {
+                                    "id":  "U_kgDODExicw",
+                                    "login":  "gaius-codius"
+                                },
+        "mergedAt":  "2026-01-02T19:25:12Z",
+        "number":  2725,
+        "title":  "add OSC 52 clipboard support for terminal applications",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2725"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjg3NTQyNg==",
+                       "is_bot":  false,
+                       "login":  "stevenvo",
+                       "name":  "Steven Vo"
+                   },
+        "headRefName":  "feature/keyboard-scroll-shortcuts",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjg3NTQyNg==",
+                                    "name":  "Steven Vo",
+                                    "login":  "stevenvo"
+                                },
+        "mergedAt":  "2025-12-15T19:35:21Z",
+        "number":  2679,
+        "title":  "Add Cmd+Up/Down keyboard shortcuts for terminal scrolling",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2679"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjU4OTg3Mjgy",
+                       "is_bot":  false,
+                       "login":  "andya1lan",
+                       "name":  "Andy_Allan"
+                   },
+        "headRefName":  "feat/ssh-agent-windows",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjU4OTg3Mjgy",
+                                    "name":  "Andy_Allan",
+                                    "login":  "andya1lan"
+                                },
+        "mergedAt":  "2025-12-15T19:05:11Z",
+        "number":  2644,
+        "title":  "feat: implement SSH agent for Windows with tests",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2644"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjg3NTQyNg==",
+                       "is_bot":  false,
+                       "login":  "stevenvo",
+                       "name":  "Steven Vo"
+                   },
+        "headRefName":  "feature/preview-refresh-buttons",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjg3NTQyNg==",
+                                    "name":  "Steven Vo",
+                                    "login":  "stevenvo"
+                                },
+        "mergedAt":  "2025-12-15T17:12:18Z",
+        "number":  2680,
+        "title":  "Add manual refresh buttons to file preview",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2680"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjExMDU1MjQ2",
+                       "is_bot":  false,
+                       "login":  "togo01",
+                       "name":  ""
+                   },
+        "headRefName":  "feature/terminal-input-improvements",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjExMDU1MjQ2",
+                                    "login":  "togo01"
+                                },
+        "mergedAt":  "2025-11-07T21:56:06Z",
+        "number":  2523,
+        "title":  "feat(terminal): improve input handling for interactive CLI tools",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2523"
+    },
+    {
+        "author":  {
+                       "id":  "U_kgDOCE3Wyg",
+                       "is_bot":  false,
+                       "login":  "Mostafa-Khairy0",
+                       "name":  "Mostafa Khairy"
+                   },
+        "headRefName":  "feature/fullscreen-launch-setting",
+        "headRepositoryOwner":  {
+                                    "id":  "U_kgDOCE3Wyg",
+                                    "name":  "Mostafa Khairy",
+                                    "login":  "Mostafa-Khairy0"
+                                },
+        "mergedAt":  "2025-10-31T23:34:32Z",
+        "number":  2490,
+        "title":  "feat: Add fullscreen launch setting (#1933)",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2490"
+    },
+    {
+        "author":  {
+                       "id":  "U_kgDOCE3Wyg",
+                       "is_bot":  false,
+                       "login":  "Mostafa-Khairy0",
+                       "name":  "Mostafa Khairy"
+                   },
+        "headRefName":  "remove-unused-imports",
+        "headRepositoryOwner":  {
+                                    "id":  "U_kgDOCE3Wyg",
+                                    "name":  "Mostafa Khairy",
+                                    "login":  "Mostafa-Khairy0"
+                                },
+        "mergedAt":  "2025-10-31T23:31:51Z",
+        "number":  2491,
+        "title":  "remove unused imports and empty files",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2491"
+    },
+    {
+        "author":  {
+                       "id":  "U_kgDOCT6W5Q",
+                       "is_bot":  false,
+                       "login":  "slate20",
+                       "name":  "Matt"
+                   },
+        "headRefName":  "fix/monaco-syntax-highlighting",
+        "headRepositoryOwner":  {
+                                    "id":  "U_kgDOCT6W5Q",
+                                    "name":  "Matt",
+                                    "login":  "slate20"
+                                },
+        "mergedAt":  "2025-10-21T00:26:48Z",
+        "number":  2459,
+        "title":  "Fix Monaco editor syntax highlighting in Preview block",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2459"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjE3MTQ4MQ==",
+                       "is_bot":  false,
+                       "login":  "jpetazzo",
+                       "name":  "Jérôme Petazzoni"
+                   },
+        "headRefName":  "patch-1",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjE3MTQ4MQ==",
+                                    "name":  "Jérôme Petazzoni",
+                                    "login":  "jpetazzo"
+                                },
+        "mergedAt":  "2025-10-17T18:14:45Z",
+        "number":  2452,
+        "title":  "`wsh ai` example was missing `-m` flag",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2452"
+    },
+    {
+        "author":  {
+                       "id":  "MDQ6VXNlcjc2NTYzMjI=",
+                       "is_bot":  false,
+                       "login":  "mister-x-ops",
+                       "name":  "Oleksandr Hreshchuk"
+                   },
+        "headRefName":  "feat/blocks-list",
+        "headRepositoryOwner":  {
+                                    "id":  "MDQ6VXNlcjc2NTYzMjI=",
+                                    "name":  "Oleksandr Hreshchuk",
+                                    "login":  "mister-x-ops"
+                                },
+        "mergedAt":  "2025-10-08T20:41:24Z",
+        "number":  2337,
+        "title":  "feat(cli): add blocks list with filtering and JSON output",
+        "url":  "https://github.com/wavetermdev/waveterm/pull/2337"
+    }
+]

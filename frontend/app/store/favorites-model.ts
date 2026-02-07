@@ -5,6 +5,7 @@ export interface FavoriteItem {
     id: string;
     label: string;
     path: string;
+    connection?: string;
     icon?: string;
     children?: FavoriteItem[];
 }
@@ -15,86 +16,152 @@ export interface FavoritesData {
 }
 
 const STORAGE_KEY_PREFIX = "waveterm-favorites";
-const GLOBAL_SCOPE_ID = "global";
-
-function makeStorageKey(scopeId?: string): string {
-    const effectiveScopeId = scopeId && scopeId.trim() ? scopeId.trim() : GLOBAL_SCOPE_ID;
-    if (effectiveScopeId === GLOBAL_SCOPE_ID) {
-        return STORAGE_KEY_PREFIX;
-    }
-    return `${STORAGE_KEY_PREFIX}:${effectiveScopeId}`;
-}
+const STORAGE_KEY = STORAGE_KEY_PREFIX;
+const SCOPED_STORAGE_KEY_PREFIX = `${STORAGE_KEY_PREFIX}:`;
 
 function makeDefaultFavorites(): FavoritesData {
     return { items: [], lastUpdated: Date.now() };
+}
+
+function normalizeFavoritePath(path: string): string {
+    if (!path) {
+        return "";
+    }
+    const trimmed = path.trim();
+    if (!trimmed) {
+        return "";
+    }
+    if (trimmed === "/" || trimmed === "\\" || trimmed === "~") {
+        return trimmed;
+    }
+    return trimmed.replace(/[\\/]+$/, "");
+}
+
+function normalizeConnection(connection?: string): string | undefined {
+    const cleaned = connection?.trim();
+    return cleaned ? cleaned : undefined;
 }
 
 function defaultLabelForPath(path: string): string {
     if (!path) {
         return "";
     }
-    const trimmed = path.replace(/[\\/]+$/, "");
-    if (!trimmed) {
+    const normalized = normalizeFavoritePath(path);
+    if (!normalized) {
         return path;
     }
-    const parts = trimmed.split(/[\\/]/);
-    return parts[parts.length - 1] || trimmed || path;
+    const parts = normalized.split(/[\\/]/);
+    return parts[parts.length - 1] || normalized;
+}
+
+function cloneFavoriteItem(item: FavoriteItem): FavoriteItem {
+    return {
+        id: item.id,
+        label: item.label,
+        path: normalizeFavoritePath(item.path),
+        connection: normalizeConnection(item.connection),
+        icon: item.icon,
+        children: item.children?.map(cloneFavoriteItem) ?? [],
+    };
+}
+
+function makeFavoriteSignature(item: FavoriteItem): string {
+    return `${normalizeConnection(item.connection) ?? "local"}::${normalizeFavoritePath(item.path)}`;
+}
+
+function mergeFavoriteItems(target: FavoriteItem[], source: FavoriteItem[]): void {
+    for (const sourceItem of source) {
+        const normalizedSource = cloneFavoriteItem(sourceItem);
+        const signature = makeFavoriteSignature(normalizedSource);
+        const existing = target.find((targetItem) => makeFavoriteSignature(targetItem) === signature);
+        if (!existing) {
+            target.push(normalizedSource);
+            continue;
+        }
+        if (normalizedSource.children?.length) {
+            if (!existing.children) {
+                existing.children = [];
+            }
+            mergeFavoriteItems(existing.children, normalizedSource.children);
+        }
+    }
+}
+
+function normalizeFavoritesData(data: Partial<FavoritesData> | null | undefined): FavoritesData {
+    const normalizedItems = Array.isArray(data?.items) ? data.items.map(cloneFavoriteItem) : [];
+    return {
+        items: normalizedItems,
+        lastUpdated: typeof data?.lastUpdated === "number" ? data.lastUpdated : Date.now(),
+    };
 }
 
 export class FavoritesModel {
-    private static instances: Map<string, FavoritesModel> = new Map();
+    private static instance: FavoritesModel | null = null;
 
-    private scopeId: string;
     private storageKey: string;
     private data: FavoritesData;
 
-    private constructor(scopeId: string) {
-        this.scopeId = scopeId && scopeId.trim() ? scopeId.trim() : GLOBAL_SCOPE_ID;
-        this.storageKey = makeStorageKey(this.scopeId);
+    private constructor() {
+        this.storageKey = STORAGE_KEY;
         this.data = this.loadFromStorage();
     }
 
-    static getInstance(scopeId?: string): FavoritesModel {
-        const effectiveScopeId = scopeId && scopeId.trim() ? scopeId.trim() : GLOBAL_SCOPE_ID;
-        const storageKey = makeStorageKey(effectiveScopeId);
-        const existing = FavoritesModel.instances.get(storageKey);
-        if (existing) {
-            return existing;
+    static getInstance(_scopeId?: string): FavoritesModel {
+        if (FavoritesModel.instance) {
+            return FavoritesModel.instance;
         }
-        const instance = new FavoritesModel(effectiveScopeId);
-        FavoritesModel.instances.set(storageKey, instance);
-        return instance;
+        FavoritesModel.instance = new FavoritesModel();
+        return FavoritesModel.instance;
     }
 
     private loadFromStorage(): FavoritesData {
         try {
             const stored = localStorage.getItem(this.storageKey);
             if (stored) {
-                return JSON.parse(stored);
+                return normalizeFavoritesData(JSON.parse(stored));
             }
 
-            // Migration/fallback: if this is a scoped favorites list and no data exists yet,
-            // seed it from the global favorites so users don't "lose" existing items.
-            if (this.scopeId !== GLOBAL_SCOPE_ID) {
-                const globalStored = localStorage.getItem(makeStorageKey(GLOBAL_SCOPE_ID));
-                if (globalStored) {
-                    const parsed = JSON.parse(globalStored) as FavoritesData;
-                    const seeded: FavoritesData = {
-                        items: JSON.parse(JSON.stringify(parsed?.items ?? [])),
-                        lastUpdated: Date.now(),
-                    };
-                    try {
-                        localStorage.setItem(this.storageKey, JSON.stringify(seeded));
-                    } catch {
-                        // ignore
-                    }
-                    return seeded;
-                }
+            const migrated = this.migrateScopedFavorites();
+            if (migrated.items.length > 0) {
+                localStorage.setItem(this.storageKey, JSON.stringify(migrated));
+                return migrated;
             }
         } catch (e) {
             console.error("Failed to load favorites from storage:", e);
         }
         return makeDefaultFavorites();
+    }
+
+    private migrateScopedFavorites(): FavoritesData {
+        const merged = makeDefaultFavorites();
+
+        try {
+            const scopedKeys: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(SCOPED_STORAGE_KEY_PREFIX)) {
+                    scopedKeys.push(key);
+                }
+            }
+
+            scopedKeys.sort();
+            for (const key of scopedKeys) {
+                const raw = localStorage.getItem(key);
+                if (!raw) {
+                    continue;
+                }
+                const parsed = normalizeFavoritesData(JSON.parse(raw));
+                mergeFavoriteItems(merged.items, parsed.items);
+            }
+
+            if (merged.items.length > 0) {
+                merged.lastUpdated = Date.now();
+            }
+        } catch (e) {
+            console.error("Failed to migrate scoped favorites:", e);
+        }
+
+        return merged;
     }
 
     private saveToStorage(): void {
@@ -110,30 +177,38 @@ export class FavoritesModel {
         return this.data.items;
     }
 
-    addFavorite(path: string, label?: string, parentId?: string): void {
-        const id = `fav-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const displayLabel = label || defaultLabelForPath(path) || path;
+    addFavorite(path: string, label?: string, parentId?: string, connection?: string): void {
+        const normalizedPath = normalizeFavoritePath(path);
+        if (!normalizedPath) {
+            return;
+        }
 
+        const normalizedConnection = normalizeConnection(connection);
+        const displayLabel = label || defaultLabelForPath(normalizedPath) || normalizedPath;
+
+        const parent = parentId ? this.findItemById(this.data.items, parentId) : undefined;
+        const targetItems = parent ? (parent.children ??= []) : this.data.items;
+
+        const duplicated = targetItems.some(
+            (item) =>
+                normalizeFavoritePath(item.path) === normalizedPath &&
+                normalizeConnection(item.connection) === normalizedConnection
+        );
+        if (duplicated) {
+            return;
+        }
+
+        const id = `fav-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
         const newItem: FavoriteItem = {
             id,
             label: displayLabel,
-            path,
+            path: normalizedPath,
+            connection: normalizedConnection,
             icon: "folder",
             children: [],
         };
 
-        if (parentId) {
-            const parent = this.findItemById(this.data.items, parentId);
-            if (parent) {
-                if (!parent.children) {
-                    parent.children = [];
-                }
-                parent.children.push(newItem);
-            }
-        } else {
-            this.data.items.push(newItem);
-        }
-
+        targetItems.push(newItem);
         this.saveToStorage();
     }
 
@@ -151,13 +226,13 @@ export class FavoritesModel {
     }
 
     moveFavorite(itemId: string, newParentId?: string): void {
-        // Remove from current location
         const item = this.findItemById(this.data.items, itemId);
-        if (!item) return;
+        if (!item) {
+            return;
+        }
 
         this.data.items = this.removeItemById(this.data.items, itemId);
 
-        // Add to new location
         if (newParentId) {
             const newParent = this.findItemById(this.data.items, newParentId);
             if (newParent) {

@@ -8,10 +8,8 @@ import { Workspace } from "@/app/workspace/workspace";
 import { ContextMenuModel } from "@/store/contextmenu";
 import {
     atoms,
-    clearTabIndicatorFromFocus,
     createBlock,
     getSettingsPrefixAtom,
-    getTabIndicatorAtom,
     globalStore,
     isDev,
     removeFlashError,
@@ -29,6 +27,7 @@ import { Fragment, useEffect, useState } from "react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { AppBackground } from "./app-bg";
+import { initAccentColorFromStorage } from "./element/accent-color";
 import { initLogoColorFromStorage } from "./element/logo-color";
 import { CenteredDiv } from "./element/quickelems";
 import { NotificationBubbles } from "./notification/notificationbubbles";
@@ -46,6 +45,7 @@ const focusLog = debug("wave:focus");
 const App = ({ onFirstRender }: { onFirstRender: () => void }) => {
     const tabId = useAtomValue(atoms.staticTabId);
     useEffect(() => {
+        initAccentColorFromStorage();
         initLogoColorFromStorage();
         onFirstRender();
     }, []);
@@ -219,25 +219,6 @@ const AppKeyHandlers = () => {
 };
 
 const TabIndicatorAutoClearing = () => {
-    const tabId = useAtomValue(atoms.staticTabId);
-    const indicator = useAtomValue(getTabIndicatorAtom(tabId));
-    const documentHasFocus = useAtomValue(atoms.documentHasFocus);
-
-    useEffect(() => {
-        if (!indicator || !documentHasFocus || !indicator.clearonfocus) {
-            return;
-        }
-
-        const timeoutId = setTimeout(() => {
-            const currentIndicator = globalStore.get(getTabIndicatorAtom(tabId));
-            if (globalStore.get(atoms.documentHasFocus) && currentIndicator?.clearonfocus) {
-                clearTabIndicatorFromFocus(tabId);
-            }
-        }, 3000);
-
-        return () => clearTimeout(timeoutId);
-    }, [tabId, indicator, documentHasFocus]);
-
     return null;
 };
 

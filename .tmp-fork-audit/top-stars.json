@@ -1,0 +1,882 @@
+﻿[
+    {
+        "nameWithOwner":  "bklieger-groq/waveterm-groq",
+        "url":  "https://github.com/bklieger-groq/waveterm-groq",
+        "stargazerCount":  3,
+        "pushedAt":  "2025-05-16T06:57:39Z",
+        "updatedAt":  "2025-07-26T11:59:59Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "DarkHater01/waveterm",
+        "url":  "https://github.com/DarkHater01/waveterm",
+        "stargazerCount":  2,
+        "pushedAt":  "2025-11-27T17:55:13Z",
+        "updatedAt":  "2025-12-16T16:48:21Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "draco28/FlowTerminal_wave",
+        "url":  "https://github.com/draco28/FlowTerminal_wave",
+        "stargazerCount":  2,
+        "pushedAt":  "2025-11-25T19:06:43Z",
+        "updatedAt":  "2025-12-16T22:38:58Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Sumangal44/waveterm",
+        "url":  "https://github.com/Sumangal44/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2026-01-24T21:19:43Z",
+        "updatedAt":  "2026-01-26T14:31:04Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "preechapon250/waveterm",
+        "url":  "https://github.com/preechapon250/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2026-01-16T03:05:33Z",
+        "updatedAt":  "2026-01-16T03:59:10Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Kali99xx/waveterm",
+        "url":  "https://github.com/Kali99xx/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-12-06T01:53:22Z",
+        "updatedAt":  "2025-12-06T10:09:17Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "leoricshcn/waveterm",
+        "url":  "https://github.com/leoricshcn/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-12-02T05:54:55Z",
+        "updatedAt":  "2025-12-02T09:25:46Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "guobin211/waveterm",
+        "url":  "https://github.com/guobin211/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-11-13T01:53:51Z",
+        "updatedAt":  "2025-12-17T02:01:13Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "nickweiminhan/waveterm",
+        "url":  "https://github.com/nickweiminhan/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-11-04T06:05:35Z",
+        "updatedAt":  "2025-11-04T14:23:07Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "inboxxobni/waveterm",
+        "url":  "https://github.com/inboxxobni/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-10-31T00:16:27Z",
+        "updatedAt":  "2025-10-31T00:28:19Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "rebots-online/waveterm",
+        "url":  "https://github.com/rebots-online/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-10-28T05:59:18Z",
+        "updatedAt":  "2025-10-28T07:11:51Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "tsoe199966/waveterm-tsoe",
+        "url":  "https://github.com/tsoe199966/waveterm-tsoe",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-10-21T06:29:10Z",
+        "updatedAt":  "2025-10-21T10:10:36Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "ssushant0011/waveterm",
+        "url":  "https://github.com/ssushant0011/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2026-01-17T01:19:39Z",
+        "updatedAt":  "2025-10-20T01:11:50Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "xpxwek/waveterm",
+        "url":  "https://github.com/xpxwek/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-07-25T16:18:11Z",
+        "updatedAt":  "2025-07-27T20:56:18Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "K34S/waveterm",
+        "url":  "https://github.com/K34S/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-07-25T16:18:11Z",
+        "updatedAt":  "2025-07-25T19:26:17Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "MarkBruns/waveterm",
+        "url":  "https://github.com/MarkBruns/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-05-09T17:05:21Z",
+        "updatedAt":  "2025-05-11T03:31:44Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "DepsCian/waveterm",
+        "url":  "https://github.com/DepsCian/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-08-29T08:27:59Z",
+        "updatedAt":  "2025-09-25T10:32:53Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "imjustbackup/waveterm",
+        "url":  "https://github.com/imjustbackup/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-03-25T14:06:14Z",
+        "updatedAt":  "2025-05-02T02:23:15Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "almarales/waveterm",
+        "url":  "https://github.com/almarales/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-03-14T17:09:08Z",
+        "updatedAt":  "2025-03-19T08:55:26Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "sowavy234/waveterm",
+        "url":  "https://github.com/sowavy234/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-03-02T06:07:42Z",
+        "updatedAt":  "2025-03-18T00:25:52Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Jasphine256/WaveTerminalFork",
+        "url":  "https://github.com/Jasphine256/WaveTerminalFork",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-02-02T03:51:21Z",
+        "updatedAt":  "2025-02-02T18:57:30Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "ais1175/waveterm",
+        "url":  "https://github.com/ais1175/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-01-22T08:39:34Z",
+        "updatedAt":  "2025-01-22T11:44:20Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "amr-karam/waveterm",
+        "url":  "https://github.com/amr-karam/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2025-01-13T18:37:58Z",
+        "updatedAt":  "2025-01-15T08:33:44Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Jessicalau86/waveterm",
+        "url":  "https://github.com/Jessicalau86/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2024-12-15T03:01:27Z",
+        "updatedAt":  "2024-12-15T03:20:19Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "0xdevinda/waveterm",
+        "url":  "https://github.com/0xdevinda/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2024-12-13T17:47:41Z",
+        "updatedAt":  "2024-12-14T17:51:14Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "agentmishra/waveterm",
+        "url":  "https://github.com/agentmishra/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2024-12-13T17:47:41Z",
+        "updatedAt":  "2024-12-14T13:40:12Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "kesgin1/waveterm",
+        "url":  "https://github.com/kesgin1/waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2024-12-13T03:25:13Z",
+        "updatedAt":  "2024-12-13T09:37:45Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "apanchoo/waveterm-nerd",
+        "url":  "https://github.com/apanchoo/waveterm-nerd",
+        "stargazerCount":  1,
+        "pushedAt":  "2024-07-30T10:24:21Z",
+        "updatedAt":  "2025-08-21T03:53:43Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "code/app-waveterm",
+        "url":  "https://github.com/code/app-waveterm",
+        "stargazerCount":  1,
+        "pushedAt":  "2024-09-20T06:33:01Z",
+        "updatedAt":  "2025-04-22T13:28:45Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "legendxcheng/waveterm",
+        "url":  "https://github.com/legendxcheng/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-07T07:37:05Z",
+        "updatedAt":  "2026-02-07T03:44:43Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "JustHereToHelp/waveterm",
+        "url":  "https://github.com/JustHereToHelp/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-07T00:33:40Z",
+        "updatedAt":  "2026-02-06T23:31:54Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "yww520/waveterm",
+        "url":  "https://github.com/yww520/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-06T06:21:44Z",
+        "updatedAt":  "2026-02-06T14:50:03Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "ovehbe/waveterm",
+        "url":  "https://github.com/ovehbe/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-06T06:21:44Z",
+        "updatedAt":  "2026-02-06T11:37:10Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Cyberdad247/waveterm",
+        "url":  "https://github.com/Cyberdad247/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-06T01:12:16Z",
+        "updatedAt":  "2026-02-06T02:34:54Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "DanielW8088/waveterm",
+        "url":  "https://github.com/DanielW8088/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-05T02:31:57Z",
+        "updatedAt":  "2026-02-05T17:04:06Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "tocasoft/waveterm",
+        "url":  "https://github.com/tocasoft/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-05T02:31:57Z",
+        "updatedAt":  "2026-02-05T14:43:04Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Kaden-Schutt/waveterm",
+        "url":  "https://github.com/Kaden-Schutt/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-05T02:31:57Z",
+        "updatedAt":  "2026-02-05T04:19:16Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "WooZoo86/waveterm",
+        "url":  "https://github.com/WooZoo86/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-04T23:29:31Z",
+        "updatedAt":  "2026-02-04T23:57:13Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "avalonreset/glaive",
+        "url":  "https://github.com/avalonreset/glaive",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-04T20:48:50Z",
+        "updatedAt":  "2026-02-04T22:32:05Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "akari2600/waveterm",
+        "url":  "https://github.com/akari2600/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-04T10:04:40Z",
+        "updatedAt":  "2026-02-04T10:04:45Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "All3yp/waveterm",
+        "url":  "https://github.com/All3yp/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-01T21:25:20Z",
+        "updatedAt":  "2026-02-02T19:48:28Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "R-Ernesto/waveterm",
+        "url":  "https://github.com/R-Ernesto/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-01T21:25:20Z",
+        "updatedAt":  "2026-02-02T18:44:49Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "lizhuangs/waveterm",
+        "url":  "https://github.com/lizhuangs/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-01T21:25:20Z",
+        "updatedAt":  "2026-02-02T03:08:25Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "gracie007-cloud/wave-terminal",
+        "url":  "https://github.com/gracie007-cloud/wave-terminal",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-02T00:31:16Z",
+        "updatedAt":  "2026-02-02T00:31:45Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Drew-Goddyn/waveterm",
+        "url":  "https://github.com/Drew-Goddyn/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-02T05:11:04Z",
+        "updatedAt":  "2026-02-01T18:32:18Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "ericmann/waveterm",
+        "url":  "https://github.com/ericmann/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-01T01:10:11Z",
+        "updatedAt":  "2026-02-01T01:01:49Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "qqqqq412984588-cpu/waveterm",
+        "url":  "https://github.com/qqqqq412984588-cpu/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-29T23:47:02Z",
+        "updatedAt":  "2026-01-30T00:32:30Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Lawyer1GPT/waveterm",
+        "url":  "https://github.com/Lawyer1GPT/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-29T05:05:07Z",
+        "updatedAt":  "2026-01-29T05:41:52Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "lexi-the-cute/waveterm",
+        "url":  "https://github.com/lexi-the-cute/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-28T06:28:57Z",
+        "updatedAt":  "2026-01-28T13:35:30Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "srcxsercan/waveterm",
+        "url":  "https://github.com/srcxsercan/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-28T06:28:57Z",
+        "updatedAt":  "2026-01-28T07:23:04Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "tabiznet/wavetermGROK",
+        "url":  "https://github.com/tabiznet/wavetermGROK",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-26T22:01:52Z",
+        "updatedAt":  "2026-01-26T22:01:56Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "moto-zz/waveterm",
+        "url":  "https://github.com/moto-zz/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-24T21:19:43Z",
+        "updatedAt":  "2026-01-26T15:05:00Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "0John-Hong0/waveterm",
+        "url":  "https://github.com/0John-Hong0/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-02-03T14:14:58Z",
+        "updatedAt":  "2026-02-03T14:15:48Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "kap24bit-source/waveterm-kapx",
+        "url":  "https://github.com/kap24bit-source/waveterm-kapx",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-26T09:22:28Z",
+        "updatedAt":  "2026-01-26T09:07:57Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Zykairotis/waveterm",
+        "url":  "https://github.com/Zykairotis/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-24T21:19:43Z",
+        "updatedAt":  "2026-01-26T07:37:15Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "BRlin-o/waveterm",
+        "url":  "https://github.com/BRlin-o/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-24T21:19:43Z",
+        "updatedAt":  "2026-01-25T13:19:28Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "buyaka/waveterm",
+        "url":  "https://github.com/buyaka/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-24T21:19:43Z",
+        "updatedAt":  "2026-01-25T13:07:00Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "AyoubGharbi/waveterm",
+        "url":  "https://github.com/AyoubGharbi/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-25T17:21:58Z",
+        "updatedAt":  "2026-01-25T02:48:55Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "allenlinli/waveterm",
+        "url":  "https://github.com/allenlinli/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-24T01:59:50Z",
+        "updatedAt":  "2026-01-24T19:35:27Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "millette/waveterm",
+        "url":  "https://github.com/millette/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-23T00:32:39Z",
+        "updatedAt":  "2026-01-23T16:05:15Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "dev-loka/waveterm",
+        "url":  "https://github.com/dev-loka/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-23T00:32:39Z",
+        "updatedAt":  "2026-01-23T01:50:56Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "kiki830621/waveterm",
+        "url":  "https://github.com/kiki830621/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-22T02:42:24Z",
+        "updatedAt":  "2026-01-22T12:24:42Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Panadol-block/we-terminal",
+        "url":  "https://github.com/Panadol-block/we-terminal",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-22T02:42:24Z",
+        "updatedAt":  "2026-01-22T05:27:45Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "mexyusef/waveterm",
+        "url":  "https://github.com/mexyusef/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-21T09:55:06Z",
+        "updatedAt":  "2026-01-21T09:55:14Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "hansugus/waveterm",
+        "url":  "https://github.com/hansugus/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-20T01:21:53Z",
+        "updatedAt":  "2026-01-20T17:37:16Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "sergioarnal-iupa/waveterm",
+        "url":  "https://github.com/sergioarnal-iupa/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-20T01:21:53Z",
+        "updatedAt":  "2026-01-20T11:37:31Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "rex993/waveterm",
+        "url":  "https://github.com/rex993/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-20T01:21:53Z",
+        "updatedAt":  "2026-01-20T11:34:58Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "lovemew67/waveterm",
+        "url":  "https://github.com/lovemew67/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-20T02:45:13Z",
+        "updatedAt":  "2026-01-20T02:22:48Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "UnbreakableMJ/waveterm",
+        "url":  "https://github.com/UnbreakableMJ/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-19T01:58:14Z",
+        "updatedAt":  "2026-01-19T16:59:19Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "tvminh19/waveterm",
+        "url":  "https://github.com/tvminh19/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-19T01:58:14Z",
+        "updatedAt":  "2026-01-19T10:07:47Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "noahk81/waveterm",
+        "url":  "https://github.com/noahk81/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-19T01:58:14Z",
+        "updatedAt":  "2026-01-19T06:54:27Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "telcotronics/waveterm",
+        "url":  "https://github.com/telcotronics/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-19T01:58:14Z",
+        "updatedAt":  "2026-01-19T03:37:20Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "Fsh10/waveterm",
+        "url":  "https://github.com/Fsh10/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-19T01:58:14Z",
+        "updatedAt":  "2026-01-19T02:13:12Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "giraypultar/waveterm",
+        "url":  "https://github.com/giraypultar/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-18T15:02:55Z",
+        "updatedAt":  "2026-01-18T14:25:57Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "goodmen001/waveterm",
+        "url":  "https://github.com/goodmen001/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-17T00:54:45Z",
+        "updatedAt":  "2026-01-18T14:04:48Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "XenosXX/waveterm",
+        "url":  "https://github.com/XenosXX/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-17T00:54:45Z",
+        "updatedAt":  "2026-01-18T03:15:10Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "01NeuralNinja/waveterm",
+        "url":  "https://github.com/01NeuralNinja/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-17T19:28:02Z",
+        "updatedAt":  "2026-01-17T19:02:53Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "whysmx/waveterm",
+        "url":  "https://github.com/whysmx/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-17T00:54:45Z",
+        "updatedAt":  "2026-01-17T16:31:58Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "JohnoString/waveterm",
+        "url":  "https://github.com/JohnoString/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-17T00:54:45Z",
+        "updatedAt":  "2026-01-17T07:02:05Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    },
+    {
+        "nameWithOwner":  "saucenovi/waveterm",
+        "url":  "https://github.com/saucenovi/waveterm",
+        "stargazerCount":  0,
+        "pushedAt":  "2026-01-17T00:54:45Z",
+        "updatedAt":  "2026-01-17T01:55:20Z",
+        "isArchived":  false,
+        "defaultBranchRef":  {
+                                 "name":  "main"
+                             }
+    }
+]

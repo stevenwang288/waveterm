@@ -5,10 +5,8 @@ import { ContextMenuModel } from "@/app/store/contextmenu";
 import type { FavoriteItem } from "@/app/store/favorites-model";
 import { FavoritesModel } from "@/app/store/favorites-model";
 import { createBlock } from "@/store/global";
-import { atoms } from "@/store/global";
 import { fireAndForget } from "@/util/util";
 import clsx from "clsx";
-import { useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -16,10 +14,13 @@ type FavoritesBarState = {
     items: FavoriteItem[];
 };
 
+function isCategoryPath(path: string): boolean {
+    return path.endsWith("/__category__") || path.endsWith("\\__category__");
+}
+
 const FavoritesBar = memo(() => {
     const { t } = useTranslation();
-    const tabId = useAtomValue(atoms.staticTabId);
-    const favoritesModel = useMemo(() => FavoritesModel.getInstance(tabId), [tabId]);
+    const favoritesModel = useMemo(() => FavoritesModel.getInstance(), []);
     const [state, setState] = useState<FavoritesBarState>({ items: [] });
 
     useEffect(() => {
@@ -40,13 +41,19 @@ const FavoritesBar = memo(() => {
         return parts[parts.length - 1] || trimmed || path;
     }, []);
 
-    const openFavorite = useCallback((path: string) => {
-        createBlock({
-            meta: {
-                view: "preview",
-                file: path,
-            },
-        });
+    const openFavorite = useCallback((item: FavoriteItem) => {
+        if (isCategoryPath(item.path)) {
+            return;
+        }
+        const meta: Record<string, any> = {
+            controller: "shell",
+            view: "term",
+            "cmd:cwd": item.path,
+        };
+        if (item.connection) {
+            meta.connection = item.connection;
+        }
+        createBlock({ meta });
     }, []);
 
     const showItemContextMenu = useCallback(
@@ -56,7 +63,7 @@ const FavoritesBar = memo(() => {
             const menu: ContextMenuItem[] = [
                 {
                     label: t("common.open") || "打开",
-                    click: () => openFavorite(item.path),
+                    click: () => openFavorite(item),
                 },
                 {
                     label: t("favorites.copyFullPath") || "复制完整路径",
@@ -96,9 +103,9 @@ const FavoritesBar = memo(() => {
                                 "inline-flex items-center gap-1.5 px-2 py-1 mr-2 rounded w-32",
                                 "bg-zinc-900 text-secondary hover:bg-zinc-800 hover:text-primary cursor-pointer text-xs"
                             )}
-                            onClick={() => openFavorite(item.path)}
+                            onClick={() => openFavorite(item)}
                             onContextMenu={(e) => showItemContextMenu(e, item)}
-                            title={item.path}
+                            title={item.connection ? `${item.connection} · ${item.path}` : item.path}
                         >
                             <i className="fas fa-folder-open text-zinc-400" />
                             <span className="flex-1 truncate align-middle">{getDisplayLabel(item.path)}</span>

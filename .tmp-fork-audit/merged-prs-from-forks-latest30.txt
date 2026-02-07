@@ -1,0 +1,17 @@
+﻿#2776 | 2026-02-05T02:31:57Z | owner:thnk2wn | changed:6 | +30/-5 | Add configurable verbosity for OpenAI Responses API | https://github.com/wavetermdev/waveterm/pull/2776
+#2819 | 2026-02-01T21:11:55Z | owner:ericmann | changed:1 | +1/-1 | Update Model Mode Docs | https://github.com/wavetermdev/waveterm/pull/2819
+#2777 | 2026-01-28T23:55:59Z | owner:giraypultar | changed:1 | +27/-0 | Document OpenAI compatible API provider usage | https://github.com/wavetermdev/waveterm/pull/2777
+#2725 | 2026-01-02T19:25:12Z | owner:gaius-codius | changed:2 | +92/-14 | add OSC 52 clipboard support for terminal applications | https://github.com/wavetermdev/waveterm/pull/2725
+#2679 | 2025-12-15T19:35:21Z | owner:stevenvo | changed:1 | +41/-5 | Add Cmd+Up/Down keyboard shortcuts for terminal scrolling | https://github.com/wavetermdev/waveterm/pull/2679
+#2644 | 2025-12-15T19:05:11Z | owner:andya1lan | changed:8 | +119/-15 | feat: implement SSH agent for Windows with tests | https://github.com/wavetermdev/waveterm/pull/2644
+#2680 | 2025-12-15T17:12:18Z | owner:stevenvo | changed:4 | +41/-2 | Add manual refresh buttons to file preview | https://github.com/wavetermdev/waveterm/pull/2680
+#2523 | 2025-11-07T21:56:06Z | owner:togo01 | changed:8 | +396/-10 | feat(terminal): improve input handling for interactive CLI tools | https://github.com/wavetermdev/waveterm/pull/2523
+#2490 | 2025-10-31T23:34:32Z | owner:Mostafa-Khairy0 | changed:8 | +42/-1 | feat: Add fullscreen launch setting (#1933) | https://github.com/wavetermdev/waveterm/pull/2490
+#2491 | 2025-10-31T23:31:51Z | owner:Mostafa-Khairy0 | changed:4 | +2/-4 | remove unused imports and empty files | https://github.com/wavetermdev/waveterm/pull/2491
+#2459 | 2025-10-21T00:26:48Z | owner:slate20 | changed:4 | +66/-6 | Fix Monaco editor syntax highlighting in Preview block | https://github.com/wavetermdev/waveterm/pull/2459
+#2452 | 2025-10-17T18:14:45Z | owner:jpetazzo | changed:1 | +1/-1 | `wsh ai` example was missing `-m` flag | https://github.com/wavetermdev/waveterm/pull/2452
+#2337 | 2025-10-08T20:41:24Z | owner:mister-x-ops | changed:6 | +402/-0 | feat(cli): add blocks list with filtering and JSON output | https://github.com/wavetermdev/waveterm/pull/2337
+#2249 | 2025-08-19T18:30:58Z | owner:L1l1thLY | changed:2 | +15/-7 | feat: Claude AI configuration supports custom base URL | https://github.com/wavetermdev/waveterm/pull/2249
+#2211 | 2025-08-15T05:47:23Z | owner:ryderstorm | changed:1 | +83/-1 | docs: add OSC-7 working-directory tracking documentation | https://github.com/wavetermdev/waveterm/pull/2211
+#2088 | 2025-05-02T18:10:17Z | owner:HAHA741 | changed:3 | +36/-2 | Feat add editor fontsize | https://github.com/wavetermdev/waveterm/pull/2088
+#1864 | 2025-02-03T22:50:18Z | owner:mylesj | changed:3 | +17/-8 | Proposal: Add ability to hide widgets via config | https://github.com/wavetermdev/waveterm/pull/1864

@@ -49,7 +49,7 @@ export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
                 okLabel={t("common.close")}
             >
                 <div className="flex flex-col gap-4 pt-4 pb-4 max-w-xl">
-                    <div className="font-semibold text-lg text-green-500">
+                    <div className="font-semibold text-lg text-accent">
                         {t("aipanel.restoreBackup.successTitle")}
                     </div>
                     <div className="text-sm text-gray-300 leading-relaxed">

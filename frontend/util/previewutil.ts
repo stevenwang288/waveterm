@@ -1,8 +1,38 @@
-import { createBlock, getApi } from "@/app/store/global";
+﻿import { createBlock, getApi } from "@/app/store/global";
 import i18next from "@/app/i18n";
 import { makeNativeLabel } from "./platformutil";
 import { fireAndForget } from "./util";
 import { formatRemoteUri } from "./waveutil";
+
+function openCliInNewTerminal(cwd: string, conn: string, cliCommand: string) {
+    const meta: Record<string, any> = {
+        controller: "shell",
+        view: "term",
+        "cmd:cwd": cwd,
+        "cmd:initscript": `${cliCommand}\n`,
+    };
+    if (conn) {
+        meta.connection = conn;
+    }
+    const termBlockDef: BlockDef = { meta };
+    fireAndForget(() => createBlock(termBlockDef));
+}
+
+const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
+    { label: "Codex", command: "codex" },
+    { label: "Claude", command: "claude" },
+    { label: "Gemini", command: "gemini" },
+    { label: "Amp", command: "amp" },
+    { label: "IFlow", command: "iflow" },
+    { label: "OpenCode", command: "opencode" },
+];
+
+function makeAiLaunchMenuItems(targetCwd: string, conn: string): ContextMenuItem[] {
+    return AI_LAUNCH_COMMANDS.map((item) => ({
+        label: i18next.t("preview.openAiHere", { ai: item.label }),
+        click: () => openCliInNewTerminal(targetCwd, conn, item.command),
+    }));
+}
 
 export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: FileInfo): ContextMenuItem[] {
     if (!finfo) {
@@ -57,6 +87,7 @@ export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: F
                 }),
         });
     }
+    const targetCwd = finfo.isdir ? finfo.path : finfo.dir;
     menu.push({
         label: i18next.t("preview.openTerminalHere"),
         click: () => {
@@ -64,12 +95,17 @@ export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: F
                 meta: {
                     controller: "shell",
                     view: "term",
-                    "cmd:cwd": finfo.isdir ? finfo.path : finfo.dir,
+                    "cmd:cwd": targetCwd,
                     connection: conn,
                 },
             };
             fireAndForget(() => createBlock(termBlockDef));
         },
     });
+    menu.push({
+        label: i18next.t("preview.openWithAi"),
+        submenu: makeAiLaunchMenuItems(targetCwd, conn),
+    });
     return menu;
 }
+

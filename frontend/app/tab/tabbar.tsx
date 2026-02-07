@@ -3,7 +3,7 @@
 
 import { Button } from "@/app/element/button";
 import { modalsModel } from "@/app/store/modalmodel";
-import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
+import { SidePanelView, WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { deleteLayoutModelForTab } from "@/layout/index";
 import { atoms, createTab, getApi, globalStore, setActiveTab } from "@/store/global";
 import { isMacOS, isWindows } from "@/util/platformutil";
@@ -43,26 +43,65 @@ interface TabBarProps {
     workspace: Workspace;
 }
 
+const SidePanelToggleButton = memo(
+    ({
+        view,
+        iconClass,
+        label,
+        labelClassName,
+        showLabel = true,
+    }: {
+        view: SidePanelView;
+        iconClass: string;
+        label: string;
+        labelClassName?: string;
+        showLabel?: boolean;
+    }) => {
+        const panelOpen = useAtomValue(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
+        const panelView = useAtomValue(WorkspaceLayoutModel.getInstance().panelViewAtom);
+        const isActive = panelOpen && panelView === view;
+
+        const onClick = () => {
+            WorkspaceLayoutModel.getInstance().toggleSidePanelView(view);
+        };
+
+        return (
+            <div
+                className={`flex h-[26px] px-1.5 justify-end items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${isActive ? "text-accent" : "text-secondary"}`}
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                onClick={onClick}
+            >
+                <i className={iconClass} />
+                {showLabel && <span className={`font-bold ml-1 -top-px ${labelClassName ?? ""}`}>{label}</span>}
+            </div>
+        );
+    }
+);
+
+SidePanelToggleButton.displayName = "SidePanelToggleButton";
+
 const WaveAIButton = memo(() => {
-    const aiPanelOpen = useAtomValue(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
-
-    const onClick = () => {
-        const currentVisible = WorkspaceLayoutModel.getInstance().getAIPanelVisible();
-        WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
-    };
-
-    return (
-        <div
-            className={`flex h-[26px] px-1.5 justify-end items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${aiPanelOpen ? "text-accent" : "text-secondary"}`}
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            onClick={onClick}
-        >
-            <i className="fa fa-sparkles" />
-            <span className="font-bold ml-1 -top-px font-mono">AI</span>
-        </div>
-    );
+    return <SidePanelToggleButton view="ai" iconClass="fa fa-sparkles" label="AI" labelClassName="font-mono" />;
 });
 WaveAIButton.displayName = "WaveAIButton";
+
+const FavoritesQuickButton = memo(() => {
+    const { t } = useTranslation();
+    return <SidePanelToggleButton view="favorites" iconClass="fa fa-star" label={t("favorites.title")} showLabel={false} />;
+});
+FavoritesQuickButton.displayName = "FavoritesQuickButton";
+
+const ServersQuickButton = memo(() => {
+    const { t } = useTranslation();
+    return <SidePanelToggleButton view="servers" iconClass="fa fa-laptop" label={t("workspace.servers")} />;
+});
+ServersQuickButton.displayName = "ServersQuickButton";
+
+const GitQuickButton = memo(() => {
+    const { t } = useTranslation();
+    return <SidePanelToggleButton view="git" iconClass="fa fa-code-branch" label={t("workspace.git")} />;
+});
+GitQuickButton.displayName = "GitQuickButton";
 
 const ConfigErrorMessage = () => {
     const fullConfig = useAtomValue(atoms.fullConfigAtom);
@@ -193,6 +232,10 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const scrollableRef = useRef<boolean>(false);
     const updateStatusBannerRef = useRef<HTMLButtonElement>(null);
     const configErrorButtonRef = useRef<HTMLElement>(null);
+    const aiButtonRef = useRef<HTMLDivElement>(null);
+    const favoritesButtonRef = useRef<HTMLDivElement>(null);
+    const serversButtonRef = useRef<HTMLDivElement>(null);
+    const gitButtonRef = useRef<HTMLDivElement>(null);
     const prevAllLoadedRef = useRef<boolean>(false);
     const activeTabId = useAtomValue(atoms.staticTabId);
     const isFullScreen = useAtomValue(atoms.isFullScreen);
@@ -248,6 +291,10 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         const updateStatusLabelWidth = updateStatusBannerRef.current?.getBoundingClientRect().width ?? 0;
         const configErrorWidth = configErrorButtonRef.current?.getBoundingClientRect().width ?? 0;
         const appMenuButtonWidth = appMenuButtonRef.current?.getBoundingClientRect().width ?? 0;
+        const aiButtonWidth = aiButtonRef.current?.getBoundingClientRect().width ?? 0;
+        const favoritesButtonWidth = favoritesButtonRef.current?.getBoundingClientRect().width ?? 0;
+        const serversButtonWidth = serversButtonRef.current?.getBoundingClientRect().width ?? 0;
+        const gitButtonWidth = gitButtonRef.current?.getBoundingClientRect().width ?? 0;
         const workspaceSwitcherWidth = workspaceSwitcherRef.current?.getBoundingClientRect().width ?? 0;
 
         const nonTabElementsWidth =
@@ -257,6 +304,10 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             updateStatusLabelWidth +
             configErrorWidth +
             appMenuButtonWidth +
+            aiButtonWidth +
+            favoritesButtonWidth +
+            serversButtonWidth +
+            gitButtonWidth +
             workspaceSwitcherWidth;
         const spaceForTabs = tabbarWrapperWidth - nonTabElementsWidth;
 
@@ -659,7 +710,18 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                     <i className="fa fa-ellipsis" />
                 </div>
             )}
-            <WaveAIButton />
+            <div ref={aiButtonRef}>
+                <WaveAIButton />
+            </div>
+            <div ref={favoritesButtonRef}>
+                <FavoritesQuickButton />
+            </div>
+            <div ref={serversButtonRef}>
+                <ServersQuickButton />
+            </div>
+            <div ref={gitButtonRef}>
+                <GitQuickButton />
+            </div>
             <WorkspaceSwitcher ref={workspaceSwitcherRef} />
             <div className="tab-bar" ref={tabBarRef} data-overlayscrollbars-initialize>
                 <div className="tabs-wrapper" ref={tabsWrapperRef} style={{ width: `${tabsWrapperWidth}px` }}>

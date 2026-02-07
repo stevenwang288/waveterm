@@ -4,7 +4,6 @@
 import {
     atoms,
     clearAllTabIndicators,
-    clearTabIndicatorFromFocus,
     getTabIndicatorAtom,
     globalStore,
     recordTEvent,
@@ -147,10 +146,6 @@ const Tab = memo(
             };
 
             const handleTabClick = () => {
-                const currentIndicator = globalStore.get(getTabIndicatorAtom(id));
-                if (currentIndicator?.clearonfocus) {
-                    clearTabIndicatorFromFocus(id);
-                }
                 onSelect();
             };
 

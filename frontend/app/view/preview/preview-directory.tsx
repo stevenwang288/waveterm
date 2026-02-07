@@ -1,8 +1,8 @@
-// Copyright 2025, Command Line Inc.
+﻿// Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { atoms, createBlock, getApi, globalStore } from "@/app/store/global";
+import { atoms, getApi, globalStore } from "@/app/store/global";
 import i18next from "@/app/i18n";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -49,7 +49,7 @@ import { type PreviewModel } from "./preview-model";
 
 const PageJumpSize = 20;
 type DragDropOperation = "copy" | "move";
-type DirectoryViewMode = "details" | "list" | "smallIcons" | "mediumIcons" | "largeIcons";
+export type DirectoryViewMode = "details" | "list" | "smallIcons" | "mediumIcons" | "largeIcons";
 
 function parseWshUri(uri: string): { connection: string; path: string } | null {
     if (!uri) {
@@ -161,7 +161,7 @@ interface DirectoryTableProps {
     focusIndex: number;
     setFocusIndex: (_: number) => void;
     setSearch: (_: string) => void;
-    setSelectedPath: (_: string) => void;
+    setSelectedPath: (_path: string, _isDir?: boolean) => void;
     setRefreshVersion: React.Dispatch<React.SetStateAction<number>>;
     entryManagerOverlayPropsAtom: PrimitiveAtom<EntryManagerOverlayProps>;
     newFile: () => void;
@@ -332,7 +332,11 @@ function DirectoryTable({
     const sortingState = table.getState().sorting;
     useEffect(() => {
         const allRows = table.getRowModel()?.flatRows || [];
-        setSelectedPath((allRows[focusIndex]?.getValue("path") as string) ?? "");
+        const row = allRows[focusIndex];
+        const path = (row?.getValue("path") as string) ?? "";
+        const fileInfo = row?.original;
+        const isDir = fileInfo?.isdir ?? undefined;
+        setSelectedPath(path, isDir);
     }, [focusIndex, data, setSelectedPath, sortingState]);
 
     const columnSizeVars = useMemo(() => {
@@ -405,7 +409,7 @@ interface TableBodyProps {
     focusIndex: number;
     setFocusIndex: (_: number) => void;
     setSearch: (_: string) => void;
-    setSelectedPath: (_: string) => void;
+    setSelectedPath: (_path: string, _isDir?: boolean) => void;
     setRefreshVersion: React.Dispatch<React.SetStateAction<number>>;
     osRef: OverlayScrollbarsComponentRef;
 }
@@ -460,6 +464,7 @@ function TableBody({
             viewport.scrollTo({ top: topVal });
         }
     }, [focusIndex]);
+
 
     const handleFileContextMenu = useCallback(
         async (e: any, finfo: FileInfo) => {
@@ -517,8 +522,8 @@ function TableBody({
                 {
                     label: i18next.t("favorites.add"),
                     click: () => {
-                        const favoritesModel = FavoritesModel.getInstance(model.tabModel.tabId);
-                        favoritesModel.addFavorite(finfo.path, fileName);
+                        const favoritesModel = FavoritesModel.getInstance();
+                        favoritesModel.addFavorite(finfo.path, fileName, undefined, conn);
                         window.dispatchEvent(new Event("favorites-updated"));
                     },
                 }
@@ -570,7 +575,7 @@ function TableBody({
             )}
             <div className="dir-table-body-scroll-box">
                 <div className="dummy dir-table-body-row" ref={dummyLineRef}>
-                    <div className="dir-table-body-cell">—</div>
+                    <div className="dir-table-body-cell">..</div>
                 </div>
                 {dotdotRow && (
                     <TableRow
@@ -681,17 +686,28 @@ interface DirectoryPreviewProps {
     model: PreviewModel;
     searchText?: string;
     setSearchText?: React.Dispatch<React.SetStateAction<string>>;
-    onSelectedPathChange?: (path: string) => void;
+    onSelectedPathChange?: (path: string, isDir?: boolean) => void;
+    viewMode?: DirectoryViewMode;
+    setViewMode?: React.Dispatch<React.SetStateAction<DirectoryViewMode>>;
+    showQuickViewControls?: boolean;
 }
 
-function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: setSearchTextProp, onSelectedPathChange }: DirectoryPreviewProps) {
+function DirectoryPreview({
+    model,
+    searchText: searchTextProp,
+    setSearchText: setSearchTextProp,
+    onSelectedPathChange,
+    viewMode: viewModeProp,
+    setViewMode: setViewModeProp,
+    showQuickViewControls = true,
+}: DirectoryPreviewProps) {
     const [internalSearchText, setInternalSearchText] = useState("");
     const searchText = searchTextProp ?? internalSearchText;
     const setSearchText = setSearchTextProp ?? setInternalSearchText;
     const [focusIndex, setFocusIndex] = useState(0);
     const sortingStorageKey = "waveterm-directory-sorting";
     const viewModeStorageKey = "waveterm-directory-viewmode";
-    const [viewMode, setViewMode] = useState<DirectoryViewMode>(() => {
+    const [internalViewMode, setInternalViewMode] = useState<DirectoryViewMode>(() => {
         try {
             const stored = localStorage.getItem(viewModeStorageKey);
             if (
@@ -708,6 +724,27 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
         }
         return "details";
     });
+    const viewMode = viewModeProp ?? internalViewMode;
+    const setViewMode = setViewModeProp ?? setInternalViewMode;
+
+    useEffect(() => {
+        const handler = (event: Event) => {
+            const customEvent = event as CustomEvent<{ blockId?: string; mode?: DirectoryViewMode }>;
+            if (customEvent.detail?.blockId !== model.blockId) {
+                return;
+            }
+            const mode = customEvent.detail?.mode;
+            if (!mode) {
+                return;
+            }
+            setViewMode(mode);
+        };
+        window.addEventListener("preview-directory-view-mode", handler as EventListener);
+        return () => {
+            window.removeEventListener("preview-directory-view-mode", handler as EventListener);
+        };
+    }, [model.blockId, setViewMode]);
+
     const [sorting, setSorting] = useState<SortingState>(() => {
         try {
             const stored = localStorage.getItem(sortingStorageKey);
@@ -728,9 +765,11 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
     const [unfilteredData, setUnfilteredData] = useState<FileInfo[]>([]);
     const showHiddenFiles = useAtomValue(model.showHiddenFiles);
     const [selectedPath, setSelectedPath] = useState("");
+    const [selectedPathIsDir, setSelectedPathIsDir] = useState<boolean | undefined>(undefined);
     const [refreshVersion, setRefreshVersion] = useAtom(model.refreshVersion);
     const conn = useAtomValue(model.connection);
     const blockData = useAtomValue(model.blockAtom);
+    const isExplorerView = !!blockData?.meta?.["preview:explorer"];
     const finfo = useAtomValue(model.statFile);
     const dirPath = finfo?.path;
     const setErrorMsg = useSetAtom(model.errorMsgAtom);
@@ -744,41 +783,59 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
         };
     }, [setRefreshVersion]);
 
-    useEffect(
-        () =>
-            fireAndForget(async () => {
-                let entries: FileInfo[];
-                try {
-                    const file = await RpcApi.FileReadCommand(
-                        TabRpcClient,
-                        {
-                            info: {
-                                path: await model.formatRemoteUri(dirPath, globalStore.get),
-                            },
+    useEffect(() => {
+        let cancelled = false;
+
+        fireAndForget(async () => {
+            if (!dirPath) {
+                if (!cancelled) {
+                    setUnfilteredData([]);
+                }
+                return;
+            }
+
+            let entries: FileInfo[] = [];
+            try {
+                const file = await RpcApi.FileReadCommand(
+                    TabRpcClient,
+                    {
+                        info: {
+                            path: await model.formatRemoteUri(dirPath, globalStore.get),
                         },
-                        null
-                    );
-                    entries = file.entries ?? [];
-                    if (file?.info && file.info.dir && file.info?.path !== file.info?.dir) {
-                        entries.unshift({
-                            name: "..",
-                            path: file?.info?.dir,
-                            isdir: true,
-                            modtime: new Date().getTime(),
-                            mimetype: "directory",
-                        });
-                    }
-                } catch (e) {
+                    },
+                    { timeout: 30000 }
+                );
+
+                entries = file.entries ?? [];
+                if (file?.info && file.info.dir && file.info?.path !== file.info?.dir) {
+                    entries.unshift({
+                        name: "..",
+                        path: file?.info?.dir,
+                        isdir: true,
+                        modtime: new Date().getTime(),
+                        mimetype: "directory",
+                    });
+                }
+            } catch (e) {
+                if (!cancelled) {
                     setErrorMsg({
                         status: "Cannot Read Directory",
                         text: `${e}`,
                     });
                 }
-                setUnfilteredData(entries);
-            }),
-        [conn, dirPath, refreshVersion]
-    );
+            }
 
+            if (!cancelled) {
+                setUnfilteredData(entries);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [conn, dirPath, model, refreshVersion, setErrorMsg]);
+
+    const effectiveSearchText = isExplorerView ? "" : searchText;
     const filteredData = useMemo(
         () =>
             unfilteredData?.filter((fileInfo) => {
@@ -789,14 +846,14 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
                 if (!showHiddenFiles && fileInfo.name.startsWith(".") && fileInfo.name != "..") {
                     return false;
                 }
-                return fileInfo.name.toLowerCase().includes(searchText.toLowerCase());
+                return fileInfo.name.toLowerCase().includes(effectiveSearchText.toLowerCase());
             }) ?? [],
-        [unfilteredData, showHiddenFiles, searchText]
+        [effectiveSearchText, showHiddenFiles, unfilteredData]
     );
 
     useEffect(() => {
-        onSelectedPathChange?.(selectedPath);
-    }, [onSelectedPathChange, selectedPath]);
+        onSelectedPathChange?.(selectedPath, selectedPathIsDir);
+    }, [onSelectedPathChange, selectedPath, selectedPathIsDir]);
 
     useEffect(() => {
         try {
@@ -816,11 +873,11 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
 
     useEffect(() => {
         model.directoryKeyDownHandler = (waveEvent: WaveKeyboardEvent): boolean => {
-            if (checkKeyPressed(waveEvent, "Cmd:f")) {
+            if (!isExplorerView && checkKeyPressed(waveEvent, "Cmd:f")) {
                 globalStore.set(model.directorySearchActive, true);
                 return true;
             }
-            if (checkKeyPressed(waveEvent, "Escape")) {
+            if (!isExplorerView && checkKeyPressed(waveEvent, "Escape")) {
                 setSearchText("");
                 globalStore.set(model.directorySearchActive, false);
                 return;
@@ -846,11 +903,13 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
                     return;
                 }
                 model.goHistory(selectedPath);
-                setSearchText("");
-                globalStore.set(model.directorySearchActive, false);
+                if (!isExplorerView) {
+                    setSearchText("");
+                    globalStore.set(model.directorySearchActive, false);
+                }
                 return true;
             }
-            if (checkKeyPressed(waveEvent, "Backspace")) {
+            if (!isExplorerView && checkKeyPressed(waveEvent, "Backspace")) {
                 if (searchText.length == 0) {
                     return true;
                 }
@@ -859,14 +918,14 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
             }
             if (
                 checkKeyPressed(waveEvent, "Space") &&
-                searchText == "" &&
+                effectiveSearchText == "" &&
                 PLATFORM == PlatformMacOS &&
                 !blockData?.meta?.connection
             ) {
                 getApi().onQuicklook(selectedPath);
                 return true;
             }
-            if (isCharacterKeyEvent(waveEvent)) {
+            if (!isExplorerView && isCharacterKeyEvent(waveEvent)) {
                 setSearchText((current) => current + waveEvent.key.toLowerCase());
                 return true;
             }
@@ -875,7 +934,7 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
         return () => {
             model.directoryKeyDownHandler = null;
         };
-    }, [filteredData, selectedPath, searchText, setSearchText]);
+    }, [blockData?.meta?.connection, effectiveSearchText, filteredData, isExplorerView, model, searchText, selectedPath, setSearchText]);
 
     useEffect(() => {
         if (filteredData.length != 0 && focusIndex > filteredData.length - 1) {
@@ -1191,29 +1250,12 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
                     {
                         label: i18next.t("favorites.addCurrentFolder"),
                         click: () => {
-                            const favoritesModel = FavoritesModel.getInstance(model.tabModel.tabId);
-                            favoritesModel.addFavorite(dirPath, dirName);
+                            const favoritesModel = FavoritesModel.getInstance();
+                            favoritesModel.addFavorite(dirPath, dirName, undefined, conn);
                             window.dispatchEvent(new Event("favorites-updated"));
                         },
                     },
                 );
-                if (!blockData?.meta?.["preview:explorer"]) {
-                    menu.push({
-                        label: i18next.t("explorer.openView"),
-                        click: () =>
-                            fireAndForget(async () => {
-                                const blockDef: BlockDef = {
-                                    meta: {
-                                        view: "preview",
-                                        file: dirPath,
-                                        connection: conn,
-                                        "preview:explorer": true,
-                                    },
-                                };
-                                await createBlock(blockDef);
-                            }),
-                    });
-                }
             }
 
             ContextMenuModel.showContextMenu(menu, e);
@@ -1226,13 +1268,16 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
             <div
                 ref={refs.setReference}
                 className={clsx(
-                    "dir-table-container",
+                    "dir-table-container relative",
                     viewMode === "list" && "dir-view-list",
                     viewMode === "smallIcons" && "dir-view-icons dir-view-icons-sm",
                     viewMode === "mediumIcons" && "dir-view-icons dir-view-icons-md",
                     viewMode === "largeIcons" && "dir-view-icons dir-view-icons-lg"
                 )}
                 onChangeCapture={(e) => {
+                    if (isExplorerView) {
+                        return;
+                    }
                     const event = e as React.ChangeEvent<HTMLInputElement>;
                     if (!entryManagerProps) {
                         setSearchText(event.target.value.toLowerCase());
@@ -1245,14 +1290,17 @@ function DirectoryPreview({ model, searchText: searchTextProp, setSearchText: se
                 <DirectoryTable
                     model={model}
                     data={filteredData}
-                    search={searchText}
+                    search={effectiveSearchText}
                     viewMode={viewMode}
                     sorting={sorting}
                     setSorting={setSorting}
                     focusIndex={focusIndex}
                     setFocusIndex={setFocusIndex}
                     setSearch={setSearchText}
-                    setSelectedPath={setSelectedPath}
+                    setSelectedPath={(path, isDir) => {
+                        setSelectedPath(path);
+                        setSelectedPathIsDir(isDir);
+                    }}
                     setRefreshVersion={setRefreshVersion}
                     entryManagerOverlayPropsAtom={entryManagerPropsAtom}
                     newFile={newFile}

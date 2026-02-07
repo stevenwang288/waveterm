@@ -84,7 +84,9 @@
     "copyFullPath": "复制完整路径",
     "add": "添加到收藏夹",
     "addCurrentFolder": "添加当前文件夹到收藏夹",
-    "remove": "从收藏夹移除"
+    "remove": "从收藏夹移除",
+    "addCategory": "新建分类",
+    "enterCategoryName": "请输入分类名称"
   },
   "explorer": {
     "thisPC": "此电脑",
@@ -339,7 +341,8 @@
       "tips": "提示",
       "secrets": "密钥",
       "help": "帮助",
-      "editWidgetsJson": "编辑 widgets.json"
+      "editWidgetsJson": "编辑 widgets.json",
+      "appearance": "外观"
     },
     "settingsHelpTooltip": "设置与帮助",
     "runningDevBuild": "正在运行 Wave 开发构建",
@@ -347,7 +350,9 @@
     "noLocalAppsFound": "未找到本地应用",
     "localWaveAppsTooltip": "本地 WaveApp",
     "confirmCloseWindowUnsavedTabs": "????????????????????????\\n\\n????",
-    "confirmDeleteWorkspace": "?????????????\\n\\n????"
+    "confirmDeleteWorkspace": "?????????????\\n\\n????",
+    "servers": "服务器",
+    "git": "Git"
   },
   "about": {
     "title": "Wave Terminal",
@@ -357,7 +362,9 @@
     "github": "Github",
     "website": "官网",
     "acknowledgements": "致谢",
-    "copyright": "&copy; {{year}} Command Line Inc."
+    "copyright": "&copy; {{year}} Command Line Inc.",
+    "logoColor": "Logo 颜色",
+    "accentColor": "主题颜色"
   },
   "launcher": {
     "viewName": "小部件启动器",
@@ -432,7 +439,9 @@
     "errorConnectingToWithError": "连接到 {{conn}} 时出错（{{error}}）",
     "disconnectedFrom": "已从 {{conn}} 断开",
     "wshNotInstalled": "该连接未安装 wsh",
-    "gitBash": "Git Bash"
+    "gitBash": "Git Bash",
+    "remotes": "远程",
+    "noRemoteConnections": "暂无远程连接"
   },
   "connStatus": {
     "disconnected": "已从 {{connName}} 断开连接",
@@ -489,7 +498,9 @@
         "typeToSearch": "输入以搜索",
         "searchingFor": "正在搜索 “{{search}}”"
       }
-    }
+    },
+    "openWithAi": "用指定 AI 打开",
+    "openAiHere": "在此打开 {{ai}}"
   },
   "aipanel": {
     "header": "Wave AI",

@@ -355,9 +355,9 @@ async function makeFullAppMenu(callbacks: AppMenuCallbacks, workspaceOrBuilderId
     ];
     const menuTemplate: Electron.MenuItemConstructorOptions[] = [
         { role: "appMenu", submenu: appMenuItems },
-        { role: "fileMenu", submenu: fileMenu },
-        { role: "editMenu", submenu: editMenu },
-        { role: "viewMenu", submenu: viewMenu },
+        { label: i18next.t('menu.file'), submenu: fileMenu },
+        { label: i18next.t('menu.edit'), submenu: editMenu },
+        { label: i18next.t('menu.view'), submenu: viewMenu },
     ];
     if (workspaceMenu != null && !isBuilderWindowFocused) {
         menuTemplate.push({
@@ -367,7 +367,7 @@ async function makeFullAppMenu(callbacks: AppMenuCallbacks, workspaceOrBuilderId
         });
     }
     menuTemplate.push({
-        role: "windowMenu",
+        label: i18next.t('menu.window'),
         submenu: windowMenu,
     });
     return electron.Menu.buildFromTemplate(menuTemplate);

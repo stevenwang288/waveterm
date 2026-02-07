@@ -1,13 +1,15 @@
-// Copyright 2025, Command Line Inc.
+﻿// Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { Tooltip } from "@/app/element/tooltip";
 import { ConnectionButton } from "@/app/block/connectionbutton";
+import { modalsModel } from "@/app/store/modalmodel";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { FocusManager } from "@/app/store/focusManager";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { atoms, createBlock, getBlockComponentModel, useBlockAtom, WOS, isDev } from "@/store/global";
+import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { fireAndForget, isBlank, makeIconClass } from "@/util/util";
 import {
     FloatingPortal,
@@ -34,6 +36,20 @@ function sortByDisplayOrder(wmap: { [key: string]: WidgetConfigType }): WidgetCo
     return wlist;
 }
 
+function isExplorerWidget(widget: WidgetConfigType): boolean {
+    const meta = widget?.blockdef?.meta as Record<string, any> | undefined;
+    return meta?.view === "preview" && !!meta?.["preview:explorer"];
+}
+
+const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
+    { label: "Codex", command: "codex" },
+    { label: "Claude", command: "claude" },
+    { label: "Gemini", command: "gemini" },
+    { label: "Amp", command: "amp" },
+    { label: "IFlow", command: "iflow" },
+    { label: "OpenCode", command: "opencode" },
+];
+
 async function handleWidgetSelect(widget: WidgetConfigType) {
     const blockDef = widget.blockdef;
     createBlock(blockDef, widget.magnified);
@@ -55,7 +71,7 @@ const Widget = memo(({ widget, mode }: { widget: WidgetConfigType; mode: "normal
     return (
         <Tooltip
             content={widget.description || widget.label}
-            placement="left"
+            placement="right"
             disable={shouldDisableTooltip}
             divClassName={clsx(
                 "flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer",
@@ -152,7 +168,7 @@ const AppsFloatingWindow = memo(
         const { refs, floatingStyles, context } = useFloating({
             open: isOpen,
             onOpenChange: onClose,
-            placement: "left-start",
+            placement: "right-start",
             middleware: [offset(-2), shift({ padding: 12 })],
             whileElementsMounted: autoUpdate,
             elements: {
@@ -254,6 +270,49 @@ const AppsFloatingWindow = memo(
     }
 );
 
+const GitFloatingWindow = memo(
+    ({
+        isOpen,
+        onClose,
+        referenceElement,
+    }: {
+        isOpen: boolean;
+        onClose: () => void;
+        referenceElement: HTMLElement;
+    }) => {
+        const { refs, floatingStyles, context } = useFloating({
+            open: isOpen,
+            onOpenChange: onClose,
+            placement: "right-start",
+            middleware: [offset(-2), shift({ padding: 12 })],
+            whileElementsMounted: autoUpdate,
+            elements: {
+                reference: referenceElement,
+            },
+        });
+
+        const dismiss = useDismiss(context);
+        const { getFloatingProps } = useInteractions([dismiss]);
+
+        if (!isOpen) return null;
+
+        return (
+            <FloatingPortal>
+                <div
+                    ref={refs.setFloating}
+                    style={floatingStyles}
+                    {...getFloatingProps()}
+                    className="bg-modalbg rounded-lg shadow-xl z-50 overflow-hidden"
+                >
+                    <div className="w-[460px] min-w-[360px] max-w-[700px] h-[680px] max-h-[78vh] min-h-[420px]">
+                        <GitPanel />
+                    </div>
+                </div>
+            </FloatingPortal>
+        );
+    }
+);
+
 const SettingsFloatingWindow = memo(
     ({
         isOpen,
@@ -268,7 +327,7 @@ const SettingsFloatingWindow = memo(
         const { refs, floatingStyles, context } = useFloating({
             open: isOpen,
             onOpenChange: onClose,
-            placement: "left-start",
+            placement: "right-start",
             middleware: [offset(-2), shift({ padding: 12 })],
             whileElementsMounted: autoUpdate,
             elements: {
@@ -292,6 +351,14 @@ const SettingsFloatingWindow = memo(
                         },
                     };
                     createBlock(blockDef, false, true);
+                    onClose();
+                },
+            },
+            {
+                icon: "palette",
+                label: t("workspace.menu.appearance"),
+                onClick: () => {
+                    modalsModel.pushModal("AboutModal");
                     onClose();
                 },
             },
@@ -363,47 +430,93 @@ const SettingsFloatingWindow = memo(
     }
 );
 
+GitFloatingWindow.displayName = "GitFloatingWindow";
 SettingsFloatingWindow.displayName = "SettingsFloatingWindow";
 
 const Widgets = memo(() => {
     const { t } = useTranslation();
-    const fullConfig = useAtomValue(atoms.fullConfigAtom);
-    const hasCustomAIPresets = useAtomValue(atoms.hasCustomAIPresetsAtom);
+    const fallbackFullConfigAtom = useMemo(() => atom<FullConfigType>(null), []);
+    const fallbackHasCustomAIPresetsAtom = useMemo(() => atom(false), []);
+    const fullConfig = useAtomValue(atoms?.fullConfigAtom ?? fallbackFullConfigAtom);
+    const hasCustomAIPresets = useAtomValue(atoms?.hasCustomAIPresetsAtom ?? fallbackHasCustomAIPresetsAtom);
     const [mode, setMode] = useState<"normal" | "compact" | "supercompact">("normal");
     const containerRef = useRef<HTMLDivElement>(null);
     const measurementRef = useRef<HTMLDivElement>(null);
 
     const featureWaveAppBuilder = fullConfig?.settings?.["feature:waveappbuilder"] ?? false;
     const widgetsMap = fullConfig?.widgets ?? {};
-    const effectiveWidgetsMap = useMemo(() => {
-        if (widgetsMap["defwidget@explorer"]) {
-            return widgetsMap;
-        }
-        const explorerWidget: WidgetConfigType = {
-            "display:order": -3.5,
-            icon: "folder-tree",
-            label: "explorer",
-            description: "Windows-like explorer",
-            blockdef: {
-                meta: {
-                    view: "preview",
-                    file: "~",
-                    "preview:explorer": true,
-                },
-            },
-        };
-        return { ...widgetsMap, "defwidget@explorer": explorerWidget };
-    }, [widgetsMap]);
-    const filteredWidgets = hasCustomAIPresets
-        ? effectiveWidgetsMap
-        : Object.fromEntries(Object.entries(effectiveWidgetsMap).filter(([key]) => key !== "defwidget@ai"));
+    const filteredWidgets = useMemo(() => {
+        return Object.fromEntries(
+            Object.entries(widgetsMap).filter(([key, widget]) => {
+                if (!hasCustomAIPresets && key === "defwidget@ai") {
+                    return false;
+                }
+                if (isExplorerWidget(widget)) {
+                    return false;
+                }
+                return true;
+            })
+        );
+    }, [hasCustomAIPresets, widgetsMap]);
     const widgets = sortByDisplayOrder(filteredWidgets);
 
     const [isAppsOpen, setIsAppsOpen] = useState(false);
     const appsButtonRef = useRef<HTMLDivElement>(null);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const settingsButtonRef = useRef<HTMLDivElement>(null);
     const focusedBlockId = useAtomValue(FocusManager.getInstance().blockFocusAtom);
+    const [focusedBlockData] = WOS.useWaveObjectValue<Block>(
+        focusedBlockId ? WOS.makeORef("block", focusedBlockId) : null,
+        [focusedBlockId]
+    );
+
+    const launchAiCommand = useCallback(
+        (command: string) => {
+            const meta: Record<string, any> = {
+                controller: "shell",
+                view: "term",
+            };
+            const cwd = focusedBlockData?.meta?.["cmd:cwd"];
+            const connection = focusedBlockData?.meta?.connection;
+            if (!isBlank(cwd)) {
+                meta["cmd:cwd"] = cwd;
+            }
+            if (!isBlank(connection)) {
+                meta.connection = connection;
+            }
+            meta["cmd:initscript"] = `${command}\n`;
+            fireAndForget(async () => {
+                await createBlock({ meta }, false, true);
+            });
+        },
+        [focusedBlockData]
+    );
+
+    const showAiLauncherMenu = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const menu: ContextMenuItem[] = AI_LAUNCH_COMMANDS.map((item) => ({
+                label: t("preview.openAiHere", { ai: item.label }),
+                click: () => launchAiCommand(item.command),
+            }));
+            ContextMenuModel.showContextMenu(menu, e);
+        },
+        [launchAiCommand, t]
+    );
+
+    const openGitBlock = useCallback(() => {
+        WorkspaceLayoutModel.getInstance().toggleSidePanelView("git");
+    }, []);
+
+    const openSettingsPanel = useCallback(() => {
+        const blockDef: BlockDef = {
+            meta: {
+                view: "waveconfig",
+            },
+        };
+        fireAndForget(async () => {
+            await createBlock(blockDef, false, true);
+        });
+    }, []);
 
     const checkModeNeeded = useCallback(() => {
         if (!containerRef.current || !measurementRef.current) return;
@@ -492,11 +605,13 @@ const Widgets = memo(() => {
                                 <div
                                     ref={appsButtonRef}
                                     className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
-                                    onClick={() => setIsAppsOpen(!isAppsOpen)}
+                                    onClick={() => {
+                                        setIsAppsOpen((prev) => !prev);
+                                    }}
                                 >
                                     <Tooltip
                                         content={t("workspace.localWaveAppsTooltip")}
-                                        placement="left"
+                                        placement="right"
                                         disable={isAppsOpen}
                                     >
                                         <div>
@@ -506,14 +621,39 @@ const Widgets = memo(() => {
                                 </div>
                             ) : null}
                             <div
-                                ref={settingsButtonRef}
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
-                                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                                onClick={() => {
+                                    openGitBlock();
+                                    setIsAppsOpen(false);
+                                }}
+                            >
+                                <Tooltip content={t("workspace.git")} placement="right" disable={false}>
+                                    <div>
+                                        <i className={makeIconClass("code-branch", true)}></i>
+                                    </div>
+                                </Tooltip>
+                            </div>
+                            <div
+                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                                onClick={showAiLauncherMenu}
+                            >
+                                <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
+                                    <div>
+                                        <i className={makeIconClass("robot", true)}></i>
+                                    </div>
+                                </Tooltip>
+                            </div>
+                            <div
+                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                                onClick={() => {
+                                    openSettingsPanel();
+                                    setIsAppsOpen(false);
+                                }}
                             >
                                 <Tooltip
                                     content={t("workspace.settingsHelpTooltip")}
-                                    placement="left"
-                                    disable={isSettingsOpen}
+                                    placement="right"
+                                    disable={false}
                                 >
                                     <div>
                                         <i className={makeIconClass("gear", true)}></i>
@@ -533,9 +673,11 @@ const Widgets = memo(() => {
                             <div
                                 ref={appsButtonRef}
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
-                                onClick={() => setIsAppsOpen(!isAppsOpen)}
+                                onClick={() => {
+                                    setIsAppsOpen((prev) => !prev);
+                                }}
                             >
-                                <Tooltip content={t("workspace.localWaveAppsTooltip")} placement="left" disable={isAppsOpen}>
+                                <Tooltip content={t("workspace.localWaveAppsTooltip")} placement="right" disable={isAppsOpen}>
                                     <div className="flex flex-col items-center w-full">
                                         <div>
                                             <i className={makeIconClass("cube", true)}></i>
@@ -549,19 +691,58 @@ const Widgets = memo(() => {
                                 </Tooltip>
                             </div>
                         ) : null}
-                                <div
-                                    ref={settingsButtonRef}
-                                    className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
-                                    onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                                >
-                                    <Tooltip content={t("workspace.settingsHelpTooltip")} placement="left" disable={isSettingsOpen}>
-                                        <div>
-                                            <i className={makeIconClass("gear", true)}></i>
+                        <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={() => {
+                                openGitBlock();
+                                setIsAppsOpen(false);
+                            }}
+                        >
+                            <Tooltip content={t("workspace.git")} placement="right" disable={false}>
+                                <div className="flex flex-col items-center w-full">
+                                    <div>
+                                        <i className={makeIconClass("code-branch", true)}></i>
+                                    </div>
+                                    {mode === "normal" && (
+                                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                                            {t("workspace.git")}
                                         </div>
-                                    </Tooltip>
+                                    )}
                                 </div>
-                            </>
-                        )}
+                            </Tooltip>
+                        </div>
+                        <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={showAiLauncherMenu}
+                        >
+                            <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
+                                <div className="flex flex-col items-center w-full">
+                                    <div>
+                                        <i className={makeIconClass("robot", true)}></i>
+                                    </div>
+                                    {mode === "normal" && (
+                                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                                            AI
+                                        </div>
+                                    )}
+                                </div>
+                            </Tooltip>
+                        </div>
+                        <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={() => {
+                                openSettingsPanel();
+                                setIsAppsOpen(false);
+                            }}
+                        >
+                            <Tooltip content={t("workspace.settingsHelpTooltip")} placement="right" disable={false}>
+                                <div>
+                                    <i className={makeIconClass("gear", true)}></i>
+                                </div>
+                            </Tooltip>
+                        </div>
+                    </>
+                )}
                 {isDev() ? (
                     <div
                         className="flex justify-center items-center w-full py-1 text-accent text-[30px]"
@@ -578,13 +759,6 @@ const Widgets = memo(() => {
                     referenceElement={appsButtonRef.current}
                 />
             )}
-            {settingsButtonRef.current && (
-                <SettingsFloatingWindow
-                    isOpen={isSettingsOpen}
-                    onClose={() => setIsSettingsOpen(false)}
-                    referenceElement={settingsButtonRef.current}
-                />
-            )}
 
             <div
                 ref={measurementRef}
@@ -595,6 +769,18 @@ const Widgets = memo(() => {
                 ))}
                 <div className="flex-grow" />
                 <ExplorerConnectionButton mode="normal" />
+                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                    <div>
+                        <i className={makeIconClass("code-branch", true)}></i>
+                    </div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.git")}</div>
+                </div>
+                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                    <div>
+                        <i className={makeIconClass("robot", true)}></i>
+                    </div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">AI</div>
+                </div>
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>
                         <i className={makeIconClass("gear", true)}></i>
@@ -623,3 +809,4 @@ const Widgets = memo(() => {
 });
 
 export { Widgets };
+

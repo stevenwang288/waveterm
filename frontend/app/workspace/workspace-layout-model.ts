@@ -20,6 +20,12 @@ const AIPANEL_DEFAULTWIDTHRATIO = 0.33;
 const AIPANEL_MINWIDTH = 300;
 const AIPANEL_MAXWIDTHRATIO = 0.66;
 
+export type SidePanelView = "ai" | "favorites" | "servers" | "git";
+
+function isSidePanelView(value: string): value is SidePanelView {
+    return value === "ai" || value === "favorites" || value === "servers" || value === "git";
+}
+
 class WorkspaceLayoutModel {
     private static instance: WorkspaceLayoutModel | null = null;
 
@@ -30,11 +36,13 @@ class WorkspaceLayoutModel {
     inResize: boolean; // prevents recursive setLayout calls (setLayout triggers onLayout which calls setLayout)
     private aiPanelVisible: boolean;
     private aiPanelWidth: number | null;
+    private sidePanelView: SidePanelView;
     private debouncedPersistWidth: (width: number) => void;
     private initialized: boolean = false;
     private transitionTimeoutRef: NodeJS.Timeout | null = null;
     private focusTimeoutRef: NodeJS.Timeout | null = null;
     panelVisibleAtom: jotai.PrimitiveAtom<boolean>;
+    panelViewAtom: jotai.PrimitiveAtom<SidePanelView>;
 
     private constructor() {
         this.aiPanelRef = null;
@@ -44,7 +52,9 @@ class WorkspaceLayoutModel {
         this.inResize = false;
         this.aiPanelVisible = false;
         this.aiPanelWidth = null;
+        this.sidePanelView = "ai";
         this.panelVisibleAtom = jotai.atom(this.aiPanelVisible);
+        this.panelViewAtom = jotai.atom(this.sidePanelView);
 
         this.handleWindowResize = this.handleWindowResize.bind(this);
         this.handlePanelLayout = this.handlePanelLayout.bind(this);
@@ -75,6 +85,7 @@ class WorkspaceLayoutModel {
         try {
             const savedVisible = globalStore.get(this.getPanelOpenAtom());
             const savedWidth = globalStore.get(this.getPanelWidthAtom());
+            const savedView = globalStore.get(this.getPanelViewAtom());
 
             if (savedVisible != null) {
                 this.aiPanelVisible = savedVisible;
@@ -82,6 +93,10 @@ class WorkspaceLayoutModel {
             }
             if (savedWidth != null) {
                 this.aiPanelWidth = savedWidth;
+            }
+            if (isSidePanelView(savedView)) {
+                this.sidePanelView = savedView;
+                globalStore.set(this.panelViewAtom, savedView);
             }
         } catch (e) {
             console.warn("Failed to initialize from tab meta:", e);
@@ -100,6 +115,11 @@ class WorkspaceLayoutModel {
     private getPanelWidthAtom(): jotai.Atom<number> {
         const tabORef = WOS.makeORef("tab", this.getTabId());
         return getOrefMetaKeyAtom(tabORef, "waveai:panelwidth");
+    }
+
+    private getPanelViewAtom(): jotai.Atom<string> {
+        const tabORef = WOS.makeORef("tab", this.getTabId());
+        return getOrefMetaKeyAtom(tabORef, "waveai:panelview");
     }
 
     registerRefs(
@@ -220,6 +240,43 @@ class WorkspaceLayoutModel {
         return this.aiPanelVisible;
     }
 
+    getSidePanelView(): SidePanelView {
+        this.initializeFromTabMeta();
+        return this.sidePanelView;
+    }
+
+    setSidePanelView(view: SidePanelView, opts?: { nofocus?: boolean }): void {
+        this.sidePanelView = view;
+        globalStore.set(this.panelViewAtom, view);
+        getApi().setWaveAIOpen(this.getAIPanelVisible() && view === "ai");
+        RpcApi.SetMetaCommand(TabRpcClient, {
+            oref: WOS.makeORef("tab", this.getTabId()),
+            meta: { "waveai:panelview": view },
+        });
+
+        if (!this.getAIPanelVisible()) {
+            this.setAIPanelVisible(true, { nofocus: view !== "ai" || opts?.nofocus });
+            return;
+        }
+
+        if (view === "ai" && !opts?.nofocus) {
+            this.focusTimeoutRef = setTimeout(() => {
+                WaveAIModel.getInstance().focusInput();
+                this.focusTimeoutRef = null;
+            }, 120);
+        }
+    }
+
+    toggleSidePanelView(view: SidePanelView): void {
+        const isOpen = this.getAIPanelVisible();
+        const active = isOpen && this.getSidePanelView() === view;
+        if (active) {
+            this.setAIPanelVisible(false);
+            return;
+        }
+        this.setSidePanelView(view);
+    }
+
     setAIPanelVisible(visible: boolean, opts?: { nofocus?: boolean }): void {
         if (this.focusTimeoutRef != null) {
             clearTimeout(this.focusTimeoutRef);
@@ -227,11 +284,13 @@ class WorkspaceLayoutModel {
         }
         const wasVisible = this.aiPanelVisible;
         this.aiPanelVisible = visible;
-        if (visible && !wasVisible) {
+        const sidePanelView = this.getSidePanelView();
+
+        if (visible && !wasVisible && sidePanelView === "ai") {
             recordTEvent("action:openwaveai");
         }
         globalStore.set(this.panelVisibleAtom, visible);
-        getApi().setWaveAIOpen(visible);
+        getApi().setWaveAIOpen(visible && sidePanelView === "ai");
         RpcApi.SetMetaCommand(TabRpcClient, {
             oref: WOS.makeORef("tab", this.getTabId()),
             meta: { "waveai:panelopen": visible },
@@ -240,7 +299,7 @@ class WorkspaceLayoutModel {
         this.syncAIPanelRef();
 
         if (visible) {
-            if (!opts?.nofocus) {
+            if (!opts?.nofocus && sidePanelView === "ai") {
                 this.focusTimeoutRef = setTimeout(() => {
                     WaveAIModel.getInstance().focusInput();
                     this.focusTimeoutRef = null;

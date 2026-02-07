@@ -22,6 +22,8 @@
         "dev": "electron-vite dev",
         "start": "electron-vite preview",
         "build:dev": "electron-vite build --mode development",
+        "build:backend:windows": "task build:backend:quickdev:windows",
+        "prebuild:prod": "task build:backend",
         "build:prod": "electron-vite build --mode production",
         "coverage": "vitest run --coverage",
         "test": "vitest",

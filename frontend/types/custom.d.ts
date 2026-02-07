@@ -94,6 +94,7 @@ declare global {
         getWebviewPreload: () => string; // get-webview-preload
         getAboutModalDetails: () => AboutModalDetails; // get-about-modal-details
         getZoomFactor: () => number; // get-zoom-factor
+        runGit: (cwd: string, args: string[]) => Promise<GitRunResult>; // git-run
         showWorkspaceAppMenu: (workspaceId: string) => void; // workspace-appmenu-show
         showBuilderAppMenu: (builderId: string) => void; // builder-appmenu-show
         showContextMenu: (workspaceId: string, menu: ElectronContextMenuItem[]) => void; // contextmenu-show
@@ -376,6 +377,12 @@ declare global {
     interface AboutModalDetails {
         version: string;
         buildTime: number;
+    }
+
+    interface GitRunResult {
+        code: number;
+        stdout: string;
+        stderr: string;
     }
 
     type BlockComponentModel = {

@@ -1,0 +1,909 @@
+﻿[
+    {
+        "full_name":  "smallkiller1/waveterm",
+        "html_url":  "https://github.com/smallkiller1/waveterm",
+        "ahead_by":  1,
+        "behind_by":  49,
+        "changed_files":  1,
+        "pushed_at":  "2026-02-06T17:13:50Z",
+        "tags":  [
+                     "终端内核"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "46a8fd1 Add files via upload"
+    },
+    {
+        "full_name":  "sgeraldes/waveterm",
+        "html_url":  "https://github.com/sgeraldes/waveterm",
+        "ahead_by":  178,
+        "behind_by":  21,
+        "changed_files":  300,
+        "pushed_at":  "2026-02-06T17:12:56Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "SSH/远程",
+                     "CLI/WSH",
+                     "终端内核",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  [
+                         {
+                             "number":  2792,
+                             "title":  "feat(terminal): upgrade xterm.js to 6.1.0 with synchronized output support",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2792"
+                         },
+                         {
+                             "number":  2789,
+                             "title":  "feat: Tab base directory with VS Code style redesign",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2789"
+                         },
+                         {
+                             "number":  2770,
+                             "title":  "fix: prevent terminal history duplication on restart",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2770"
+                         }
+                     ],
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "5622d24 feat: Tab base directory with VS Code style redesign",
+                               "4421ab3 fix: address code review findings for tab base directory",
+                               "fb2ab9e fix: add OSC 7 debounce cleanup to tabbar UI close handler",
+                               "53ecce0 fix: address CodeRabbit review findings"
+                           ]
+    },
+    {
+        "full_name":  "akari2600/waveterm",
+        "html_url":  "https://github.com/akari2600/waveterm",
+        "ahead_by":  6,
+        "behind_by":  8,
+        "changed_files":  22,
+        "pushed_at":  "2026-02-04T10:04:40Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "CLI/WSH",
+                     "文档"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "0283764 Change magnify keybinding from Cmd+M to Cmd+Shift+M",
+                               "493bf22 Add CLAUDE.md and MCP config for Claude Code",
+                               "7976bb2 Add Claude Max OAuth authentication support",
+                               "75d44b0 Add Claude Max Settings UI and RPC endpoints"
+                           ]
+    },
+    {
+        "full_name":  "gracie007-cloud/wave-terminal",
+        "html_url":  "https://github.com/gracie007-cloud/wave-terminal",
+        "ahead_by":  2,
+        "behind_by":  9,
+        "changed_files":  2,
+        "pushed_at":  "2026-02-02T00:31:16Z",
+        "tags":  [
+                     "其他"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "51b4bca Create webpack.yml",
+                               "941768f Create datadog-synthetics.yml"
+                           ]
+    },
+    {
+        "full_name":  "liatrio-labs/waveterm",
+        "html_url":  "https://github.com/liatrio-labs/waveterm",
+        "ahead_by":  78,
+        "behind_by":  31,
+        "changed_files":  300,
+        "pushed_at":  "2026-01-30T21:02:07Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "SSH/远程",
+                     "CLI/WSH",
+                     "终端内核",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "f53d691 feat: Rebrand to Liatrio Code and add welcome screen foundation",
+                               "b51a4dd feat: Complete workspace creation flows (Task 1.0)",
+                               "02631a3 feat: Implement session layout templates system",
+                               "c114bc4 feat: Add Claude Code auto-start integration"
+                           ]
+    },
+    {
+        "full_name":  "GlacierEQ/waveterm",
+        "html_url":  "https://github.com/GlacierEQ/waveterm",
+        "ahead_by":  6,
+        "behind_by":  218,
+        "changed_files":  39,
+        "pushed_at":  "2026-01-29T00:57:14Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "CLI/WSH",
+                     "终端内核",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "4471b6c REPO_DIR=\"/Users/macarena1/Downloads/GIT/FILEBOSS\"",
+                               "5c7655f REPO_DIR=\"/Users/macarena1/Downloads/GIT/FILEBOSS\"",
+                               "15c8b46 REPO_DIR=\"/Users/macarena1/Downloads/GIT/FILEBOSS\"",
+                               "5de1c45 REPO_DIR=\"/Users/macarena1/Downloads/GIT/FILEBOSS\""
+                           ]
+    },
+    {
+        "full_name":  "tabiznet/wavetermGROK",
+        "html_url":  "https://github.com/tabiznet/wavetermGROK",
+        "ahead_by":  2,
+        "behind_by":  21,
+        "changed_files":  9,
+        "pushed_at":  "2026-01-26T22:01:52Z",
+        "tags":  [
+                     "AI/模型",
+                     "文档"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "93d400a Add Grok Code support to Waveterm",
+                               "9af83af Add Grok Code suppor"
+                           ]
+    },
+    {
+        "full_name":  "mexyusef/waveterm",
+        "html_url":  "https://github.com/mexyusef/waveterm",
+        "ahead_by":  1,
+        "behind_by":  31,
+        "changed_files":  5,
+        "pushed_at":  "2026-01-21T09:55:06Z",
+        "tags":  [
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "7a492eb feat: add Cerebras, SambaNova, Hyperbolic, and Groq as LLM providers"
+    },
+    {
+        "full_name":  "sters/waveterm",
+        "html_url":  "https://github.com/sters/waveterm",
+        "ahead_by":  1,
+        "behind_by":  31,
+        "changed_files":  1,
+        "pushed_at":  "2026-01-12T13:05:23Z",
+        "tags":  [
+                     "UI/前端",
+                     "终端内核"
+                 ],
+        "open_prs":  {
+                         "number":  2767,
+                         "title":  "change IME composing handling order to support implicitly confirming IME",
+                         "url":  "https://github.com/wavetermdev/waveterm/pull/2767"
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "0a9036e change IME composing handling order to support implicitly confirming IME"
+    },
+    {
+        "full_name":  "rnunley-nmg/waveterm",
+        "html_url":  "https://github.com/rnunley-nmg/waveterm",
+        "ahead_by":  1,
+        "behind_by":  31,
+        "changed_files":  18,
+        "pushed_at":  "2026-01-10T06:06:37Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型"
+                 ],
+        "open_prs":  {
+                         "number":  2763,
+                         "title":  "add workspace directory feature with shell quoting and tests",
+                         "url":  "https://github.com/wavetermdev/waveterm/pull/2763"
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "3e13210 add workspace directory feature"
+    },
+    {
+        "full_name":  "mrancier/waveterm",
+        "html_url":  "https://github.com/mrancier/waveterm",
+        "ahead_by":  3,
+        "behind_by":  37,
+        "changed_files":  12,
+        "pushed_at":  "2026-01-06T15:20:35Z",
+        "tags":  [
+                     "UI/前端"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "1abab3b [mpt] Add comprehensive frontend test suite",
+                               "5d31130 [mpt] Add React component test utilities and tests",
+                               "9bc2170 Merge pull request #1 from mrancier/mpt-main"
+                           ]
+    },
+    {
+        "full_name":  "stevenvo/waveterm",
+        "html_url":  "https://github.com/stevenvo/waveterm",
+        "ahead_by":  32,
+        "behind_by":  70,
+        "changed_files":  24,
+        "pushed_at":  "2026-01-03T20:18:22Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "CLI/WSH",
+                     "终端内核"
+                 ],
+        "open_prs":  [
+                         {
+                             "number":  2742,
+                             "title":  "Add drag-and-drop file support to terminal",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2742"
+                         },
+                         {
+                             "number":  2717,
+                             "title":  "Fix terminal state loss when switching workspaces",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2717"
+                         },
+                         {
+                             "number":  2681,
+                             "title":  "New tabs inherit working directory from active tab",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2681"
+                         },
+                         {
+                             "number":  2678,
+                             "title":  "Add confirmation dialog before closing tabs",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2678"
+                         }
+                     ],
+        "merged_prs":  [
+                           {
+                               "number":  2679,
+                               "title":  "Add Cmd+Up/Down keyboard shortcuts for terminal scrolling",
+                               "url":  "https://github.com/wavetermdev/waveterm/pull/2679",
+                               "mergedAt":  "2025-12-15T19:35:21Z"
+                           },
+                           {
+                               "number":  2680,
+                               "title":  "Add manual refresh buttons to file preview",
+                               "url":  "https://github.com/wavetermdev/waveterm/pull/2680",
+                               "mergedAt":  "2025-12-15T17:12:18Z"
+                           }
+                       ],
+        "sample_commits":  [
+                               "f76712c Add AI-powered automatic tab title generation",
+                               "e08c0cb Add drag-and-drop file support to terminal",
+                               "85858e1 Fix drag-and-drop to use full file paths",
+                               "da2595c Add Electron API for getting file paths in drag-drop"
+                           ]
+    },
+    {
+        "full_name":  "a5af/waveterm",
+        "html_url":  "https://github.com/a5af/waveterm",
+        "ahead_by":  24,
+        "behind_by":  228,
+        "changed_files":  70,
+        "pushed_at":  "2025-12-25T19:45:24Z",
+        "tags":  [
+                     "其他"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  {
+
+                           }
+    },
+    {
+        "full_name":  "wuyueerhao/waveterm",
+        "html_url":  "https://github.com/wuyueerhao/waveterm",
+        "ahead_by":  2,
+        "behind_by":  97,
+        "changed_files":  1,
+        "pushed_at":  "2025-12-03T02:28:20Z",
+        "tags":  [
+                     "其他"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "6b0e853 Create sync-fork-auto.yml",
+                               "5ba5fcf Update sync-fork-auto.yml"
+                           ]
+    },
+    {
+        "full_name":  "netixc/waveterm",
+        "html_url":  "https://github.com/netixc/waveterm",
+        "ahead_by":  27,
+        "behind_by":  99,
+        "changed_files":  22,
+        "pushed_at":  "2025-12-02T11:47:45Z",
+        "tags":  [
+                     "其他"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  {
+
+                           }
+    },
+    {
+        "full_name":  "ivikasavnish/waveterm",
+        "html_url":  "https://github.com/ivikasavnish/waveterm",
+        "ahead_by":  10,
+        "behind_by":  99,
+        "changed_files":  11,
+        "pushed_at":  "2025-12-02T09:01:54Z",
+        "tags":  [
+                     "UI/前端",
+                     "SSH/远程",
+                     "CLI/WSH"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "2a0eb65 Initial plan",
+                               "5378fdd Add SSH port forwarding backend implementation",
+                               "ed64ea4 Add frontend UI for port forwarding management",
+                               "10d1fc9 Address code review feedback for port forwarding feature"
+                           ]
+    },
+    {
+        "full_name":  "draco28/FlowTerminal_wave",
+        "html_url":  "https://github.com/draco28/FlowTerminal_wave",
+        "ahead_by":  2,
+        "behind_by":  114,
+        "changed_files":  37,
+        "pushed_at":  "2025-11-25T19:06:43Z",
+        "tags":  [
+                     "AI/模型",
+                     "终端内核",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "e61b08d feat: Add Claude Code CLI backend for FlowTerminal",
+                               "9f9664b chore: Rebrand from Wave Terminal to FlowTerminal"
+                           ]
+    },
+    {
+        "full_name":  "Dev-ZC/alfred",
+        "html_url":  "https://github.com/Dev-ZC/alfred",
+        "ahead_by":  2,
+        "behind_by":  167,
+        "changed_files":  24,
+        "pushed_at":  "2025-11-09T03:21:38Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "8796606 Implemented tect to speech and speech to text ai funcionality",
+                               "f74cb5f Add Piper TTS integration with voice features"
+                           ]
+    },
+    {
+        "full_name":  "devicemanager/waveterm",
+        "html_url":  "https://github.com/devicemanager/waveterm",
+        "ahead_by":  1,
+        "behind_by":  228,
+        "changed_files":  2,
+        "pushed_at":  "2025-10-18T09:10:35Z",
+        "tags":  [
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "db1b482 Add sharp dependency to docs package.json"
+    },
+    {
+        "full_name":  "sarumaj/waveterm",
+        "html_url":  "https://github.com/sarumaj/waveterm",
+        "ahead_by":  7,
+        "behind_by":  271,
+        "changed_files":  7,
+        "pushed_at":  "2025-10-08T20:49:15Z",
+        "tags":  [
+                     "UI/前端",
+                     "SSH/远程",
+                     "CLI/WSH",
+                     "文档"
+                 ],
+        "open_prs":  {
+                         "number":  2238,
+                         "title":  "Sysinfo: add support for AMD and NVIDIA GPUs",
+                         "url":  "https://github.com/wavetermdev/waveterm/pull/2238"
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "b204f73 sysinfo: add support for amd and nvidia gpus",
+                               "be0ea10 wshremote: fix unused output",
+                               "59257cd refactor and apply suggestions",
+                               "1aebc5b get rid of estimations"
+                           ]
+    },
+    {
+        "full_name":  "DepsCian/waveterm",
+        "html_url":  "https://github.com/DepsCian/waveterm",
+        "ahead_by":  4,
+        "behind_by":  342,
+        "changed_files":  1,
+        "pushed_at":  "2025-08-29T08:27:59Z",
+        "tags":  [
+                     "UI/前端"
+                 ],
+        "open_prs":  [
+                         {
+                             "number":  2103,
+                             "title":  "refactor: enhance AI block UI/UX",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2103"
+                         },
+                         {
+                             "number":  2101,
+                             "title":  "fix: add WebSocket polyfill for Electron main process",
+                             "url":  "https://github.com/wavetermdev/waveterm/pull/2101"
+                         }
+                     ],
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "639086b fix: add WebSocket polyfill for Electron main process",
+                               "742fe43 Merge branch \u0027main\u0027 into main",
+                               "2626c2d Merge branch \u0027main\u0027 into main",
+                               "6d12c1e Merge branch \u0027main\u0027 into main"
+                           ]
+    },
+    {
+        "full_name":  "10x-smitty/waveterm",
+        "html_url":  "https://github.com/10x-smitty/waveterm",
+        "ahead_by":  1,
+        "behind_by":  399,
+        "changed_files":  1,
+        "pushed_at":  "2025-08-22T19:09:12Z",
+        "tags":  [
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "e58a8de Update package.json"
+    },
+    {
+        "full_name":  "L1l1thLY/waveterm",
+        "html_url":  "https://github.com/L1l1thLY/waveterm",
+        "ahead_by":  6,
+        "behind_by":  386,
+        "changed_files":  2,
+        "pushed_at":  "2025-08-19T18:30:20Z",
+        "tags":  [
+                     "AI/模型"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+                           "number":  2249,
+                           "title":  "feat: Claude AI configuration supports custom base URL",
+                           "url":  "https://github.com/wavetermdev/waveterm/pull/2249",
+                           "mergedAt":  "2025-08-19T18:30:58Z"
+                       },
+        "sample_commits":  [
+                               "936ee19 feat: Claude AI configuration supports custom base URL",
+                               "70b6b55 Merge branch \u0027main\u0027 into main",
+                               "13d0ce8 merge main into branch",
+                               "6c5111f fix ineffective break statement in the google backend"
+                           ]
+    },
+    {
+        "full_name":  "xuzhounan/waveterm",
+        "html_url":  "https://github.com/xuzhounan/waveterm",
+        "ahead_by":  171,
+        "behind_by":  399,
+        "changed_files":  167,
+        "pushed_at":  "2025-08-14T16:27:44Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "CLI/WSH",
+                     "终端内核",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "2d7646e feat: 增强原生终端功能并清理 Modern Terminal 代码",
+                               "c98e35b 🐛 fix(build-app.sh): 修复后端服务编译和部署问题",
+                               "ffc6ddb Here\u0027s the commit message analyzing all changes:",
+                               "407fe5c 🐛 fix(enhanced-ime): 优化输入法处理逻辑和事件过滤"
+                           ]
+    },
+    {
+        "full_name":  "Salnika/waveterm",
+        "html_url":  "https://github.com/Salnika/waveterm",
+        "ahead_by":  3,
+        "behind_by":  399,
+        "changed_files":  6,
+        "pushed_at":  "2025-08-10T11:13:28Z",
+        "tags":  [
+                     "UI/前端",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "d5d1986 feat: add maxtokensfield",
+                               "3e6b0fc Update pkg/wconfig/settingsconfig.go",
+                               "735590f Update schema/aipresets.json"
+                           ]
+    },
+    {
+        "full_name":  "testdriverai/waveterm",
+        "html_url":  "https://github.com/testdriverai/waveterm",
+        "ahead_by":  5,
+        "behind_by":  677,
+        "changed_files":  2,
+        "pushed_at":  "2025-07-29T11:26:26Z",
+        "tags":  [
+                     "其他"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "41a03c7 remove unused cmds",
+                               "4d1d54a Merge branch \u0027wavetermdev:main\u0027 into main",
+                               "8190a3e does this work ?",
+                               "f66b08b add update check run"
+                           ]
+    },
+    {
+        "full_name":  "Icarus-B4/waveterm",
+        "html_url":  "https://github.com/Icarus-B4/waveterm",
+        "ahead_by":  2,
+        "behind_by":  399,
+        "changed_files":  10,
+        "pushed_at":  "2025-07-23T21:50:58Z",
+        "tags":  [
+                     "UI/前端",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "41f5d78 chore: update yarn configuration and package manager version",
+                               "82a036b docs: update README.md to include German translation and enhance installation instructions for Wave Terminal - Pinokio Script for autoinstallation - Test"
+                           ]
+    },
+    {
+        "full_name":  "Bhaktabahadurthapa/waveterm",
+        "html_url":  "https://github.com/Bhaktabahadurthapa/waveterm",
+        "ahead_by":  3,
+        "behind_by":  399,
+        "changed_files":  17,
+        "pushed_at":  "2025-07-12T06:01:41Z",
+        "tags":  [
+                     "文档"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "dc272fe Add comprehensive DevOps contribution guide for Wave Terminal project",
+                               "349af90 Add comprehensive Docker development environment for Wave Terminal",
+                               "f1ca856 Merge pull request #1 from Bhaktabahadurthapa/cursor/contributing-as-a-cloud-devops-engineer-c97d"
+                           ]
+    },
+    {
+        "full_name":  "xxyy2024/waveterm_aipy",
+        "html_url":  "https://github.com/xxyy2024/waveterm_aipy",
+        "ahead_by":  2052,
+        "behind_by":  399,
+        "changed_files":  300,
+        "pushed_at":  "2025-06-27T09:31:29Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "CLI/WSH",
+                     "终端内核",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "cbc50da Fix quicktips getting cut off (#1857)",
+                               "65792bc roadmap updates, and 1 other doc change (#1859)",
+                               "427c23a send SIGUSR1 to dump all goroutines (for debugging) (#1860)",
+                               "d3dbc3b fail any rpc call which blocks the runServer loop for more than 1s (#1861)"
+                           ]
+    },
+    {
+        "full_name":  "Malaeu/waveterm",
+        "html_url":  "https://github.com/Malaeu/waveterm",
+        "ahead_by":  1,
+        "behind_by":  399,
+        "changed_files":  3,
+        "pushed_at":  "2025-06-02T19:16:21Z",
+        "tags":  [
+                     "AI/模型",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "9a44c9c fix: resolve OpenAI backend compatibility issues and build failures"
+    },
+    {
+        "full_name":  "bklieger-groq/waveterm-groq",
+        "html_url":  "https://github.com/bklieger-groq/waveterm-groq",
+        "ahead_by":  5,
+        "behind_by":  399,
+        "changed_files":  27,
+        "pushed_at":  "2025-05-16T06:57:39Z",
+        "tags":  [
+                     "UI/前端",
+                     "AI/模型",
+                     "终端内核",
+                     "文档",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "3130106 feat: switch to groq, change color theme",
+                               "9811b6a feat: add commandlog widget, fix default AI model",
+                               "2bca1ff chore: update README",
+                               "bcdf13b chore: update README.md"
+                           ]
+    },
+    {
+        "full_name":  "HAHA741/waveterm",
+        "html_url":  "https://github.com/HAHA741/waveterm",
+        "ahead_by":  3,
+        "behind_by":  435,
+        "changed_files":  3,
+        "pushed_at":  "2025-05-02T18:04:53Z",
+        "tags":  [
+                     "UI/前端"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+                           "number":  2088,
+                           "title":  "Feat add editor fontsize",
+                           "url":  "https://github.com/wavetermdev/waveterm/pull/2088",
+                           "mergedAt":  "2025-05-02T18:10:17Z"
+                       },
+        "sample_commits":  [
+                               "7b6e316 字体大小修改",
+                               "8b26a53 editor adds the fontsize option",
+                               "055093a Modifying Font Description"
+                           ]
+    },
+    {
+        "full_name":  "kartikone/waveterm",
+        "html_url":  "https://github.com/kartikone/waveterm",
+        "ahead_by":  7,
+        "behind_by":  435,
+        "changed_files":  8,
+        "pushed_at":  "2025-04-25T08:06:59Z",
+        "tags":  [
+                     "UI/前端"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "639086b fix: add WebSocket polyfill for Electron main process",
+                               "887e52c refactor: complete Wave AI widget remake",
+                               "43d810b feat: enhance code block functionality",
+                               "2042b82 refactor: minor enhancements for Wave AI"
+                           ]
+    },
+    {
+        "full_name":  "coders33123/waveterm",
+        "html_url":  "https://github.com/coders33123/waveterm",
+        "ahead_by":  7,
+        "behind_by":  435,
+        "changed_files":  6,
+        "pushed_at":  "2025-04-23T07:44:16Z",
+        "tags":  [
+                     "AI/模型",
+                     "文档"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "aba2b10 Create Acro-Geniu .py",
+                               "2e186c5 Update BUILD.md",
+                               "9244dc2 Create JARIS",
+                               "9901fc3 Create Flipping"
+                           ]
+    },
+    {
+        "full_name":  "robinvandernoord/waveterm-hujson",
+        "html_url":  "https://github.com/robinvandernoord/waveterm-hujson",
+        "ahead_by":  6,
+        "behind_by":  441,
+        "changed_files":  4,
+        "pushed_at":  "2025-02-26T15:41:07Z",
+        "tags":  [
+                     "UI/前端",
+                     "构建/配置"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  [
+                               "a7e13ea Add `hujson` support to parsing wave config files",
+                               "c688bcc Merge branch \u0027main\u0027 of github.com:robinvandernoord/waveterm-hujson",
+                               "136eb10 fix: combine current `json.jsonDefaults.diagnosticsOptions` with updates (allowComments + trailingCommas) to maintain other settings (e.g. `schemas`)",
+                               "069c6c9 Merge branch \u0027main\u0027 of github.com:wavetermdev/waveterm"
+                           ]
+    },
+    {
+        "full_name":  "starbucknathan/waveterm",
+        "html_url":  "https://github.com/starbucknathan/waveterm",
+        "ahead_by":  1,
+        "behind_by":  698,
+        "changed_files":  1,
+        "pushed_at":  "2025-01-05T05:36:37Z",
+        "tags":  [
+                     "其他"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "3dc2b20 Create main.yml"
+    },
+    {
+        "full_name":  "zecreh/waveterm",
+        "html_url":  "https://github.com/zecreh/waveterm",
+        "ahead_by":  1,
+        "behind_by":  798,
+        "changed_files":  1,
+        "pushed_at":  "2024-12-15T09:36:10Z",
+        "tags":  [
+                     "文档"
+                 ],
+        "open_prs":  {
+
+                     },
+        "merged_prs":  {
+
+                       },
+        "sample_commits":  "9c2ab44 Update README.md"
+    }
+]

@@ -54,6 +54,37 @@ Platform-specific installation instructions can be found [here](https://docs.wav
 
 You can also install Wave Terminal directly from: [www.waveterm.dev/download](https://www.waveterm.dev/download).
 
+### Command-line install examples
+
+Use these examples after downloading a release artifact to your current directory.
+
+```bash
+# Ubuntu / Debian (.deb)
+sudo apt-get update
+sudo apt-get install -y ./WaveCN-linux-x64-<version>.deb
+```
+
+```bash
+# Fedora / RHEL / Rocky / AlmaLinux (.rpm)
+sudo dnf install -y ./WaveCN-linux-x64-<version>.rpm
+```
+
+```bash
+# openSUSE (.rpm)
+sudo zypper install -y ./WaveCN-linux-x64-<version>.rpm
+```
+
+```bash
+# Generic Linux (AppImage)
+chmod +x ./WaveCN-linux-x64-<version>.AppImage
+./WaveCN-linux-x64-<version>.AppImage
+```
+
+```powershell
+# Windows silent install (.exe)
+Start-Process -FilePath ".\WaveCN-win32-x64-<version>.exe" -ArgumentList "/S" -Wait
+```
+
 ### Minimum requirements
 
 Wave Terminal runs on the following platforms:
