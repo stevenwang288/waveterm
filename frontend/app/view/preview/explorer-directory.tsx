@@ -3,7 +3,6 @@
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { createBlock, globalStore } from "@/app/store/global";
-import type { FavoriteItem } from "@/app/store/favorites-model";
 import { FavoritesModel } from "@/app/store/favorites-model";
 import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -199,7 +198,6 @@ function clampNumber(value: number, min: number, max: number): number {
 function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     const { t } = useTranslation();
     const favoritesModel = useMemo(() => FavoritesModel.getInstance(model.tabModel.tabId), [model.tabModel.tabId]);
-    const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
     const [drives, setDrives] = useState<ExplorerItem[]>([]);
     const [drivesLoading, setDrivesLoading] = useState(false);
     const currentFileInfo = useAtomValue(model.statFile);
@@ -265,24 +263,21 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         }
     });
     const sidebarSectionsKey = `waveterm-explorer-sidebar-sections:${explorerStateScope}`;
-    const [collapsedSections, setCollapsedSections] = useState<Record<"quickAccess" | "favorites" | "thisPC", boolean>>(
-        () => {
-            try {
-                const raw = localStorage.getItem(sidebarSectionsKey);
-                if (!raw) {
-                    return { quickAccess: false, favorites: false, thisPC: false };
-                }
-                const parsed = JSON.parse(raw) as Record<string, boolean>;
-                return {
-                    quickAccess: !!parsed.quickAccess,
-                    favorites: !!parsed.favorites,
-                    thisPC: !!parsed.thisPC,
-                };
-            } catch {
-                return { quickAccess: false, favorites: false, thisPC: false };
+    const [collapsedSections, setCollapsedSections] = useState<Record<"quickAccess" | "thisPC", boolean>>(() => {
+        try {
+            const raw = localStorage.getItem(sidebarSectionsKey);
+            if (!raw) {
+                return { quickAccess: false, thisPC: false };
             }
+            const parsed = JSON.parse(raw) as Record<string, boolean>;
+            return {
+                quickAccess: !!parsed.quickAccess,
+                thisPC: !!parsed.thisPC,
+            };
+        } catch {
+            return { quickAccess: false, thisPC: false };
         }
-    );
+    });
     const treeExpandedKey = `waveterm-explorer-tree-expanded:${explorerStateScope}`;
     const [expandedTreePaths, setExpandedTreePaths] = useState<Set<string>>(() => {
         try {
@@ -351,15 +346,14 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                 const parsed = JSON.parse(raw) as Record<string, boolean>;
                 setCollapsedSections({
                     quickAccess: !!parsed?.quickAccess,
-                    favorites: !!parsed?.favorites,
                     thisPC: !!parsed?.thisPC,
                 });
             } else {
-                setCollapsedSections({ quickAccess: false, favorites: false, thisPC: false });
+                setCollapsedSections({ quickAccess: false, thisPC: false });
             }
             loadedSidebarSectionsKeyRef.current = sidebarSectionsKey;
         } catch {
-            setCollapsedSections({ quickAccess: false, favorites: false, thisPC: false });
+            setCollapsedSections({ quickAccess: false, thisPC: false });
             loadedSidebarSectionsKeyRef.current = sidebarSectionsKey;
         }
     }, [sidebarSectionsKey]);
@@ -437,13 +431,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             // ignore
         }
     }, [expandedTreePaths, treeExpandedKey]);
-
-    useEffect(() => {
-        const update = () => setFavorites(favoritesModel.getItems());
-        update();
-        window.addEventListener("favorites-updated", update);
-        return () => window.removeEventListener("favorites-updated", update);
-    }, [favoritesModel]);
 
     useEffect(() => {
         if (PLATFORM !== PlatformWindows) {
@@ -824,17 +811,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         [addToFavorites, copyToClipboard, favoritesModel, openTerminalAtPath, t]
     );
 
-    const favoriteNavItems = useMemo(
-        () =>
-            favorites.map((fav) => ({
-                icon: "star",
-                label: getLeafLabel(fav.path),
-                path: fav.path,
-                favoriteId: fav.id,
-            })),
-        [favorites]
-    );
-
     const detailsPath = selectedPath || currentPath;
     useEffect(() => {
         if (!showDetails) {
@@ -1039,30 +1015,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                         </button>
                         {!collapsedSections.quickAccess && (
                             <div className="px-1">{renderNavTreeItems(quickAccessItems as ExplorerNavItem[], 0)}</div>
-                        )}
-
-                        <button
-                            className="w-full flex items-center gap-2 px-3 pt-4 pb-2 text-xs font-semibold text-secondary uppercase tracking-wider hover:bg-hoverbg"
-                            onClick={() => setCollapsedSections((prev) => ({ ...prev, favorites: !prev.favorites }))}
-                            type="button"
-                        >
-                            <i
-                                className={clsx(
-                                    "fas",
-                                    collapsedSections.favorites ? "fa-chevron-right" : "fa-chevron-down",
-                                    "text-[10px] text-zinc-400 w-3 text-center"
-                                )}
-                            />
-                            <span className="truncate">{t("favorites.title")}</span>
-                        </button>
-                        {!collapsedSections.favorites && (
-                            <div className="px-1 pb-3">
-                                {favoriteNavItems.length === 0 ? (
-                                    <div className="px-2 py-1.5 text-sm text-secondary">{t("favorites.hint")}</div>
-                                ) : (
-                                    renderNavTreeItems(favoriteNavItems as ExplorerNavItem[], 0)
-                                )}
-                            </div>
                         )}
 
                         {PLATFORM === PlatformWindows && (
