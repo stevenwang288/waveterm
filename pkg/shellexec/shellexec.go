@@ -179,6 +179,9 @@ func StartWslShellProcNoWsh(ctx context.Context, termSize waveobj.TermSize, cmdS
 }
 
 func StartWslShellProc(ctx context.Context, termSize waveobj.TermSize, cmdStr string, cmdOpts CommandOptsType, conn *wslconn.WslConn) (*ShellProc, error) {
+	if cmdOpts.SwapToken == nil {
+		return nil, fmt.Errorf("SwapToken is required in CommandOptsType")
+	}
 	client := conn.GetClient()
 	conn.Infof(ctx, "WSL-NEWSESSION (StartWslShellProc)")
 	connRoute := wshutil.MakeConnectionRouteId(conn.GetName())
@@ -346,6 +349,9 @@ func StartRemoteShellProcNoWsh(ctx context.Context, termSize waveobj.TermSize, c
 }
 
 func StartRemoteShellProc(ctx context.Context, logCtx context.Context, termSize waveobj.TermSize, cmdStr string, cmdOpts CommandOptsType, conn *conncontroller.SSHConn) (*ShellProc, error) {
+	if cmdOpts.SwapToken == nil {
+		return nil, fmt.Errorf("SwapToken is required in CommandOptsType")
+	}
 	client := conn.GetClient()
 	connRoute := wshutil.MakeConnectionRouteId(conn.GetName())
 	rpcClient := wshclient.GetBareRpcClient()

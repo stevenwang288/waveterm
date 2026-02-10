@@ -288,6 +288,18 @@ function checkCommandForTelemetry(decodedCmd: string) {
         recordTEvent("action:term", { "action:type": "cli-tailf" });
         return;
     }
+
+    const claudeRegex = /^claude\b/;
+    if (claudeRegex.test(decodedCmd)) {
+        recordTEvent("action:term", { "action:type": "claude" });
+        return;
+    }
+
+    const opencodeRegex = /^opencode\b/;
+    if (opencodeRegex.test(decodedCmd)) {
+        recordTEvent("action:term", { "action:type": "opencode" });
+        return;
+    }
 }
 
 const AITermCommandPrefixes = [
