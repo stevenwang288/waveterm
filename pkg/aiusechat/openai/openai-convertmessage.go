@@ -395,6 +395,8 @@ func ConvertAIMessageToOpenAIChatMessage(aiMsg uctypes.AIMessage) (*OpenAIChatMe
 	}
 
 	var contentBlocks []OpenAIMessageContent
+	imageCount := 0
+	imageFailCount := 0
 
 	for i, part := range aiMsg.Parts {
 		switch part.Type {
@@ -408,8 +410,14 @@ func ConvertAIMessageToOpenAIChatMessage(aiMsg uctypes.AIMessage) (*OpenAIChatMe
 			})
 
 		case uctypes.AIMessagePartTypeFile:
+			if strings.HasPrefix(part.MimeType, "image/") {
+				imageCount++
+			}
 			block, err := convertFileAIMessagePart(part)
 			if err != nil {
+				if strings.HasPrefix(part.MimeType, "image/") {
+					imageFailCount++
+				}
 				log.Printf("openai: %v", err)
 				continue
 			}
@@ -420,6 +428,13 @@ func ConvertAIMessageToOpenAIChatMessage(aiMsg uctypes.AIMessage) (*OpenAIChatMe
 			log.Printf("openai: dropping unknown part type '%s'", part.Type)
 			continue
 		}
+	}
+
+	if len(contentBlocks) == 0 {
+		if imageCount > 0 && imageFailCount == imageCount {
+			return nil, fmt.Errorf("all %d image conversions failed", imageCount)
+		}
+		return nil, errors.New("message has no valid content after processing all parts")
 	}
 
 	return &OpenAIChatMessage{
