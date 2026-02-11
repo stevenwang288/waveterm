@@ -60,6 +60,7 @@ export class Updater {
 
         // Only update the release channel if it's specified, otherwise use the one configured in the updater.
         autoUpdater.channel = getUpdateChannel(settings);
+        autoUpdater.allowDowngrade = false;
 
         autoUpdater.removeAllListeners();
 

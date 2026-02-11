@@ -33,14 +33,16 @@ type ConnInterface interface {
 
 type CmdWrap struct {
 	Cmd      *exec.Cmd
+	IsShell  bool
 	WaitOnce *sync.Once
 	WaitErr  error
 	pty.Pty
 }
 
-func MakeCmdWrap(cmd *exec.Cmd, cmdPty pty.Pty) CmdWrap {
+func MakeCmdWrap(cmd *exec.Cmd, cmdPty pty.Pty, isShell bool) CmdWrap {
 	return CmdWrap{
 		Cmd:      cmd,
+		IsShell:  isShell,
 		WaitOnce: &sync.Once{},
 		Pty:      cmdPty,
 	}
@@ -75,6 +77,8 @@ func (cw CmdWrap) KillGraceful(timeout time.Duration) {
 	}
 	if runtime.GOOS == "windows" {
 		cw.Cmd.Process.Signal(os.Interrupt)
+	} else if cw.IsShell {
+		syscall.Kill(cw.Cmd.Process.Pid, syscall.SIGHUP)
 	} else {
 		cw.Cmd.Process.Signal(syscall.SIGTERM)
 	}
