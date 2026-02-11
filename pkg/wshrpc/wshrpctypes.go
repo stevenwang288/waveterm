@@ -830,6 +830,7 @@ type CommandJobCmdExitedData struct {
 
 type CommandJobControllerStartJobData struct {
 	ConnName string            `json:"connname"`
+	JobKind  string            `json:"jobkind"`
 	Cmd      string            `json:"cmd"`
 	Args     []string          `json:"args"`
 	Env      map[string]string `json:"env"`

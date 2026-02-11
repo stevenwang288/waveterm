@@ -9,7 +9,6 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import {
     atoms,
     fetchWaveFile,
-    getApi,
     getOverrideConfigAtom,
     getSettingsKeyAtom,
     globalStore,
@@ -33,6 +32,12 @@ import debug from "debug";
 import * as jotai from "jotai";
 import { debounce } from "throttle-debounce";
 import { FitAddon } from "./fitaddon";
+import {
+    handleOsc16162Command,
+    handleOsc52Command,
+    handleOsc7Command,
+    type ShellIntegrationStatus,
+} from "./osc-handlers";
 import { createTempFileFromBlob, extractAllClipboardData } from "./termutil";
 
 const dlog = debug("wave:termwrap");
@@ -662,7 +667,7 @@ export class TermWrap {
     pasteActive: boolean = false;
     lastUpdated: number;
     promptMarkers: TermTypes.IMarker[] = [];
-    shellIntegrationStatusAtom: jotai.PrimitiveAtom<"ready" | "running-command" | null>;
+    shellIntegrationStatusAtom: jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     nodeModel: BlockNodeModel; // this can be null
     unreadAtom: jotai.PrimitiveAtom<boolean>;

@@ -389,6 +389,7 @@ declare global {
     // wshrpc.CommandJobControllerStartJobData
     type CommandJobControllerStartJobData = {
         connname: string;
+        jobkind: string;
         cmd: string;
         args: string[];
         env: {[key: string]: string};
@@ -1435,6 +1436,9 @@ declare global {
         "activity:waveaiactiveminutes"?: number;
         "activity:waveaifgminutes"?: number;
         "activity:termcommandsrun"?: number;
+        "activity:termcommands:remote"?: number;
+        "activity:termcommands:durable"?: number;
+        "activity:termcommands:wsl"?: number;
         "app:firstday"?: boolean;
         "app:firstlaunch"?: boolean;
         "action:initiator"?: "keyboard" | "mouse";
@@ -1448,6 +1452,7 @@ declare global {
         "wsh:haderror"?: boolean;
         "conn:conntype"?: string;
         "conn:wsherrorcode"?: string;
+        "conn:errorcode"?: string;
         "onboarding:feature"?: "waveai" | "durable" | "magnify" | "wsh";
         "onboarding:version"?: string;
         "onboarding:githubstar"?: "already" | "star" | "later";
@@ -1462,6 +1467,8 @@ declare global {
         "count:workspaces"?: number;
         "count:sshconn"?: number;
         "count:wslconn"?: number;
+        "count:jobs"?: number;
+        "count:jobsconnected"?: number;
         "count:views"?: {[key: string]: number};
         "waveai:apitype"?: string;
         "waveai:model"?: string;
@@ -1490,6 +1497,8 @@ declare global {
         "waveai:islocal"?: boolean;
         "waveai:feedback"?: "good" | "bad";
         "waveai:action"?: string;
+        "job:donereason"?: string;
+        "job:kind"?: string;
         $set?: TEventUserProps;
         $set_once?: TEventUserProps;
     };
