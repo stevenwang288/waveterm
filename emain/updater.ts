@@ -204,6 +204,7 @@ export class Updater {
         if (this.status == "ready") {
             this.status = "installing";
             await delay(1000);
+            setUserConfirmedQuit(true);
             autoUpdater.quitAndInstall();
         }
     }
