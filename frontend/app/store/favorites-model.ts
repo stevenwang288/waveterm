@@ -6,6 +6,7 @@ export interface FavoriteItem {
     label: string;
     path: string;
     connection?: string;
+    autoCmd?: string;
     icon?: string;
     children?: FavoriteItem[];
 }
@@ -60,6 +61,7 @@ function cloneFavoriteItem(item: FavoriteItem): FavoriteItem {
         label: item.label,
         path: normalizeFavoritePath(item.path),
         connection: normalizeConnection(item.connection),
+        autoCmd: typeof item.autoCmd === "string" ? item.autoCmd.trim() || undefined : undefined,
         icon: item.icon,
         children: item.children?.map(cloneFavoriteItem) ?? [],
     };
@@ -177,13 +179,14 @@ export class FavoritesModel {
         return this.data.items;
     }
 
-    addFavorite(path: string, label?: string, parentId?: string, connection?: string): void {
+    addFavorite(path: string, label?: string, parentId?: string, connection?: string, autoCmd?: string): void {
         const normalizedPath = normalizeFavoritePath(path);
         if (!normalizedPath) {
             return;
         }
 
         const normalizedConnection = normalizeConnection(connection);
+        const normalizedAutoCmd = typeof autoCmd === "string" ? autoCmd.trim() || undefined : undefined;
         const displayLabel = label || defaultLabelForPath(normalizedPath) || normalizedPath;
 
         const parent = parentId ? this.findItemById(this.data.items, parentId) : undefined;
@@ -204,6 +207,7 @@ export class FavoritesModel {
             label: displayLabel,
             path: normalizedPath,
             connection: normalizedConnection,
+            autoCmd: normalizedAutoCmd,
             icon: "folder",
             children: [],
         };
@@ -223,6 +227,16 @@ export class FavoritesModel {
             item.label = label;
             this.saveToStorage();
         }
+    }
+
+    updateFavoriteAutoCmd(id: string, autoCmd?: string): void {
+        const item = this.findItemById(this.data.items, id);
+        if (!item) {
+            return;
+        }
+        const normalized = typeof autoCmd === "string" ? autoCmd.trim() : "";
+        item.autoCmd = normalized ? normalized : undefined;
+        this.saveToStorage();
     }
 
     moveFavorite(itemId: string, newParentId?: string): void {

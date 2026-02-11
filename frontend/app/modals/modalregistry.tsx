@@ -7,6 +7,7 @@ import { UpgradeOnboardingModal } from "@/app/onboarding/onboarding-upgrade";
 import { DeleteFileModal, PublishAppModal, RenameFileModal } from "@/builder/builder-apppanel";
 import { SetSecretDialog } from "@/builder/tabs/builder-secrettab";
 import { AboutModal } from "./about";
+import { CodexTranslateModal } from "./codextranslatemodal";
 import { UserInputModal } from "./userinputmodal";
 
 const modalRegistry: { [key: string]: React.ComponentType<any> } = {
@@ -15,6 +16,7 @@ const modalRegistry: { [key: string]: React.ComponentType<any> } = {
     [UserInputModal.displayName || "UserInputModal"]: UserInputModal,
     [AboutModal.displayName || "AboutModal"]: AboutModal,
     [MessageModal.displayName || "MessageModal"]: MessageModal,
+    [CodexTranslateModal.displayName || "CodexTranslateModal"]: CodexTranslateModal,
     [PublishAppModal.displayName || "PublishAppModal"]: PublishAppModal,
     [RenameFileModal.displayName || "RenameFileModal"]: RenameFileModal,
     [DeleteFileModal.displayName || "DeleteFileModal"]: DeleteFileModal,

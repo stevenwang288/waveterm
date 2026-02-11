@@ -333,6 +333,14 @@ process.on("uncaughtException", (error) => {
         return;
     }
 
+    // If wavesrv already exited, we may see follow-up connection errors while shutting down/relaunching.
+    // Avoid turning those into a second, noisy shutdown path.
+    if ((error as any)?.code === "ECONNREFUSED" && getIsWaveSrvDead()) {
+        console.log("Ignoring ECONNREFUSED after wavesrv exit:", error.message);
+        console.log("Stack Trace:", error.stack);
+        return;
+    }
+
     caughtException = true;
     console.log("Uncaught Exception, shutting down: ", error);
     console.log("Stack Trace:", error.stack);

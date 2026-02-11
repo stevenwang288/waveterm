@@ -134,6 +134,7 @@ declare global {
         closeBuilderWindow: () => void; // close-builder-window
         incrementTermCommands: () => void; // increment-term-commands
         nativePaste: () => void; // native-paste
+        codexTranslate: (text: string) => Promise<string>; // codex-translate
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh
@@ -444,6 +445,7 @@ declare global {
         actions?: NotificationActionType[];
         persistent?: boolean;
         type?: "error" | "update" | "info" | "warning";
+        clickActionKey?: string;
     };
 
     interface AbstractWshClient {

@@ -8,9 +8,10 @@ import { TileLayoutContents } from "@/layout/lib/types";
 import { atoms, getApi } from "@/store/global";
 import * as services from "@/store/services";
 import * as WOS from "@/store/wos";
+import { maybeApplyPendingCliLayout } from "@/util/clilayout";
 import { atom, useAtomValue } from "jotai";
 import * as React from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 const tileGapSizeAtom = atom((get) => {
@@ -26,6 +27,22 @@ const TabContent = React.memo(({ tabId }: { tabId: string }) => {
     const tabAtom = useMemo(() => WOS.getWaveObjectAtom<Tab>(oref), [oref]);
     const tabData = useAtomValue(tabAtom);
     const tileGapSize = useAtomValue(tileGapSizeAtom);
+    const appliedPendingLayoutRef = useRef(false);
+
+    useEffect(() => {
+        appliedPendingLayoutRef.current = false;
+    }, [tabId]);
+
+    useEffect(() => {
+        if (appliedPendingLayoutRef.current) {
+            return;
+        }
+        if (tabLoading || !tabData) {
+            return;
+        }
+        appliedPendingLayoutRef.current = true;
+        maybeApplyPendingCliLayout(tabId);
+    }, [tabId, tabLoading, tabData]);
 
     const tileLayoutContents = useMemo(() => {
         const renderContent: ContentRenderer = (nodeModel: NodeModel) => {

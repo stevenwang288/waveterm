@@ -464,7 +464,7 @@ const GitPanel = memo(() => {
         if (selectedFile.untracked) {
             setState((prev) => ({
                 ...prev,
-                actionError: "Untracked file discard is not supported in panel yet",
+                actionError: "未跟踪文件暂不支持在面板中丢弃",
             }));
             return;
         }

@@ -25,6 +25,7 @@
     "cut": "Cut",
     "copy": "Copy",
     "paste": "Paste",
+    "pasteAndMatchStyle": "Paste and Match Style",
     "delete": "Delete",
     "selectAll": "Select All",
     "services": "Services",
@@ -78,6 +79,11 @@
     "confirmQuitTitle": "Confirm Quit",
     "confirmQuitMessage": "Are you sure you want to quit {{appName}}?"
   },
+  "notification": {
+    "cannotBeCleared": "Cannot be cleared",
+    "clickToCopyMessage": "Click to copy message",
+    "clickToOpen": "Click to open"
+  },
   "favorites": {
     "title": "Favorites",
     "hint": "Right-click a folder and choose \"Add to Favorites\"",
@@ -86,7 +92,50 @@
     "addCurrentFolder": "Add current folder to Favorites",
     "remove": "Remove from Favorites",
     "addCategory": "New Category",
-    "enterCategoryName": "Enter category name:"
+    "enterCategoryName": "Enter category name:",
+    "empty": "No favorites",
+    "openDefault": "Open (Default)",
+    "clearDefaultCommand": "Clear default command",
+    "cdHere": "cd here",
+    "defaultMarker": " (Default)",
+    "currentMarker": " (Current)",
+    "applyToCurrentTerminal": "Apply to current terminal",
+    "defaultCommand": "Default command",
+    "autoCommand": "Auto command"
+  },
+  "clilayout": {
+    "menu": "Layout",
+    "saveCurrent": "Save current",
+    "refresh": "Refresh",
+    "quickPresets": "Quick split",
+    "savedConfigs": "Saved layouts",
+    "noSavedLayouts": "No saved layouts",
+    "recent": "Recent",
+    "includesCommand": "Includes startup command",
+    "restoreRecentPresetTitle": "Restore recent {{preset}}",
+    "createNewPresetTitle": "Create new {{preset}}",
+    "promptSaveName": "Save layout name",
+    "defaultSavedName": "Layout {{datetime}}",
+    "layoutTitle": "Layout {{rows}}×{{cols}}",
+    "addOnly": "Add to preset only",
+    "addAndOpen": "Add and open",
+    "saveToSlot": "Save to {{slot}}",
+    "loadSlot": "Load {{slot}}",
+    "presets": {
+      "2": "2 panes",
+      "3": "3 panes",
+      "4": "4 panes",
+      "6": "6 panes",
+      "6-2col": "6 panes (2 columns)",
+      "8": "8 panes",
+      "8-2col": "8 panes (2 columns)",
+      "9": "9 panes"
+    },
+    "slots": {
+      "layout1": "Layout slot 1",
+      "layout2": "Layout slot 2",
+      "layout3": "Layout slot 3"
+    }
   },
   "explorer": {
     "thisPC": "This PC",
@@ -728,6 +777,13 @@
       "disabledInProgram": "Wave AI integration disabled while you're inside {{program}}."
     },
     "sendToWaveAI": "Send to Wave AI",
+    "translateSelection": "Translate Selection (Chinese)",
+    "translateSelectionTitle": "Translation",
+    "translating": "Translating…",
+    "translationFailed": "Translation failed",
+    "reflowHistory": "Reflow history to current width",
+    "bellNotify": "System notification on bell",
+    "bellNotifyTitle": "Terminal bell",
     "openUrl": "Open URL ({{host}})",
     "openUrlExternal": "Open URL in External Browser",
     "newBlockInheritCwd": "New Terminal Block (Inherit Path)",
@@ -735,6 +791,15 @@
     "splitVertically": "Split Vertically",
     "fileBrowser": "File Browser",
     "themes": "Themes",
+    "themeNames": {
+      "defaultDark": "Default Dark",
+      "oneDarkPro": "One Dark Pro",
+      "dracula": "Dracula",
+      "monokai": "Monokai",
+      "campbell": "Campbell",
+      "warmYellow": "Warm Yellow",
+      "rosePine": "Rose Pine"
+    },
     "fontSize": "Font Size",
     "transparency": "Transparency",
     "transparentBackground": "Transparent Background",

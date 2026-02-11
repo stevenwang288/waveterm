@@ -1,21 +1,40 @@
-﻿import { createBlock, getApi } from "@/app/store/global";
+﻿import { createBlock, getApi, getFocusedBlockId, globalStore, WOS } from "@/app/store/global";
 import i18next from "@/app/i18n";
+import { RpcApi } from "@/app/store/wshclientapi";
+import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { makeNativeLabel } from "./platformutil";
-import { fireAndForget } from "./util";
+import { fireAndForget, isBlank, stringToBase64 } from "./util";
 import { formatRemoteUri } from "./waveutil";
 
-function openCliInNewTerminal(cwd: string, conn: string, cliCommand: string) {
-    const meta: Record<string, any> = {
-        controller: "shell",
-        view: "term",
-        "cmd:cwd": cwd,
-        "cmd:initscript": `${cliCommand}\n`,
-    };
-    if (conn) {
-        meta.connection = conn;
+function findFocusedTerminalBlockId(): string {
+    const focusedBlockId = getFocusedBlockId();
+    if (isBlank(focusedBlockId)) {
+        return null;
     }
-    const termBlockDef: BlockDef = { meta };
-    fireAndForget(() => createBlock(termBlockDef));
+    const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", focusedBlockId));
+    const block = globalStore.get(blockAtom);
+    if (block?.meta?.view !== "term") {
+        return null;
+    }
+    return focusedBlockId;
+}
+
+function runCliInExistingTerminal(cliCommand: string): boolean {
+    const targetBlockId = findFocusedTerminalBlockId();
+    if (isBlank(targetBlockId) || isBlank(cliCommand)) {
+        return false;
+    }
+    fireAndForget(async () => {
+        await RpcApi.SetMetaCommand(TabRpcClient, {
+            oref: WOS.makeORef("block", targetBlockId),
+            meta: { "term:autoCmd": cliCommand },
+        });
+        await RpcApi.ControllerInputCommand(TabRpcClient, {
+            blockid: targetBlockId,
+            inputdata64: stringToBase64(`${cliCommand}\n`),
+        });
+    });
+    return true;
 }
 
 const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
@@ -27,10 +46,21 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "OpenCode", command: "opencode" },
 ];
 
-function makeAiLaunchMenuItems(targetCwd: string, conn: string): ContextMenuItem[] {
+function makeAiLaunchMenuItems(): ContextMenuItem[] {
     return AI_LAUNCH_COMMANDS.map((item) => ({
         label: i18next.t("preview.openAiHere", { ai: item.label }),
-        click: () => openCliInNewTerminal(targetCwd, conn, item.command),
+        click: () => {
+            runCliInExistingTerminal(item.command);
+        },
+    }));
+}
+
+function makeAutoCommandMenuItems(): ContextMenuItem[] {
+    return AI_LAUNCH_COMMANDS.map((item) => ({
+        label: item.label,
+        click: () => {
+            runCliInExistingTerminal(item.command);
+        },
     }));
 }
 
@@ -102,10 +132,15 @@ export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: F
             fireAndForget(() => createBlock(termBlockDef));
         },
     });
-    menu.push({
-        label: i18next.t("preview.openWithAi"),
-        submenu: makeAiLaunchMenuItems(targetCwd, conn),
-    });
+    menu.push(
+        {
+            label: "自动命令",
+            submenu: makeAutoCommandMenuItems(),
+        },
+        {
+            label: i18next.t("preview.openWithAi"),
+            submenu: makeAiLaunchMenuItems(),
+        }
+    );
     return menu;
 }
-

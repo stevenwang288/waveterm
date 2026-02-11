@@ -128,7 +128,13 @@
         "term:bellindicator": {
           "type": "boolean"
         },
+        "term:bellnotify": {
+          "type": "boolean"
+        },
         "term:durable": {
+          "type": "boolean"
+        },
+        "term:wheellinescroll": {
           "type": "boolean"
         },
         "editor:minimapenabled": {

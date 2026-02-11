@@ -70,6 +70,19 @@ function handleWindowsMenuAccelerators(
         return true;
     }
 
+    // Tab switching: On Windows, some Alt+number key combos can be swallowed by the OS/IME and never
+    // reach the renderer. Re-inject the key from the main process so renderer shortcuts remain reliable.
+    for (let i = 1; i <= 9; i++) {
+        if (
+            checkKeyPressed(waveEvent, `Alt:${i}`) ||
+            checkKeyPressed(waveEvent, `Alt:c{Digit${i}}`) ||
+            checkKeyPressed(waveEvent, `Alt:c{Numpad${i}}`)
+        ) {
+            tabView.webContents.send("reinject-key", waveEvent);
+            return true;
+        }
+    }
+
     for (let i = 1; i <= 9; i++) {
         if (checkKeyPressed(waveEvent, `Alt:Ctrl:${i}`)) {
             const workspaceNum = i - 1;

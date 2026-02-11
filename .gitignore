@@ -18,6 +18,7 @@ make/
 artifacts/
 mikework/
 manifests/
+third_party/
 .env
 out
 

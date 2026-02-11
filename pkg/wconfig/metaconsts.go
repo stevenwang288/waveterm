@@ -50,7 +50,9 @@ const (
 	ConfigKey_TermMacOptionIsMeta            = "term:macoptionismeta"
 	ConfigKey_TermBellSound                  = "term:bellsound"
 	ConfigKey_TermBellIndicator              = "term:bellindicator"
+	ConfigKey_TermBellNotify                 = "term:bellnotify"
 	ConfigKey_TermDurable                    = "term:durable"
+	ConfigKey_TermWheelLineScroll            = "term:wheellinescroll"
 
 	ConfigKey_EditorMinimapEnabled           = "editor:minimapenabled"
 	ConfigKey_EditorStickyScrollEnabled      = "editor:stickyscrollenabled"

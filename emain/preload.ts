@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld("api", {
     closeBuilderWindow: () => ipcRenderer.send("close-builder-window"),
     incrementTermCommands: () => ipcRenderer.send("increment-term-commands"),
     nativePaste: () => ipcRenderer.send("native-paste"),
+    codexTranslate: (text: string) => ipcRenderer.invoke("codex-translate", text),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),

@@ -181,6 +181,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     const fullConfig = globalStore.get(atoms.fullConfigAtom);
     const connFontFamily = fullConfig.connections?.[blockData?.meta?.connection]?.["term:fontfamily"];
     const isFocused = jotai.useAtomValue(model.nodeModel.isFocused);
+    const isMagnified = jotai.useAtomValue(model.nodeModel.isMagnified);
     const isMI = jotai.useAtomValue(tabModel.isTermMultiInput);
     const isBasicTerm = termMode != "vdom" && blockData?.meta?.controller != "cmd"; // needs to match isBasicTerm
 
@@ -287,12 +288,13 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
                 drawBoldTextInBrightColors: false,
                 fontWeight: "normal",
                 fontWeightBold: "bold",
-                allowTransparency: true,
-                scrollback: termScrollback,
-                allowProposedApi: true, // Required by @xterm/addon-search to enable search functionality and decorations
-                ignoreBracketedPasteMode: !termAllowBPM,
-                macOptionIsMeta: termMacOptionIsMeta,
-            },
+                 allowTransparency: true,
+                 scrollback: termScrollback,
+                 fastScrollSensitivity: 1,
+                 allowProposedApi: true, // Required by @xterm/addon-search to enable search functionality and decorations
+                 ignoreBracketedPasteMode: !termAllowBPM,
+                 macOptionIsMeta: termMacOptionIsMeta,
+             },
             {
                 keydownHandler: model.handleTerminalKeydown.bind(model),
                 useWebGl: !termSettings?.["term:disablewebgl"],
@@ -321,6 +323,32 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
             rszObs.disconnect();
         };
     }, [blockId, termSettings, termFontSize, connFontFamily]);
+
+    React.useEffect(() => {
+        const termWrap = model.termRef.current;
+        if (!termWrap) {
+            return;
+        }
+        termWrap.handleResize_debounced();
+        const timeouts = [100, 250, 500].map((delayMs) =>
+            setTimeout(() => {
+                termWrap.handleResize_debounced();
+                if (delayMs === 500) {
+                    fireAndForget(() => termWrap.resyncController("magnify resize"));
+                    if (isMagnified) {
+                        const buffer = termWrap.terminal?.buffer?.active;
+                        const isAtBottom = buffer != null && buffer.baseY === buffer.viewportY;
+                        if (isAtBottom) {
+                            fireAndForget(() => termWrap.reflowHistoryToCurrentWidth("magnify-auto"));
+                        }
+                    }
+                }
+            }, delayMs)
+        );
+        return () => {
+            timeouts.forEach((timeout) => clearTimeout(timeout));
+        };
+    }, [isMagnified]);
 
     React.useEffect(() => {
         if (termModeRef.current == "vdom" && termMode == "term") {

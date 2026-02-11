@@ -2,13 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { createBlock, getApi, globalStore } from "@/app/store/global";
+import {
+    atoms,
+    createBlock,
+    getApi,
+    getFocusedBlockId,
+    globalStore,
+    WOS,
+} from "@/app/store/global";
 import { FavoritesModel } from "@/app/store/favorites-model";
 import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { getLayoutModelForStaticTab } from "@/layout/index";
+import { openCliLayoutInNewTab } from "@/util/clilayout";
 import { PLATFORM, PlatformWindows } from "@/util/platformutil";
-import { fireAndForget, isBlank } from "@/util/util";
+import { base64ToString, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import clsx from "clsx";
 import { useAtom, useAtomValue } from "jotai";
 import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -45,6 +54,48 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
 ];
+
+type CliLayoutPreset = {
+    key: string;
+    label: string;
+    rows: number;
+    cols: number;
+};
+
+type CliLayoutPresetState = {
+    rows: number;
+    cols: number;
+    paths: string[];
+    commands?: string[];
+    connection?: string;
+    updatedTs: number;
+};
+
+type CliLayoutConfigFile = {
+    version: number;
+    lastPresetKey?: string;
+    presets: Record<string, CliLayoutPresetState>;
+    savedLayouts?: Record<string, CliLayoutPresetState>;
+};
+
+const CLI_LAYOUT_PRESETS: CliLayoutPreset[] = [
+    { key: "2", label: "布局：2 窗口（左右）", rows: 1, cols: 2 },
+    { key: "3", label: "布局：3 窗口（左中右）", rows: 1, cols: 3 },
+    { key: "4", label: "布局：4 窗口（田字）", rows: 2, cols: 2 },
+    { key: "6", label: "布局：6 窗口（2×3）", rows: 2, cols: 3 },
+    { key: "6-2col", label: "布局：6 窗口（3×2）", rows: 3, cols: 2 },
+    { key: "8", label: "布局：8 窗口（2×4）", rows: 2, cols: 4 },
+    { key: "8-2col", label: "布局：8 窗口（4×2）", rows: 4, cols: 2 },
+    { key: "9", label: "布局：9 窗口（3×3）", rows: 3, cols: 3 },
+];
+
+const CLI_LAYOUT_SAVE_SLOTS: Array<{ key: string; label: string }> = [
+    { key: "layout1", label: "布局方案 1" },
+    { key: "layout2", label: "布局方案 2" },
+    { key: "layout3", label: "布局方案 3" },
+];
+
+const CLI_LAYOUT_APPLY_EVENT = "waveterm:apply-cli-layout-preset";
 
 function getLeafLabel(path: string): string {
     const trimmed = path.replace(/[\\/]+$/, "");
@@ -232,8 +283,12 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
     const [selectedPathIsDir, setSelectedPathIsDir] = useState<boolean | null>(null);
     const [addressMode, setAddressMode] = useState<"crumbs" | "edit">("crumbs");
     const [addressText, setAddressText] = useState("");
+    const layoutModel = useMemo(() => getLayoutModelForStaticTab(), []);
+    const focusedLayoutNode = useAtomValue(layoutModel.focusedNode);
     const addressInputRef = useRef<HTMLInputElement>(null);
     const [showCopiedToast, setShowCopiedToast] = useState(false);
+    const cliLayoutConfigPath = useMemo(() => `${getApi().getConfigDir()}/cli-layout-presets.json`, []);
+    const lastFocusedTermBlockIdRef = useRef<string>(null);
     const copiedToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
     const treeRequestSeqRef = useRef<Record<string, number>>({});
@@ -597,12 +652,109 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         [connection, favoritesModel]
     );
 
+    const getBlockById = useCallback((blockId: string): Block | null => {
+        if (isBlank(blockId)) {
+            return null;
+        }
+        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+        return globalStore.get(blockAtom);
+    }, []);
+
+    const findTargetTerminalBlockId = useCallback((): string => {
+
+        const focusedBlockId = getFocusedBlockId();
+        const focusedBlock = getBlockById(focusedBlockId);
+        if (focusedBlock?.meta?.view === "term") {
+            return focusedBlockId;
+        }
+
+        const lastFocusedTermBlockId = lastFocusedTermBlockIdRef.current;
+        const lastFocusedTermBlock = getBlockById(lastFocusedTermBlockId);
+        if (lastFocusedTermBlock?.meta?.view === "term") {
+            return lastFocusedTermBlockId;
+        }
+
+        const staticTabId = globalStore.get(atoms.staticTabId);
+        if (isBlank(staticTabId)) {
+            return null;
+        }
+        const tabAtom = WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", staticTabId));
+        const tabData = globalStore.get(tabAtom);
+        const blockIds = tabData?.blockids ?? [];
+
+        if (!isBlank(connection)) {
+            for (const blockId of blockIds) {
+                const blockData = getBlockById(blockId);
+                if (blockData?.meta?.view !== "term") {
+                    continue;
+                }
+                if (blockData?.meta?.connection === connection) {
+                    return blockId;
+                }
+            }
+        }
+
+        for (const blockId of blockIds) {
+            const blockData = getBlockById(blockId);
+            if (blockData?.meta?.view === "term") {
+                return blockId;
+            }
+        }
+        return null;
+    }, [connection, getBlockById]);
+
+    const applyPathToTerminalBlock = useCallback((blockId: string, path: string) => {
+        const normalizedPath = normalizeExplorerPath(path);
+        if (isBlank(blockId) || isBlank(normalizedPath)) {
+            return;
+        }
+        fireAndForget(async () => {
+            await RpcApi.SetMetaCommand(TabRpcClient, {
+                oref: WOS.makeORef("block", blockId),
+                meta: { "cmd:cwd": normalizedPath },
+            });
+            await RpcApi.ControllerInputCommand(TabRpcClient, {
+                blockid: blockId,
+                inputdata64: stringToBase64(`cd "${normalizedPath.replace(/"/g, '\\"')}"\n`),
+            });
+        });
+    }, []);
+
+    useEffect(() => {
+        const focusedBlockId = focusedLayoutNode?.data?.blockId;
+        if (isBlank(focusedBlockId)) {
+            return;
+        }
+        const focusedBlock = getBlockById(focusedBlockId);
+        if (focusedBlock?.meta?.view === "term") {
+            lastFocusedTermBlockIdRef.current = focusedBlockId;
+        }
+    }, [focusedLayoutNode, getBlockById]);
+
     const openTerminalAtPath = useCallback(
-        (path: string, cliCommand?: string) => {
+        (path: string, cliCommand?: string, preferExistingTerminal = false, allowCreateWhenNoTerminal = true) => {
             const normalized = normalizeExplorerPath(path);
             if (isBlank(normalized)) {
                 return;
             }
+
+            if (preferExistingTerminal && !isBlank(cliCommand)) {
+                const targetTermBlockId = findTargetTerminalBlockId();
+                if (!isBlank(targetTermBlockId)) {
+                    const commandText = `${cliCommand}\n`;
+                    fireAndForget(() =>
+                        RpcApi.ControllerInputCommand(TabRpcClient, {
+                            blockid: targetTermBlockId,
+                            inputdata64: stringToBase64(commandText),
+                        })
+                    );
+                    return;
+                }
+                if (!allowCreateWhenNoTerminal) {
+                    return;
+                }
+            }
+
             const meta: Record<string, any> = {
                 controller: "shell",
                 view: "term",
@@ -616,8 +768,305 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             }
             fireAndForget(() => createBlock({ meta }));
         },
-        [connection]
+        [connection, findTargetTerminalBlockId]
     );
+
+    const readCliLayoutConfig = useCallback(async (): Promise<CliLayoutConfigFile> => {
+        const defaultConfig: CliLayoutConfigFile = {
+            version: 1,
+            presets: {},
+            savedLayouts: {},
+        };
+        try {
+            const fileData = await RpcApi.FileReadCommand(TabRpcClient, {
+                info: { path: cliLayoutConfigPath },
+            });
+            const data64 = fileData?.data64 ?? "";
+            if (isBlank(data64)) {
+                return defaultConfig;
+            }
+            const rawText = base64ToString(data64);
+            if (isBlank(rawText)) {
+                return defaultConfig;
+            }
+            const parsed = JSON.parse(rawText);
+            if (parsed == null || typeof parsed !== "object") {
+                return defaultConfig;
+            }
+
+            const parsedPresets = (parsed as CliLayoutConfigFile).presets;
+
+            const normalizedPresets: Record<string, CliLayoutPresetState> = {};
+            for (const [key, value] of Object.entries(parsedPresets ?? {})) {
+                if (value == null || typeof value !== "object") {
+                    continue;
+                }
+                const rows = Number((value as CliLayoutPresetState).rows);
+                const cols = Number((value as CliLayoutPresetState).cols);
+                const paths = Array.isArray((value as CliLayoutPresetState).paths)
+                    ? (value as CliLayoutPresetState).paths.map((path) => normalizeExplorerPath(path ?? "")).filter(Boolean)
+                    : [];
+                const commands = Array.isArray((value as CliLayoutPresetState).commands)
+                    ? (value as CliLayoutPresetState).commands
+                          .map((cmd) => (typeof cmd === "string" ? cmd.trim() : ""))
+                          .filter((cmd) => !isBlank(cmd))
+                    : [];
+                if (!Number.isFinite(rows) || !Number.isFinite(cols) || rows <= 0 || cols <= 0) {
+                    continue;
+                }
+                normalizedPresets[key] = {
+                    rows,
+                    cols,
+                    paths,
+                    commands,
+                    connection: (value as CliLayoutPresetState).connection,
+                    updatedTs: Number((value as CliLayoutPresetState).updatedTs) || Date.now(),
+                };
+            }
+
+            const normalizedSavedLayouts: Record<string, CliLayoutPresetState> = {};
+            const parsedSavedLayouts = (parsed as CliLayoutConfigFile).savedLayouts;
+            for (const [key, value] of Object.entries(parsedSavedLayouts ?? {})) {
+                if (value == null || typeof value !== "object") {
+                    continue;
+                }
+                const rows = Number((value as CliLayoutPresetState).rows);
+                const cols = Number((value as CliLayoutPresetState).cols);
+                const paths = Array.isArray((value as CliLayoutPresetState).paths)
+                    ? (value as CliLayoutPresetState).paths.map((path) => normalizeExplorerPath(path ?? "")).filter(Boolean)
+                    : [];
+                const commands = Array.isArray((value as CliLayoutPresetState).commands)
+                    ? (value as CliLayoutPresetState).commands
+                          .map((cmd) => (typeof cmd === "string" ? cmd.trim() : ""))
+                          .filter((cmd) => !isBlank(cmd))
+                    : [];
+                if (!Number.isFinite(rows) || !Number.isFinite(cols) || rows <= 0 || cols <= 0) {
+                    continue;
+                }
+                normalizedSavedLayouts[key] = {
+                    rows,
+                    cols,
+                    paths,
+                    commands,
+                    connection: (value as CliLayoutPresetState).connection,
+                    updatedTs: Number((value as CliLayoutPresetState).updatedTs) || Date.now(),
+                };
+            }
+
+            return {
+                version: 1,
+                lastPresetKey:
+                    typeof (parsed as CliLayoutConfigFile).lastPresetKey === "string"
+                        ? (parsed as CliLayoutConfigFile).lastPresetKey
+                        : undefined,
+                presets: normalizedPresets,
+                savedLayouts: normalizedSavedLayouts,
+            };
+        } catch {
+            return defaultConfig;
+        }
+    }, [cliLayoutConfigPath]);
+
+    const writeCliLayoutConfig = useCallback(
+        async (config: CliLayoutConfigFile) => {
+            try {
+                await RpcApi.FileWriteCommand(TabRpcClient, {
+                    info: { path: cliLayoutConfigPath },
+                    data64: stringToBase64(JSON.stringify(config, null, 2)),
+                });
+            } catch (e) {
+                console.error("Failed to write CLI layout config:", e);
+            }
+        },
+        [cliLayoutConfigPath]
+    );
+
+    const captureCurrentLayoutState = useCallback((): CliLayoutPresetState => {
+        const leafOrder = globalStore.get(layoutModel.leafOrder) ?? [];
+        const blockIds = leafOrder.map((leaf) => leaf.blockid).filter(Boolean);
+
+        const paths: string[] = [];
+        const commands: string[] = [];
+        const uniqueRows = new Set<number>();
+        const uniqueCols = new Set<number>();
+
+        for (const blockId of blockIds) {
+            const blockData = getBlockById(blockId);
+            const cmdCwd = normalizeExplorerPath((blockData?.meta?.["cmd:cwd"] as string) ?? "");
+            paths.push(cmdCwd || currentPath || "");
+            const autoCmd = typeof blockData?.meta?.["term:autoCmd"] === "string" ? blockData.meta["term:autoCmd"] : "";
+            commands.push(autoCmd.trim());
+
+            const layoutNode = layoutModel.getNodeByBlockId(blockId);
+            const addl = layoutNode ? layoutModel.getNodeAdditionalProperties(layoutNode) : null;
+            if (addl?.treeKey) {
+                const parts = String(addl.treeKey).split(".").map((segment) => Number(segment));
+                if (parts.length >= 2) {
+                    const row = parts[0];
+                    const col = parts[1];
+                    if (Number.isFinite(row)) {
+                        uniqueRows.add(row);
+                    }
+                    if (Number.isFinite(col)) {
+                        uniqueCols.add(col);
+                    }
+                }
+            }
+        }
+
+        const inferredRows = uniqueRows.size > 0 ? uniqueRows.size : Math.max(1, Math.round(Math.sqrt(blockIds.length || 1)));
+        const inferredCols = uniqueCols.size > 0 ? uniqueCols.size : Math.max(1, Math.ceil((blockIds.length || 1) / inferredRows));
+
+        return {
+            rows: inferredRows,
+            cols: inferredCols,
+            paths,
+            commands,
+            connection: connection ?? undefined,
+            updatedTs: Date.now(),
+        };
+    }, [connection, currentPath, getBlockById, layoutModel]);
+
+    const saveCurrentLayoutToSlot = useCallback(
+        (slotKey: string) => {
+            fireAndForget(async () => {
+                const config = await readCliLayoutConfig();
+                const currentLayoutState = captureCurrentLayoutState();
+                config.savedLayouts = config.savedLayouts ?? {};
+                config.savedLayouts[slotKey] = currentLayoutState;
+                await writeCliLayoutConfig(config);
+            });
+        },
+        [captureCurrentLayoutState, readCliLayoutConfig, writeCliLayoutConfig]
+    );
+
+    const applySavedLayoutSlot = useCallback(
+        (slotKey: string, fallbackPath: string) => {
+            fireAndForget(async () => {
+                const config = await readCliLayoutConfig();
+                const savedLayouts = config.savedLayouts ?? {};
+                const saved = savedLayouts[slotKey];
+                if (saved == null || saved.rows <= 0 || saved.cols <= 0) {
+                    return;
+                }
+
+                const matchingPreset = CLI_LAYOUT_PRESETS.find((preset) => preset.rows === saved.rows && preset.cols === saved.cols);
+                if (!matchingPreset) {
+                    return;
+                }
+
+                const normalizedPath = normalizeExplorerPath(fallbackPath);
+                const totalSlots = matchingPreset.rows * matchingPreset.cols;
+                const savedPaths = saved.paths ?? [];
+                const savedCommands = saved.commands ?? [];
+                const resolvedPaths = Array.from({ length: totalSlots }, (_, index) => {
+                    const path = normalizeExplorerPath(savedPaths[index] ?? "");
+                    return path || normalizedPath;
+                });
+                const resolvedCommands = Array.from({ length: totalSlots }, (_, index) => {
+                    const cmd = savedCommands[index];
+                    return typeof cmd === "string" ? cmd.trim() : "";
+                });
+
+                config.presets[matchingPreset.key] = {
+                    rows: matchingPreset.rows,
+                    cols: matchingPreset.cols,
+                    paths: resolvedPaths,
+                    commands: resolvedCommands,
+                    connection: saved.connection,
+                    updatedTs: Date.now(),
+                };
+                await writeCliLayoutConfig(config);
+                applyCliLayoutPreset(matchingPreset, normalizedPath);
+            });
+        },
+        [applyCliLayoutPreset, readCliLayoutConfig, writeCliLayoutConfig]
+    );
+
+    const applyCliLayoutPreset = useCallback(
+        (preset: CliLayoutPreset, path: string) => {
+            const normalizedPath = normalizeExplorerPath(path);
+            if (isBlank(normalizedPath)) {
+                return;
+            }
+
+            fireAndForget(async () => {
+                const presetLabelKey = `clilayout.presets.${preset.key}`;
+                const translatedPresetLabel = t(presetLabelKey);
+                const tabName = translatedPresetLabel === presetLabelKey ? preset.label : translatedPresetLabel;
+                const totalSlots = preset.rows * preset.cols;
+                const config = await readCliLayoutConfig();
+                const savedPreset = config.presets[preset.key];
+
+                const restoredPaths =
+                    savedPreset != null && savedPreset.rows === preset.rows && savedPreset.cols === preset.cols
+                        ? savedPreset.paths
+                        : [];
+                const restoredCommands =
+                    savedPreset != null && savedPreset.rows === preset.rows && savedPreset.cols === preset.cols
+                        ? savedPreset.commands ?? []
+                        : [];
+                const resolvedPaths = Array.from({ length: totalSlots }, (_, index) => {
+                    const restoredPath = normalizeExplorerPath(restoredPaths[index] ?? "");
+                    return isBlank(restoredPath) ? normalizedPath : restoredPath;
+                });
+                const resolvedCommands = Array.from({ length: totalSlots }, (_, index) => {
+                    const command = restoredCommands[index];
+                    return typeof command === "string" ? command.trim() : "";
+                });
+
+                config.lastPresetKey = preset.key;
+                config.presets[preset.key] = {
+                    rows: preset.rows,
+                    cols: preset.cols,
+                    paths: resolvedPaths,
+                    commands: resolvedCommands,
+                    connection: connection ?? undefined,
+                    updatedTs: Date.now(),
+                };
+                await writeCliLayoutConfig(config);
+
+                await openCliLayoutInNewTab(
+                    {
+                        rows: preset.rows,
+                        cols: preset.cols,
+                        paths: resolvedPaths,
+                        commands: resolvedCommands,
+                        connection: isBlank(connection) ? undefined : connection,
+                        updatedTs: Date.now(),
+                    },
+                    tabName,
+                    preset.key
+                );
+            });
+        },
+        [connection, readCliLayoutConfig, t, writeCliLayoutConfig]
+    );
+
+    useEffect(() => {
+        const onApplyLayoutFromWidgets = (event: Event) => {
+            const customEvent = event as CustomEvent<{ presetKey?: string; targetBlockId?: string }>;
+            const presetKey = customEvent.detail?.presetKey;
+            const targetBlockId = customEvent.detail?.targetBlockId;
+            if (!isBlank(targetBlockId) && targetBlockId !== model.blockId) {
+                return;
+            }
+            const preset = CLI_LAYOUT_PRESETS.find((item) => item.key === presetKey);
+            if (!preset) {
+                return;
+            }
+            const targetPath = normalizeExplorerPath(selectedPath || currentPath);
+            if (isBlank(targetPath)) {
+                return;
+            }
+            applyCliLayoutPreset(preset, targetPath);
+        };
+
+        window.addEventListener(CLI_LAYOUT_APPLY_EVENT, onApplyLayoutFromWidgets as EventListener);
+        return () => {
+            window.removeEventListener(CLI_LAYOUT_APPLY_EVENT, onApplyLayoutFromWidgets as EventListener);
+        };
+    }, [applyCliLayoutPreset, currentPath, model.blockId, selectedPath]);
 
     const formatPathForClipboard = useCallback(
         (path: string) => {
@@ -651,12 +1100,86 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             if (isBlank(normalized)) {
                 return [];
             }
-            return AI_LAUNCH_COMMANDS.map((item) => ({
+            const commandItems: ContextMenuItem[] = AI_LAUNCH_COMMANDS.map((item) => ({
                 label: t("preview.openAiHere", { ai: item.label }),
-                click: () => openTerminalAtPath(normalized, item.command),
+                click: () => openTerminalAtPath(normalized, item.command, true, false),
+            }));
+
+            const layoutItems: ContextMenuItem[] = CLI_LAYOUT_PRESETS.map((preset) => {
+                const labelKey = `clilayout.presets.${preset.key}`;
+                const translated = t(labelKey);
+                const label = translated === labelKey ? preset.label : translated;
+                return {
+                    label,
+                    click: () => applyCliLayoutPreset(preset, normalized),
+                };
+            });
+
+            return [...commandItems, { type: "separator" }, ...layoutItems];
+        },
+        [applyCliLayoutPreset, openTerminalAtPath, t]
+    );
+
+    const buildAutoCommandMenuItems = useCallback(
+        (path: string): ContextMenuItem[] => {
+            const normalized = normalizeExplorerPath(path);
+            if (isBlank(normalized)) {
+                return [];
+            }
+            return AI_LAUNCH_COMMANDS.map((item) => ({
+                label: `${item.label}`,
+                click: () => openTerminalAtPath(normalized, item.command, true, false),
             }));
         },
-        [openTerminalAtPath, t]
+        [openTerminalAtPath]
+    );
+
+    const buildLayoutMenuItems = useCallback(
+        (path: string): ContextMenuItem[] => {
+            const normalized = normalizeExplorerPath(path);
+            if (isBlank(normalized)) {
+                return [];
+            }
+
+            const presetItems: ContextMenuItem[] = CLI_LAYOUT_PRESETS.map((preset) => {
+                const labelKey = `clilayout.presets.${preset.key}`;
+                const translated = t(labelKey);
+                const label = translated === labelKey ? preset.label : translated;
+                return {
+                    label,
+                    click: () => applyCliLayoutPreset(preset, normalized),
+                };
+            });
+
+            const saveItems: ContextMenuItem[] = CLI_LAYOUT_SAVE_SLOTS.map((slot) => {
+                const slotKey = `clilayout.slots.${slot.key}`;
+                const translatedSlot = t(slotKey);
+                const slotLabel = translatedSlot === slotKey ? slot.label : translatedSlot;
+                return {
+                    label: t("clilayout.saveToSlot", { slot: slotLabel }),
+                    click: () => saveCurrentLayoutToSlot(slot.key),
+                };
+            });
+
+            const loadItems: ContextMenuItem[] = CLI_LAYOUT_SAVE_SLOTS.map((slot) => {
+                const slotKey = `clilayout.slots.${slot.key}`;
+                const translatedSlot = t(slotKey);
+                const slotLabel = translatedSlot === slotKey ? slot.label : translatedSlot;
+                return {
+                    label: t("clilayout.loadSlot", { slot: slotLabel }),
+                    click: () => applySavedLayoutSlot(slot.key, normalized),
+                };
+            });
+
+            return [
+                ...presetItems,
+                { type: "separator" },
+                ...saveItems,
+                { type: "separator" },
+                ...loadItems,
+            ];
+        },
+        [applyCliLayoutPreset, applySavedLayoutSlot, saveCurrentLayoutToSlot]
     );
 
     const showAiLaunchMenu = useCallback(
@@ -710,13 +1233,31 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                     type: "separator",
                 },
                 {
+                    label: t("favorites.autoCommand"),
+                    submenu: buildAutoCommandMenuItems(currentPath),
+                },
+                {
                     label: t("preview.openWithAi"),
                     submenu: buildAiLaunchMenuItems(currentPath),
+                },
+                {
+                    label: t("clilayout.menu"),
+                    submenu: buildLayoutMenuItems(currentPath),
                 },
             ];
             ContextMenuModel.showContextMenu(menu, e);
         },
-        [addToFavorites, buildAiLaunchMenuItems, copyToClipboard, currentPath, formatPathForClipboard, openTerminalAtPath, t]
+        [
+            addToFavorites,
+            buildAiLaunchMenuItems,
+            buildAutoCommandMenuItems,
+            buildLayoutMenuItems,
+            copyToClipboard,
+            currentPath,
+            formatPathForClipboard,
+            openTerminalAtPath,
+            t,
+        ]
     );
 
     const showBlockMenu = useCallback(
@@ -1032,11 +1573,29 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                     click: () => openTerminalAtPath(normalized),
                 },
                 {
+                    label: t("favorites.applyToCurrentTerminal"),
+                    click: () => {
+                        const targetTermBlockId = findTargetTerminalBlockId();
+                        if (isBlank(targetTermBlockId)) {
+                            return;
+                        }
+                        applyPathToTerminalBlock(targetTermBlockId, normalized);
+                    },
+                },
+                {
                     type: "separator",
+                },
+                {
+                    label: t("favorites.autoCommand"),
+                    submenu: buildAutoCommandMenuItems(normalized),
                 },
                 {
                     label: t("preview.openWithAi"),
                     submenu: buildAiLaunchMenuItems(normalized),
+                },
+                {
+                    label: t("clilayout.menu"),
+                    submenu: buildLayoutMenuItems(normalized),
                 },
             ];
             if (favoriteId) {
@@ -1056,9 +1615,13 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         [
             addToFavorites,
             buildAiLaunchMenuItems,
+            buildAutoCommandMenuItems,
+            buildLayoutMenuItems,
             copyToClipboard,
             favoritesModel,
             formatPathForClipboard,
+            findTargetTerminalBlockId,
+            applyPathToTerminalBlock,
             openTerminalAtPath,
             t,
         ]
@@ -1286,6 +1849,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                                 <i className="fas fa-robot text-blue-300 w-4 text-center" />
                                 <span className="truncate">{t("preview.openWithAi")}</span>
                             </button>
+
                         </div>
                         <button
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-secondary uppercase tracking-wider hover:bg-hoverbg"
@@ -1659,4 +2223,3 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
 ExplorerDirectoryPreview.displayName = "ExplorerDirectoryPreview";
 
 export { ExplorerDirectoryPreview };
-

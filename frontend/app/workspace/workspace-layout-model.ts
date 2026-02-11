@@ -17,13 +17,13 @@ const dlog = debug("wave:workspace");
 
 const AIPANEL_DEFAULTWIDTH = 300;
 const AIPANEL_DEFAULTWIDTHRATIO = 0.33;
-const AIPANEL_MINWIDTH = 300;
-const AIPANEL_MAXWIDTHRATIO = 0.66;
+const AIPANEL_MINWIDTH = 180;
+const AIPANEL_MAXWIDTHRATIO = 0.95;
 
-export type SidePanelView = "ai" | "favorites" | "servers" | "git";
+export type SidePanelView = "ai" | "favorites" | "servers" | "layouts" | "git";
 
 function isSidePanelView(value: string): value is SidePanelView {
-    return value === "ai" || value === "favorites" || value === "servers" || value === "git";
+    return value === "ai" || value === "favorites" || value === "servers" || value === "layouts" || value === "git";
 }
 
 class WorkspaceLayoutModel {

@@ -22,7 +22,8 @@ import {
 } from "@/app/store/global";
 import { getActiveTabModel } from "@/app/store/tab-model";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
-import { deleteLayoutModelForTab, getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
+import { deleteLayoutModelForTab, getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection } from "@/layout/index";
+import type { LayoutModel, LayoutTreeSwapNodeAction } from "@/layout/index";
 import * as keyutil from "@/util/keyutil";
 import { isWindows } from "@/util/platformutil";
 import { CHORD_TIMEOUT } from "@/util/sharedconst";
@@ -212,6 +213,31 @@ function switchBlockByBlockNum(index: number) {
     }, 10);
 }
 
+function switchBlockByCycle(offset: number) {
+    const layoutModel = getLayoutModelForStaticTab();
+    if (!layoutModel) {
+        return;
+    }
+    const leafOrder = globalStore.get(layoutModel.leafOrder);
+    if (!leafOrder || leafOrder.length === 0) {
+        return;
+    }
+    if (FocusManager.getInstance().getFocusType() === "waveai") {
+        FocusManager.getInstance().requestNodeFocus();
+    }
+    const focusedNode = globalStore.get(layoutModel.focusedNode);
+    const focusedNodeId = focusedNode?.id;
+    let curIdx = focusedNodeId ? leafOrder.findIndex((leaf) => leaf.nodeid === focusedNodeId) : -1;
+    if (curIdx < 0) {
+        curIdx = 0;
+    }
+    const newIdx = (curIdx + offset + leafOrder.length) % leafOrder.length;
+    layoutModel.focusNode(leafOrder[newIdx].nodeid);
+    setTimeout(() => {
+        globalRefocus();
+    }, 10);
+}
+
 function switchBlockInDirection(direction: NavigateDirection) {
     const layoutModel = getLayoutModelForStaticTab();
     const focusType = FocusManager.getInstance().getFocusType();
@@ -244,6 +270,105 @@ function switchBlockInDirection(direction: NavigateDirection) {
         }, 10);
         return;
     }
+    setTimeout(() => {
+        globalRefocus();
+    }, 10);
+}
+
+type LayoutNavPoint = { x: number; y: number };
+
+function navigateDirectionToOffset(direction: NavigateDirection): LayoutNavPoint {
+    switch (direction) {
+        case NavigateDirection.Up:
+            return { x: 0, y: -1 };
+        case NavigateDirection.Down:
+            return { x: 0, y: 1 };
+        case NavigateDirection.Left:
+            return { x: -1, y: 0 };
+        case NavigateDirection.Right:
+            return { x: 1, y: 0 };
+    }
+}
+
+function getRectCenter(rect: Dimensions): LayoutNavPoint {
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function findNodeIdAtPoint(nodePositions: Map<string, Dimensions>, p: LayoutNavPoint): string | null {
+    for (const [nodeId, rect] of nodePositions.entries()) {
+        if (p.x >= rect.left && p.x <= rect.left + rect.width && p.y >= rect.top && p.y <= rect.top + rect.height) {
+            return nodeId;
+        }
+    }
+    return null;
+}
+
+function findNeighborNodeIdInDirection(
+    layoutModel: LayoutModel,
+    curNodeId: string,
+    direction: NavigateDirection
+): string | null {
+    const leafs = globalStore.get(layoutModel.leafs) ?? [];
+    const addlProps = globalStore.get(layoutModel.additionalProps) ?? {};
+
+    const nodePositions: Map<string, Dimensions> = new Map();
+    for (const leaf of leafs) {
+        const pos = addlProps[leaf.id]?.rect;
+        if (pos) {
+            nodePositions.set(leaf.id, pos);
+        }
+    }
+
+    const curNodePos = nodePositions.get(curNodeId);
+    if (!curNodePos) {
+        return null;
+    }
+    nodePositions.delete(curNodeId);
+
+    const container = layoutModel.displayContainerRef?.current;
+    if (!container) {
+        return null;
+    }
+    const containerRect = container.getBoundingClientRect();
+    if (!Number.isFinite(containerRect.width) || !Number.isFinite(containerRect.height)) {
+        return null;
+    }
+
+    const maxX = containerRect.width;
+    const maxY = containerRect.height;
+    const moveAmount = 10;
+    const offset = navigateDirectionToOffset(direction);
+    const curPoint = getRectCenter(curNodePos);
+
+    while (true) {
+        curPoint.x += offset.x * moveAmount;
+        curPoint.y += offset.y * moveAmount;
+        if (curPoint.x < 0 || curPoint.x > maxX || curPoint.y < 0 || curPoint.y > maxY) {
+            return null;
+        }
+        const nodeId = findNodeIdAtPoint(nodePositions, curPoint);
+        if (nodeId) {
+            return nodeId;
+        }
+    }
+}
+
+function swapBlockInDirection(direction: NavigateDirection) {
+    const layoutModel = getLayoutModelForStaticTab();
+    const focusType = FocusManager.getInstance().getFocusType();
+    if (focusType === "waveai") {
+        return;
+    }
+    const focusedNode = globalStore.get(layoutModel.focusedNode);
+    if (!focusedNode) {
+        return;
+    }
+    const neighborNodeId = findNeighborNodeIdInDirection(layoutModel, focusedNode.id, direction);
+    if (!neighborNodeId) {
+        return;
+    }
+    const action: LayoutTreeSwapNodeAction = { type: LayoutTreeActionType.Swap, node1Id: focusedNode.id, node2Id: neighborNodeId };
+    layoutModel.treeReducer(action);
     setTimeout(() => {
         globalRefocus();
     }, 10);
@@ -519,12 +644,24 @@ function registerGlobalKeys() {
         simpleCloseStaticTab();
         return true;
     });
-    globalKeyMap.set("Cmd:m", () => {
+    const toggleMagnifyFocusedNode = () => {
         const layoutModel = getLayoutModelForStaticTab();
         const focusedNode = globalStore.get(layoutModel.focusedNode);
         if (focusedNode != null) {
             layoutModel.magnifyNodeToggle(focusedNode.id);
         }
+        return true;
+    };
+    globalKeyMap.set("Cmd:m", toggleMagnifyFocusedNode);
+    if (isWindows()) {
+        globalKeyMap.set("Ctrl:q", toggleMagnifyFocusedNode);
+    }
+    globalKeyMap.set("Ctrl:Tab", () => {
+        switchBlockByCycle(1);
+        return true;
+    });
+    globalKeyMap.set("Ctrl:Shift:Tab", () => {
+        switchBlockByCycle(-1);
         return true;
     });
     globalKeyMap.set("Ctrl:Shift:ArrowUp", () => {
@@ -543,6 +680,24 @@ function registerGlobalKeys() {
         switchBlockInDirection(NavigateDirection.Right);
         return true;
     });
+    if (isWindows()) {
+        globalKeyMap.set("Ctrl:Alt:Shift:ArrowUp", () => {
+            swapBlockInDirection(NavigateDirection.Up);
+            return true;
+        });
+        globalKeyMap.set("Ctrl:Alt:Shift:ArrowDown", () => {
+            swapBlockInDirection(NavigateDirection.Down);
+            return true;
+        });
+        globalKeyMap.set("Ctrl:Alt:Shift:ArrowLeft", () => {
+            swapBlockInDirection(NavigateDirection.Left);
+            return true;
+        });
+        globalKeyMap.set("Ctrl:Alt:Shift:ArrowRight", () => {
+            swapBlockInDirection(NavigateDirection.Right);
+            return true;
+        });
+    }
     globalKeyMap.set("Ctrl:Shift:k", () => {
         const blockId = getFocusedBlockId();
         if (blockId == null) {
@@ -582,6 +737,16 @@ function registerGlobalKeys() {
     });
     for (let idx = 1; idx <= 9; idx++) {
         globalKeyMap.set(`Cmd:${idx}`, () => {
+            switchTabAbs(idx);
+            return true;
+        });
+        // On some keyboard layouts / IME states, number shortcuts may not arrive as `event.key === "1".."9"`.
+        // Add code-based bindings so Cmd/Alt+1 always works (Digit row + Numpad).
+        globalKeyMap.set(`Cmd:c{Digit${idx}}`, () => {
+            switchTabAbs(idx);
+            return true;
+        });
+        globalKeyMap.set(`Cmd:c{Numpad${idx}}`, () => {
             switchTabAbs(idx);
             return true;
         });

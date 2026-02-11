@@ -242,7 +242,7 @@ const Tab = memo(
                         {indicator && (
                             <div
                                 className="tab-indicator pointer-events-none"
-                                style={{ color: indicator.color || "#fbbf24" }}
+                                style={{ color: indicator.color || "var(--warning-color)" }}
                                 title={t("tab.activityNotification")}
                             >
                                 <i className={makeIconClass(indicator.icon, true, { defaultIcon: "bell" })} />

@@ -216,6 +216,7 @@ export class LayoutModel {
      */
     lastEphemeralNodeId: string;
     magnifiedNodeSizeAtom: Atom<number>;
+    magnifiedNodeSizeOverrideAtom: PrimitiveAtom<number | null>;
 
     /**
      * The size of the resize handles, in CSS pixels.
@@ -325,6 +326,7 @@ export class LayoutModel {
 
         this.ephemeralNode = atom();
         this.magnifiedNodeSizeAtom = getSettingsKeyAtom("window:magnifiedblocksize");
+        this.magnifiedNodeSizeOverrideAtom = atom<number | null>(null);
 
         this.magnifiedNodeIdAtom = atom((get) => {
             const treeState = get(this.localTreeStateAtom);
@@ -734,7 +736,10 @@ export class LayoutModel {
 
             const boundingRect = this.getBoundingRect();
 
-            const magnifiedNodeSize = this.getter(this.magnifiedNodeSizeAtom);
+            const magnifiedNodeSizeSetting = this.getter(this.magnifiedNodeSizeAtom);
+            const magnifiedNodeSizeOverride = this.getter(this.magnifiedNodeSizeOverrideAtom);
+            const magnifiedNodeSize =
+                boundNumber(magnifiedNodeSizeOverride ?? magnifiedNodeSizeSetting, 0.35, 1) ?? 0.65;
 
             const callback = (node: LayoutNode) =>
                 this.updateTreeHelper(

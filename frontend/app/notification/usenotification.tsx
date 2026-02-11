@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { atoms, getApi } from "@/store/global";
+import { RpcApi } from "@/app/store/wshclientapi";
+import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { base64ToString, isBlank } from "@/util/util";
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useState } from "react";
 
@@ -65,12 +68,38 @@ export function useNotification() {
     const handleActionClick = useCallback(
         (e: React.MouseEvent, action: NotificationActionType, id: string) => {
             e.stopPropagation();
-            const actionFn = notificationActions[action.actionKey];
+            const actionKey = action.actionKey ?? "";
+
+            if (actionKey.startsWith("focus:")) {
+                const payload64 = actionKey.slice("focus:".length);
+                try {
+                    const payloadText = base64ToString(payload64);
+                    const payload = JSON.parse(payloadText) as { tabId?: string; blockId?: string };
+                    const tabId = typeof payload?.tabId === "string" ? payload.tabId.trim() : "";
+                    const blockId = typeof payload?.blockId === "string" ? payload.blockId.trim() : "";
+                    if (!isBlank(tabId)) {
+                        getApi().setActiveTab(tabId);
+                    }
+                    if (!isBlank(blockId) && !isBlank(tabId)) {
+                        setTimeout(() => {
+                            void RpcApi.SetBlockFocusCommand(TabRpcClient, blockId, { route: `tab:${tabId}`, timeout: 2000 }).catch(
+                                () => {}
+                            );
+                        }, 120);
+                    }
+                } catch (err) {
+                    console.warn("Failed to handle focus notification action", err);
+                }
+                removeNotification(id);
+                return;
+            }
+
+            const actionFn = notificationActions[actionKey];
             if (actionFn) {
                 actionFn();
                 removeNotification(id);
             } else {
-                console.warn(`No action found for key: ${action.actionKey}`);
+                console.warn(`No action found for key: ${actionKey}`);
             }
         },
         [removeNotification]

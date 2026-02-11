@@ -69,17 +69,26 @@ export class FitAddon implements ITerminalAddon, IFitApi {
         }
 
         // UPDATED CODE (removed reliance on FALLBACK_SCROLL_BAR_WIDTH in viewport)
-        const measuredScrollBarWidth =
-            core.viewport._viewportElement.offsetWidth - core.viewport._scrollArea.offsetWidth;
+        const viewportEl: HTMLElement | null = core.viewport?._viewportElement ?? null;
+        // Prefer measuring the scrollbar directly from the viewport element, since the scrollArea width can differ
+        // from the viewport width (e.g. during/after container resizes), which would incorrectly inflate the
+        // "scrollbar width" and prevent the terminal from fitting to the available width.
+        const measuredScrollBarWidth = viewportEl
+            ? Math.max(0, viewportEl.offsetWidth - viewportEl.clientWidth)
+            : 0;
         let scrollbarWidth = this._terminal.options.scrollback === 0 ? 0 : measuredScrollBarWidth;
         if (this.noScrollbar) {
             scrollbarWidth = 0;
         }
         // END UPDATED CODE
 
-        const parentElementStyle = window.getComputedStyle(this._terminal.element.parentElement);
-        const parentElementHeight = parseInt(parentElementStyle.getPropertyValue("height"));
-        const parentElementWidth = Math.max(0, parseInt(parentElementStyle.getPropertyValue("width")));
+        const parentElement = this._terminal.element.parentElement;
+        const parentRect = parentElement.getBoundingClientRect();
+        if (!Number.isFinite(parentRect.width) || !Number.isFinite(parentRect.height)) {
+            return undefined;
+        }
+        const parentElementHeight = Math.max(0, parentRect.height);
+        const parentElementWidth = Math.max(0, parentRect.width);
         const elementStyle = window.getComputedStyle(this._terminal.element);
         const elementPadding = {
             top: parseInt(elementStyle.getPropertyValue("padding-top")),

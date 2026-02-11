@@ -41,9 +41,11 @@
 
     .resize-handle {
         z-index: var(--zindex-layout-resize-handle);
+        touch-action: none;
 
         .line {
-            visibility: hidden;
+            visibility: visible;
+            opacity: 0.15;
         }
         &.flex-row {
             cursor: ew-resize;
@@ -61,10 +63,10 @@
             }
         }
         &:hover .line {
-            visibility: visible;
+            opacity: 1;
 
             // Ignore the prefers-reduced-motion override, since we are not applying a true animation here, just a delay.
-            transition-property: visibility !important;
+            transition-property: opacity !important;
             transition-delay: var(--animation-time-s) !important;
         }
     }
@@ -145,5 +147,34 @@
         background-color: var(--accent-color);
         opacity: 0.5;
         border-radius: calc(var(--block-border-radius) + 2px);
+    }
+
+    .magnified-size-handle {
+        position: absolute;
+        top: 0;
+        right: 0;
+        height: 100%;
+        width: 10px;
+        cursor: ew-resize;
+        touch-action: none;
+        z-index: 1;
+
+        .line {
+            height: 100%;
+            width: 2px;
+            margin-left: auto;
+            margin-right: 3px;
+            background: var(--accent-color);
+            opacity: 0.15;
+            border-radius: 1px;
+        }
+
+        &:hover .line {
+            opacity: 1;
+
+            // Ignore the prefers-reduced-motion override, since we are not applying a true animation here, just a delay.
+            transition-property: opacity !important;
+            transition-delay: var(--animation-time-s) !important;
+        }
     }
 }

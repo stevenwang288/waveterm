@@ -81,7 +81,7 @@ const SidePanelToggleButton = memo(
 SidePanelToggleButton.displayName = "SidePanelToggleButton";
 
 const WaveAIButton = memo(() => {
-    return <SidePanelToggleButton view="ai" iconClass="fa fa-sparkles" label="AI" labelClassName="font-mono" />;
+    return <SidePanelToggleButton view="ai" iconClass="fa fa-sparkles" label="AI" labelClassName="font-mono" showLabel={false} />;
 });
 WaveAIButton.displayName = "WaveAIButton";
 
@@ -93,13 +93,21 @@ FavoritesQuickButton.displayName = "FavoritesQuickButton";
 
 const ServersQuickButton = memo(() => {
     const { t } = useTranslation();
-    return <SidePanelToggleButton view="servers" iconClass="fa fa-laptop" label={t("workspace.servers")} />;
+    return (
+        <SidePanelToggleButton view="servers" iconClass="fa fa-laptop" label={t("workspace.servers")} showLabel={false} />
+    );
 });
 ServersQuickButton.displayName = "ServersQuickButton";
 
+const LayoutQuickButton = memo(() => {
+    const { t } = useTranslation();
+    return <SidePanelToggleButton view="layouts" iconClass="fa fa-table-cells" label={t("clilayout.menu")} showLabel={false} />;
+});
+LayoutQuickButton.displayName = "LayoutQuickButton";
+
 const GitQuickButton = memo(() => {
     const { t } = useTranslation();
-    return <SidePanelToggleButton view="git" iconClass="fa fa-code-branch" label={t("workspace.git")} />;
+    return <SidePanelToggleButton view="git" iconClass="fa fa-code-branch" label={t("workspace.git")} showLabel={false} />;
 });
 GitQuickButton.displayName = "GitQuickButton";
 
@@ -235,6 +243,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const aiButtonRef = useRef<HTMLDivElement>(null);
     const favoritesButtonRef = useRef<HTMLDivElement>(null);
     const serversButtonRef = useRef<HTMLDivElement>(null);
+    const layoutButtonRef = useRef<HTMLDivElement>(null);
     const gitButtonRef = useRef<HTMLDivElement>(null);
     const prevAllLoadedRef = useRef<boolean>(false);
     const activeTabId = useAtomValue(atoms.staticTabId);
@@ -294,6 +303,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         const aiButtonWidth = aiButtonRef.current?.getBoundingClientRect().width ?? 0;
         const favoritesButtonWidth = favoritesButtonRef.current?.getBoundingClientRect().width ?? 0;
         const serversButtonWidth = serversButtonRef.current?.getBoundingClientRect().width ?? 0;
+        const layoutButtonWidth = layoutButtonRef.current?.getBoundingClientRect().width ?? 0;
         const gitButtonWidth = gitButtonRef.current?.getBoundingClientRect().width ?? 0;
         const workspaceSwitcherWidth = workspaceSwitcherRef.current?.getBoundingClientRect().width ?? 0;
 
@@ -307,6 +317,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             aiButtonWidth +
             favoritesButtonWidth +
             serversButtonWidth +
+            layoutButtonWidth +
             gitButtonWidth +
             workspaceSwitcherWidth;
         const spaceForTabs = tabbarWrapperWidth - nonTabElementsWidth;
@@ -718,6 +729,9 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             </div>
             <div ref={serversButtonRef}>
                 <ServersQuickButton />
+            </div>
+            <div ref={layoutButtonRef}>
+                <LayoutQuickButton />
             </div>
             <div ref={gitButtonRef}>
                 <GitQuickButton />

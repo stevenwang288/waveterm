@@ -1085,7 +1085,6 @@ declare global {
         "web:useragenttype"?: string;
         "markdown:fontsize"?: number;
         "markdown:fixedfontsize"?: number;
-        "preview:explorer"?: boolean;
         "tsunami:*"?: boolean;
         "tsunami:sdkreplacepath"?: string;
         "tsunami:apppath"?: string;
@@ -1265,7 +1264,9 @@ declare global {
         "term:macoptionismeta"?: boolean;
         "term:bellsound"?: boolean;
         "term:bellindicator"?: boolean;
+        "term:bellnotify"?: boolean;
         "term:durable"?: boolean;
+        "term:wheellinescroll"?: boolean;
         "editor:minimapenabled"?: boolean;
         "editor:stickyscrollenabled"?: boolean;
         "editor:wordwrap"?: boolean;
@@ -1283,7 +1284,6 @@ declare global {
         "markdown:fontsize"?: number;
         "markdown:fixedfontsize"?: number;
         "preview:showhiddenfiles"?: boolean;
-        "preview:explorer"?: boolean;
         "tab:preset"?: string;
         "widget:*"?: boolean;
         "widget:showhelp"?: boolean;

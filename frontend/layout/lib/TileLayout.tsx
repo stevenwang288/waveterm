@@ -19,6 +19,8 @@ import React, {
 import { DropTargetMonitor, XYCoord, useDrag, useDragLayer, useDrop } from "react-dnd";
 import { debounce, throttle } from "throttle-debounce";
 import { useDevicePixelRatio } from "use-device-pixel-ratio";
+import { RpcApi } from "@/app/store/wshclientapi";
+import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { LayoutModel } from "./layoutModel";
 import { useNodeModel, useTileLayout } from "./layoutModelHooks";
 import "./tilelayout.scss";
@@ -141,6 +143,7 @@ function NodeBackdrops({ layoutModel }: { layoutModel: LayoutModel }) {
     const blockBlur = useAtomValue(blockBlurAtom);
     const ephemeralNode = useAtomValue(layoutModel.ephemeralNode);
     const magnifiedNodeId = useAtomValue(layoutModel.magnifiedNodeIdAtom);
+    const setMagnifiedNodeSizeOverride = useSetAtom(layoutModel.magnifiedNodeSizeOverrideAtom);
 
     const [showMagnifiedBackdrop, setShowMagnifiedBackdrop] = useState(!!ephemeralNode);
     const [showEphemeralBackdrop, setShowEphemeralBackdrop] = useState(!!magnifiedNodeId);
@@ -156,6 +159,7 @@ function NodeBackdrops({ layoutModel }: { layoutModel: LayoutModel }) {
         }
         if (!magnifiedNodeId) {
             setShowMagnifiedBackdrop(false);
+            setMagnifiedNodeSizeOverride(null);
         }
         if (ephemeralNode && !showEphemeralBackdrop) {
             setShowEphemeralBackdrop(true);
@@ -190,6 +194,89 @@ function NodeBackdrops({ layoutModel }: { layoutModel: LayoutModel }) {
         </>
     );
 }
+
+const MagnifiedNodeResizeHandle = memo(({ layoutModel }: { layoutModel: LayoutModel }) => {
+    const setMagnifiedNodeSizeOverride = useSetAtom(layoutModel.magnifiedNodeSizeOverrideAtom);
+    const [trackingPointer, setTrackingPointer] = useState<number>(undefined);
+    const handleRef = useRef<HTMLDivElement>(null);
+    const lastSizeRef = useRef<number | null>(null);
+
+    const computeSizePctFromClientX = useCallback(
+        (clientX: number): number | null => {
+            const container = layoutModel.displayContainerRef.current;
+            if (!container) {
+                return null;
+            }
+            const rect = container.getBoundingClientRect();
+            if (!Number.isFinite(rect.width) || rect.width <= 0) {
+                return null;
+            }
+            const xNorm = (clientX - rect.left) / rect.width;
+            const sizePct = 2 * xNorm - 1;
+            return Math.min(0.98, Math.max(0.35, sizePct));
+        },
+        [layoutModel.displayContainerRef]
+    );
+
+    const handlePointerMove = useCallback(
+        throttle(10, (event: React.PointerEvent<HTMLDivElement>) => {
+            if (trackingPointer !== event.pointerId) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const next = computeSizePctFromClientX(event.clientX);
+            if (next == null) {
+                return;
+            }
+            lastSizeRef.current = next;
+            setMagnifiedNodeSizeOverride(next);
+        }),
+        [trackingPointer, computeSizePctFromClientX, setMagnifiedNodeSizeOverride]
+    );
+
+    function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleRef.current?.setPointerCapture(event.pointerId);
+    }
+
+    function onPointerCapture(event: React.PointerEvent<HTMLDivElement>) {
+        event.preventDefault();
+        event.stopPropagation();
+        setTrackingPointer(event.pointerId);
+    }
+
+    const onPointerRelease = useCallback(
+        debounce(30, (event: React.PointerEvent<HTMLDivElement>) => {
+            if (trackingPointer !== event.pointerId) {
+                return;
+            }
+            setTrackingPointer(undefined);
+            const finalSize = lastSizeRef.current;
+            if (finalSize != null && Number.isFinite(finalSize)) {
+                void RpcApi.SetConfigCommand(TabRpcClient, { "window:magnifiedblocksize": finalSize }).catch((e) => {
+                    console.warn("Failed to update window:magnifiedblocksize", e);
+                });
+            }
+        }),
+        [trackingPointer]
+    );
+
+    return (
+        <div
+            ref={handleRef}
+            className="magnified-size-handle"
+            onPointerDown={onPointerDown}
+            onGotPointerCapture={onPointerCapture}
+            onLostPointerCapture={onPointerRelease}
+            onPointerMove={handlePointerMove}
+        >
+            <div className="line" />
+        </div>
+    );
+});
+MagnifiedNodeResizeHandle.displayName = "MagnifiedNodeResizeHandle";
 
 interface DisplayNodesWrapperProps {
     /**
@@ -313,6 +400,7 @@ const DisplayNode = ({ layoutModel, node }: DisplayNodeProps) => {
             onPointerOver={(event) => event.stopPropagation()}
         >
             {leafContent}
+            {isMagnified && <MagnifiedNodeResizeHandle layoutModel={layoutModel} />}
             {previewElement}
         </div>
     );

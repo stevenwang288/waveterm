@@ -10,7 +10,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { atoms, createBlock, getBlockComponentModel, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
-import { fireAndForget, isBlank, makeIconClass } from "@/util/util";
+import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
 import {
     FloatingPortal,
     autoUpdate,
@@ -470,6 +470,22 @@ const Widgets = memo(() => {
 
     const launchAiCommand = useCallback(
         (command: string) => {
+            const isFocusedTerm = focusedBlockData?.meta?.view === "term";
+            const targetBlockId = isFocusedTerm ? focusedBlockId : null;
+            if (!isBlank(targetBlockId) && !isBlank(command)) {
+                fireAndForget(async () => {
+                    await RpcApi.SetMetaCommand(TabRpcClient, {
+                        oref: WOS.makeORef("block", targetBlockId),
+                        meta: { "term:autoCmd": command },
+                    });
+                    await RpcApi.ControllerInputCommand(TabRpcClient, {
+                        blockid: targetBlockId,
+                        inputdata64: stringToBase64(`${command}\n`),
+                    });
+                });
+                return;
+            }
+
             const meta: Record<string, any> = {
                 controller: "shell",
                 view: "term",
@@ -482,12 +498,15 @@ const Widgets = memo(() => {
             if (!isBlank(connection)) {
                 meta.connection = connection;
             }
-            meta["cmd:initscript"] = `${command}\n`;
+            if (!isBlank(command)) {
+                meta["term:autoCmd"] = command;
+                meta["cmd:initscript"] = `${command}\n`;
+            }
             fireAndForget(async () => {
                 await createBlock({ meta }, false, true);
             });
         },
-        [focusedBlockData]
+        [focusedBlockData, focusedBlockId]
     );
 
     const showAiLauncherMenu = useCallback(
@@ -809,4 +828,3 @@ const Widgets = memo(() => {
 });
 
 export { Widgets };
-

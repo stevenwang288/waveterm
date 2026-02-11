@@ -31,7 +31,7 @@ const NotificationItem = ({
     onMouseLeave,
 }: NotificationItemProps) => {
     const { t } = useTranslation();
-    const { id, title, message, icon, type, timestamp, persistent, actions } = notification;
+    const { id, title, message, icon, type, timestamp, persistent, actions, clickActionKey } = notification;
     const color = type === "error" ? "red" : type === "warning" ? "yellow" : "green";
     const nIcon = icon ? icon : "bell";
 
@@ -62,8 +62,14 @@ const NotificationItem = ({
             className={clsx(isBubble ? "notification-bubble" : "notification", className)}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
-            onClick={() => onCopy(id)}
-            title={t("notification.clickToCopyMessage")}
+            onClick={(e) => {
+                if (clickActionKey) {
+                    onActionClick(e, { label: "", actionKey: clickActionKey }, id);
+                    return;
+                }
+                onCopy(id);
+            }}
+            title={clickActionKey ? t("notification.clickToOpen") : t("notification.clickToCopyMessage")}
         >
             {renderCloseButton()}
             <div className="notification-inner">

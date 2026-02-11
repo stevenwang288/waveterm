@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { BlockNodeModel } from "@/app/block/blocktypes";
+import i18next from "@/app/i18n";
 import { getFileSubject } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -13,13 +14,15 @@ import {
     getSettingsKeyAtom,
     globalStore,
     openLink,
+    pushNotification,
     recordTEvent,
     setTabIndicator,
+    useBlockAtom,
     WOS,
 } from "@/store/global";
 import * as services from "@/store/services";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
-import { base64ToArray, base64ToString, fireAndForget } from "@/util/util";
+import { base64ToArray, base64ToString, fireAndForget, isBlank, isLocalConnName, stringToBase64 } from "@/util/util";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -37,6 +40,7 @@ const dlog = debug("wave:termwrap");
 const TermFileName = "term";
 const TermCacheFileName = "cache:term:full";
 const MinDataProcessedForCache = 100 * 1024;
+const ReflowReloadMaxBytes = 5 * 1024 * 1024;
 const Osc52MaxDecodedSize = 75 * 1024; // max clipboard size for OSC 52 (matches common terminal implementations)
 const Osc52MaxRawLength = 128 * 1024; // includes selector + base64 + whitespace (rough check)
 export const SupportsImageInput = true;
@@ -407,6 +411,11 @@ export class TermWrap {
     shellIntegrationStatusAtom: jotai.PrimitiveAtom<"ready" | "running-command" | null>;
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     nodeModel: BlockNodeModel; // this can be null
+    unreadAtom: jotai.PrimitiveAtom<boolean>;
+    lastOutputTsAtom: jotai.PrimitiveAtom<number>;
+    private isReflowReloading: boolean = false;
+    private lastReflowReloadTermSize: TermSize | null = null;
+    private lastBellNotifyTs: number = 0;
 
     // IME composition state tracking
     // Prevents duplicate input when switching input methods during composition (e.g., using Capslock)
@@ -434,12 +443,20 @@ export class TermWrap {
         this.blockId = blockId;
         this.sendDataHandler = waveOptions.sendDataHandler;
         this.nodeModel = waveOptions.nodeModel;
+        this.unreadAtom = useBlockAtom(this.blockId, "term:unread", () => {
+            return jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
+        }) as jotai.PrimitiveAtom<boolean>;
+        this.lastOutputTsAtom = useBlockAtom(this.blockId, "term:lastoutputts", () => {
+            return jotai.atom(0) as jotai.PrimitiveAtom<number>;
+        }) as jotai.PrimitiveAtom<number>;
         this.ptyOffset = 0;
         this.dataBytesProcessed = 0;
         this.hasResized = false;
         this.lastUpdated = Date.now();
         this.promptMarkers = [];
-        this.shellIntegrationStatusAtom = jotai.atom(null) as jotai.PrimitiveAtom<"ready" | "running-command" | null>;
+        this.shellIntegrationStatusAtom = useBlockAtom(this.blockId, "term:shellstate", () => {
+            return jotai.atom(null) as jotai.PrimitiveAtom<"ready" | "running-command" | null>;
+        }) as jotai.PrimitiveAtom<"ready" | "running-command" | null>;
         this.lastCommandAtom = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
         this.terminal = new Terminal(options);
         this.fitAddon = new FitAddon();
@@ -495,6 +512,17 @@ export class TermWrap {
                     return true;
                 }
                 console.log("BEL received in terminal", this.blockId);
+                const isBlockFocused = this.nodeModel ? globalStore.get(this.nodeModel.isFocused) : false;
+                const documentFocused = document.hasFocus();
+                const shouldMarkUnread = !documentFocused || !isBlockFocused;
+                if (shouldMarkUnread) {
+                    globalStore.set(this.unreadAtom, true);
+                    if (documentFocused) {
+                        this.maybePushBellBubbleNotification();
+                    } else {
+                        this.maybeSendBellNotification();
+                    }
+                }
                 const bellSoundEnabled =
                     globalStore.get(getOverrideConfigAtom(this.blockId, "term:bellsound")) ?? false;
                 if (bellSoundEnabled) {
@@ -504,7 +532,12 @@ export class TermWrap {
                     globalStore.get(getOverrideConfigAtom(this.blockId, "term:bellindicator")) ?? false;
                 if (bellIndicatorEnabled) {
                     const tabId = globalStore.get(atoms.staticTabId);
-                    setTabIndicator(tabId, { icon: "bell", color: "#fbbf24", clearonfocus: true, priority: 1 });
+                    setTabIndicator(tabId, {
+                        icon: "bell",
+                        color: "var(--warning-color)",
+                        clearonfocus: true,
+                        priority: 1,
+                    });
                 }
                 return true;
             })
@@ -516,12 +549,190 @@ export class TermWrap {
         this.handleResize_debounced = debounce(50, this.handleResize.bind(this));
         this.terminal.open(this.connectElem);
         this.handleResize();
+
+        const wheelLineScrollAtom = getOverrideConfigAtom(this.blockId, "term:wheellinescroll");
+        const wheelLineScrollEnabled = globalStore.get(wheelLineScrollAtom) ?? true;
+        if (wheelLineScrollEnabled) {
+            const wheelHandler = (e: WheelEvent) => {
+                const buffer = this.terminal?.buffer?.active;
+                if (!buffer || buffer.type === "alternate") {
+                    return;
+                }
+
+                // Avoid interfering with browser-style zoom or alternate scroll behaviors.
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+                    return;
+                }
+
+                // Preserve smooth touchpad scrolling by only overriding "notch-like" wheel deltas.
+                const absDeltaY = Math.abs(e.deltaY);
+                const isPixelMode = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
+                const isLikelyTouchpad = isPixelMode && absDeltaY > 0 && absDeltaY < 50;
+                if (isLikelyTouchpad) {
+                    return;
+                }
+
+                this.terminal.scrollLines(e.deltaY > 0 ? 1 : -1);
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            this.connectElem.addEventListener("wheel", wheelHandler, { passive: false, capture: true });
+            this.toDispose.push({
+                dispose: () => {
+                    this.connectElem.removeEventListener("wheel", wheelHandler, { capture: true });
+                },
+            });
+        }
+        if (this.nodeModel) {
+            const unsubFn = globalStore.sub(this.nodeModel.isFocused, () => {
+                const isFocused = globalStore.get(this.nodeModel.isFocused);
+                if (isFocused) {
+                    globalStore.set(this.unreadAtom, false);
+                }
+            });
+            this.toDispose.push({ dispose: () => unsubFn() });
+        }
         const pasteHandler = this.pasteHandler.bind(this);
         this.connectElem.addEventListener("paste", pasteHandler, true);
         this.toDispose.push({
             dispose: () => {
                 this.connectElem.removeEventListener("paste", pasteHandler, true);
             },
+        });
+    }
+
+    private maybeSendBellNotification() {
+        const configured = globalStore.get(getOverrideConfigAtom(this.blockId, "term:bellnotify"));
+        const enabled = configured ?? true;
+        if (!enabled) {
+            return;
+        }
+
+        const now = Date.now();
+        // Avoid spamming multiple notifications for noisy programs.
+        if (this.lastBellNotifyTs && now - this.lastBellNotifyTs < 2500) {
+            return;
+        }
+        this.lastBellNotifyTs = now;
+
+        const tabId = this.tabId || globalStore.get(atoms.staticTabId);
+        const workspaceId = globalStore.get(atoms.workspace)?.oid;
+
+        const tabAtom = WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", tabId));
+        const tabData = globalStore.get(tabAtom);
+        const tabName = typeof tabData?.name === "string" ? tabData.name.trim() : "";
+
+        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", this.blockId));
+        const blockData = globalStore.get(blockAtom);
+        const connName = typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
+        const cwdRaw = typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]) : "";
+
+        let cwd = cwdRaw.trim();
+        if (!isBlank(cwd)) {
+            cwd = cwd.replace(/[\\/]+$/, "");
+            if (/^[A-Za-z]:$/.test(cwd)) {
+                cwd = `${cwd}\\`;
+            } else if (cwd === "") {
+                cwd = cwdRaw.trim();
+            }
+        }
+
+        const targetParts: string[] = [];
+        if (!isBlank(connName) && !isLocalConnName(connName)) {
+            targetParts.push(connName);
+        }
+        if (!isBlank(cwd)) {
+            targetParts.push(cwd);
+        }
+        const targetLabel = targetParts.join(" · ");
+
+        const bodyParts: string[] = [];
+        if (!isBlank(tabName)) {
+            bodyParts.push(tabName);
+        }
+        if (!isBlank(targetLabel)) {
+            bodyParts.push(targetLabel);
+        }
+
+        fireAndForget(() =>
+            RpcApi.NotifyCommand(
+                TabRpcClient,
+                {
+                    title: i18next.t("term.bellNotifyTitle"),
+                    body: bodyParts.join(" · ") || undefined,
+                    silent: true,
+                    workspaceid: workspaceId,
+                    tabid: tabId,
+                    blockid: this.blockId,
+                },
+                { route: "electron", timeout: 2000 }
+            )
+        );
+    }
+
+    private maybePushBellBubbleNotification() {
+        const configured = globalStore.get(getOverrideConfigAtom(this.blockId, "term:bellnotify"));
+        const enabled = configured ?? true;
+        if (!enabled) {
+            return;
+        }
+
+        const now = Date.now();
+        // Avoid spamming multiple notifications for noisy programs.
+        if (this.lastBellNotifyTs && now - this.lastBellNotifyTs < 2500) {
+            return;
+        }
+        this.lastBellNotifyTs = now;
+
+        const tabId = this.tabId || globalStore.get(atoms.staticTabId);
+
+        const tabAtom = WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", tabId));
+        const tabData = globalStore.get(tabAtom);
+        const tabName = typeof tabData?.name === "string" ? tabData.name.trim() : "";
+
+        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", this.blockId));
+        const blockData = globalStore.get(blockAtom);
+        const connName = typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
+        const cwdRaw = typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]) : "";
+
+        let cwd = cwdRaw.trim();
+        if (!isBlank(cwd)) {
+            cwd = cwd.replace(/[\\/]+$/, "");
+            if (/^[A-Za-z]:$/.test(cwd)) {
+                cwd = `${cwd}\\`;
+            } else if (cwd === "") {
+                cwd = cwdRaw.trim();
+            }
+        }
+
+        const targetParts: string[] = [];
+        if (!isBlank(connName) && !isLocalConnName(connName)) {
+            targetParts.push(connName);
+        }
+        if (!isBlank(cwd)) {
+            targetParts.push(cwd);
+        }
+        const targetLabel = targetParts.join(" бд ");
+
+        const bodyParts: string[] = [];
+        if (!isBlank(tabName)) {
+            bodyParts.push(tabName);
+        }
+        if (!isBlank(targetLabel)) {
+            bodyParts.push(targetLabel);
+        }
+
+        const clickActionPayload64 = stringToBase64(JSON.stringify({ tabId, blockId: this.blockId }));
+
+        pushNotification({
+            icon: "bell",
+            title: i18next.t("term.bellNotifyTitle"),
+            message: bodyParts.join(" бд ") || "",
+            timestamp: new Date(now).toISOString(),
+            expiration: now + 2 * 60 * 1000,
+            type: "warning",
+            clickActionKey: `focus:${clickActionPayload64}`,
         });
     }
 
@@ -698,12 +909,20 @@ export class TermWrap {
     }
 
     handleNewFileSubjectData(msg: WSFileEventData) {
+        if (this.isReflowReloading && msg.fileop === "append") {
+            return;
+        }
         if (msg.fileop == "truncate") {
             this.terminal.clear();
             this.heldData = [];
         } else if (msg.fileop == "append") {
             const decodedData = base64ToArray(msg.data64);
             if (this.loaded) {
+                const isBlockFocused = this.nodeModel ? globalStore.get(this.nodeModel.isFocused) : false;
+                if (!document.hasFocus() || !isBlockFocused) {
+                    globalStore.set(this.unreadAtom, true);
+                }
+                globalStore.set(this.lastOutputTsAtom, Date.now());
                 this.doTerminalWrite(decodedData, null);
             } else {
                 this.heldData.push(decodedData);
@@ -711,6 +930,80 @@ export class TermWrap {
         } else {
             console.log("bad fileop for terminal", msg);
             return;
+        }
+    }
+
+    async reflowHistoryToCurrentWidth(reason: string) {
+        if (!this.loaded) {
+            return;
+        }
+        if (this.isReflowReloading) {
+            return;
+        }
+        if (this.terminal == null) {
+            return;
+        }
+        if (this.terminal.buffer.active.type === "alternate") {
+            return;
+        }
+        // Avoid downloading/replaying huge histories on the UI thread.
+        if (this.ptyOffset > ReflowReloadMaxBytes) {
+            console.warn("term reflow reload skipped (history too large)", this.blockId, {
+                ptyOffset: this.ptyOffset,
+                maxBytes: ReflowReloadMaxBytes,
+                reason,
+            });
+            return;
+        }
+
+        const currentSize: TermSize = { rows: this.terminal.rows, cols: this.terminal.cols };
+        if (
+            this.lastReflowReloadTermSize != null &&
+            this.lastReflowReloadTermSize.rows === currentSize.rows &&
+            this.lastReflowReloadTermSize.cols === currentSize.cols
+        ) {
+            return;
+        }
+
+        this.isReflowReloading = true;
+        try {
+            // Ensure we have the final fitted size before replaying.
+            this.handleResize();
+
+            const zoneId = this.getZoneId();
+            const { data: fullData, fileInfo } = await fetchWaveFile(zoneId, TermFileName, 0);
+            if (fileInfo == null || fullData == null) {
+                return;
+            }
+            if (fileInfo.size > ReflowReloadMaxBytes) {
+                console.warn("term reflow reload skipped (file too large)", this.blockId, {
+                    size: fileInfo.size,
+                    maxBytes: ReflowReloadMaxBytes,
+                    reason,
+                });
+                return;
+            }
+
+            this.promptMarkers.forEach((marker) => {
+                try {
+                    marker.dispose();
+                } catch (_) {}
+            });
+            this.promptMarkers = [];
+            this.dataBytesProcessed = 0;
+            this.terminal.reset();
+            this.handleResize();
+
+            await this.doTerminalWrite(fullData, fileInfo.size);
+            const { data: deltaData, fileInfo: deltaFileInfo } = await fetchWaveFile(zoneId, TermFileName, fileInfo.size);
+            if (deltaFileInfo != null && deltaData != null && deltaData.byteLength > 0) {
+                await this.doTerminalWrite(deltaData, null);
+            }
+            this.lastReflowReloadTermSize = { rows: this.terminal.rows, cols: this.terminal.cols };
+        } catch (e) {
+            console.error("term reflow reload failed", this.blockId, reason, e);
+        } finally {
+            this.isReflowReloading = false;
         }
     }
 

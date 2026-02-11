@@ -5,16 +5,18 @@ import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
 import i18next from "@/app/i18n";
 import { appHandleKeyDown } from "@/app/store/keymodel";
+import { modalsModel } from "@/app/store/modalmodel";
 import type { TabModel } from "@/app/store/tab-model";
 import { waveEventSubscribe } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
-import { FavoritesModel } from "@/app/store/favorites-model";
+import { FavoriteItem, FavoritesModel } from "@/app/store/favorites-model";
 import { makeFeBlockRouteId } from "@/app/store/wshrouter";
 import { DefaultRouter, TabRpcClient } from "@/app/store/wshrpcutil";
 import { TerminalView } from "@/app/view/term/term";
 import { TermWshClient } from "@/app/view/term/term-wsh";
 import { VDomModel } from "@/app/view/vdom/vdom-model";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
+import { openCliLayoutInNewTab } from "@/util/clilayout";
 import {
     atoms,
     createBlock,
@@ -37,7 +39,7 @@ import {
 import * as services from "@/store/services";
 import * as keyutil from "@/util/keyutil";
 import { isMacOS, isWindows } from "@/util/platformutil";
-import { boundNumber, stringToBase64 } from "@/util/util";
+import { base64ToString, boundNumber, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import * as jotai from "jotai";
 import * as React from "react";
 import { getBlockingCommand } from "./shellblocking";
@@ -52,6 +54,95 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
 ];
+
+const BUILTIN_TERM_THEME_DISPLAY_NAME_TO_I18N_KEY: Record<string, string> = {
+    "Default Dark": "term.themeNames.defaultDark",
+    "One Dark Pro": "term.themeNames.oneDarkPro",
+    Dracula: "term.themeNames.dracula",
+    Monokai: "term.themeNames.monokai",
+    Campbell: "term.themeNames.campbell",
+    "Warm Yellow": "term.themeNames.warmYellow",
+    "Rose Pine": "term.themeNames.rosePine",
+};
+
+function translateBuiltinTermThemeDisplayName(displayName: string): string {
+    const key = BUILTIN_TERM_THEME_DISPLAY_NAME_TO_I18N_KEY[displayName];
+    if (!key) {
+        return displayName;
+    }
+    const translated = i18next.t(key);
+    return translated === key ? displayName : translated;
+}
+
+function getTermThemeMenuLabel(themeName: string, theme: Record<string, any> | undefined): string {
+    const displayName = theme?.["display:name"] ?? themeName;
+    return translateBuiltinTermThemeDisplayName(displayName);
+}
+
+type CliLayoutPreset = {
+    key: string;
+    label: string;
+    rows: number;
+    cols: number;
+};
+
+type CliLayoutPresetState = {
+    rows: number;
+    cols: number;
+    paths: string[];
+    commands?: string[];
+    connection?: string;
+    updatedTs: number;
+    name?: string;
+};
+
+type CliLayoutConfigFile = {
+    version: number;
+    lastPresetKey?: string;
+    presets: Record<string, CliLayoutPresetState>;
+    savedLayouts?: Record<string, CliLayoutPresetState>;
+};
+
+const CLI_LAYOUT_PRESETS: CliLayoutPreset[] = [
+    { key: "2", label: "两分屏", rows: 1, cols: 2 },
+    { key: "3", label: "三分屏", rows: 1, cols: 3 },
+    { key: "4", label: "四分屏", rows: 2, cols: 2 },
+    { key: "6", label: "六分屏", rows: 2, cols: 3 },
+    { key: "6-2col", label: "六分屏（2列）", rows: 3, cols: 2 },
+    { key: "8", label: "八分屏", rows: 2, cols: 4 },
+    { key: "8-2col", label: "八分屏（2列）", rows: 4, cols: 2 },
+    { key: "9", label: "九分屏", rows: 3, cols: 3 },
+];
+
+function getCliLayoutPresetLabel(preset: CliLayoutPreset): string {
+    const key = `clilayout.presets.${preset.key}`;
+    const translated = i18next.t(key);
+    return translated === key ? preset.label : translated;
+}
+
+function isCategoryPath(path: string): boolean {
+    return path.endsWith("/__category__") || path.endsWith("\\__category__");
+}
+
+function normalizeConnectionName(connection?: string): string {
+    const cleaned = connection?.trim();
+    return cleaned ? cleaned : "";
+}
+
+function normalizePath(path: string): string {
+    if (isBlank(path)) {
+        return "";
+    }
+    const trimmed = path.trim();
+    if (trimmed === "~" || trimmed === "/" || trimmed === "\\") {
+        return trimmed;
+    }
+    const driveRoot = trimmed.match(/^([A-Za-z]:)[\\/]*$/);
+    if (driveRoot) {
+        return `${driveRoot[1]}\\`;
+    }
+    return trimmed.replace(/[\\/]+$/, "");
+}
 
 export class TermViewModel implements ViewModel {
     viewType: string;
@@ -206,6 +297,7 @@ export class TermViewModel implements ViewModel {
                     }
                 }
             }
+
             const isMI = get(this.tabModel.isTermMultiInput);
             if (isMI && this.isBasicTerm(get)) {
                 rtn.push({
@@ -666,6 +758,34 @@ export class TermViewModel implements ViewModel {
                 return false;
             }
         }
+
+        // Arrow keys: scroll viewport by line when reading output.
+        // - Always allow normal arrow behavior in alternate buffer apps (vim/less/tmux).
+        // - Keep normal prompt/history behavior when we're at the bottom.
+        // - When scrolled up, use ArrowUp/ArrowDown to scroll by 1 line (avoids breaking interactive TUIs).
+        if (
+            waveEvent.key &&
+            (waveEvent.key === "ArrowUp" || waveEvent.key === "ArrowDown") &&
+            !waveEvent.shift &&
+            !waveEvent.control &&
+            !waveEvent.alt &&
+            !waveEvent.meta &&
+            !waveEvent.cmd
+        ) {
+            const termWrap = this.termRef.current;
+            const terminal = termWrap?.terminal;
+            const buffer = terminal?.buffer?.active;
+            if (terminal && buffer && buffer.type !== "alternate") {
+                const isAtBottom = buffer.baseY === buffer.viewportY;
+                const shouldScroll = !isAtBottom;
+                if (shouldScroll) {
+                    terminal.scrollLines(waveEvent.key === "ArrowUp" ? -1 : 1);
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+            }
+        }
         if (keyutil.checkKeyPressed(waveEvent, "Shift:Enter")) {
             const shiftEnterNewlineAtom = getOverrideConfigAtom(this.blockId, "term:shiftenternewline");
             const shiftEnterNewlineEnabled = globalStore.get(shiftEnterNewlineAtom) ?? true;
@@ -763,6 +883,253 @@ export class TermViewModel implements ViewModel {
         });
     }
 
+    private async readCliLayoutConfig(cliLayoutConfigPath: string): Promise<CliLayoutConfigFile> {
+        const defaultConfig: CliLayoutConfigFile = { version: 1, presets: {}, savedLayouts: {} };
+        try {
+            const fileData = await RpcApi.FileReadCommand(TabRpcClient, { info: { path: cliLayoutConfigPath } });
+            const data64 = fileData?.data64 ?? "";
+            if (isBlank(data64)) {
+                return defaultConfig;
+            }
+            const rawText = base64ToString(data64);
+            if (isBlank(rawText)) {
+                return defaultConfig;
+            }
+            const parsed = JSON.parse(rawText) as CliLayoutConfigFile;
+            if (parsed == null || typeof parsed !== "object") {
+                return defaultConfig;
+            }
+            return {
+                version: 1,
+                lastPresetKey: typeof parsed.lastPresetKey === "string" ? parsed.lastPresetKey : undefined,
+                presets: typeof parsed.presets === "object" && parsed.presets != null ? parsed.presets : {},
+                savedLayouts: typeof parsed.savedLayouts === "object" && parsed.savedLayouts != null ? parsed.savedLayouts : {},
+            };
+        } catch {
+            return defaultConfig;
+        }
+    }
+
+    private async writeCliLayoutConfig(cliLayoutConfigPath: string, config: CliLayoutConfigFile): Promise<void> {
+        await RpcApi.FileWriteCommand(TabRpcClient, {
+            info: { path: cliLayoutConfigPath },
+            data64: stringToBase64(JSON.stringify(config, null, 2)),
+        });
+    }
+
+    private async addCurrentPathToLayoutPreset(preset: CliLayoutPreset, openAfterAdd: boolean): Promise<void> {
+        if (!preset) {
+            return;
+        }
+
+        const blockData = globalStore.get(this.blockAtom);
+        const currentPath = normalizePath(String(blockData?.meta?.["cmd:cwd"] ?? "~")) || "~";
+        const currentConn = normalizeConnectionName(blockData?.meta?.connection);
+        const cliLayoutConfigPath = `${getApi().getConfigDir()}/cli-layout-presets.json`;
+
+        const config = await this.readCliLayoutConfig(cliLayoutConfigPath);
+        const existingState = config.presets?.[preset.key];
+        const totalSlots = Math.max(1, preset.rows * preset.cols);
+
+        const paths = Array.from({ length: totalSlots }, (_, index) => {
+            return normalizePath(existingState?.paths?.[index] ?? "");
+        });
+        const commands = Array.from({ length: totalSlots }, (_, index) => {
+            const cmd = existingState?.commands?.[index];
+            return typeof cmd === "string" ? cmd.trim() : "";
+        });
+
+        const emptyIndex = paths.findIndex((p) => isBlank(p));
+        if (emptyIndex >= 0) {
+            paths[emptyIndex] = currentPath;
+        } else {
+            paths.shift();
+            paths.push(currentPath);
+        }
+
+        const preservedConn =
+            existingState != null && !isBlank(existingState.connection) ? existingState.connection : currentConn;
+        const nextConnection = isBlank(preservedConn) ? undefined : preservedConn;
+
+        const nextState: CliLayoutPresetState = {
+            rows: preset.rows,
+            cols: preset.cols,
+            paths,
+            commands,
+            connection: nextConnection,
+            updatedTs: Date.now(),
+            name: typeof existingState?.name === "string" ? existingState.name : undefined,
+        };
+
+        config.version = 1;
+        config.lastPresetKey = preset.key;
+        config.presets = config.presets ?? {};
+        config.presets[preset.key] = nextState;
+
+        await this.writeCliLayoutConfig(cliLayoutConfigPath, config);
+        window.dispatchEvent(new Event("cli-layout-presets-updated"));
+
+        if (openAfterAdd) {
+            const openPaths = nextState.paths.map((p) => (isBlank(p) ? currentPath : normalizePath(p) || currentPath));
+            const openCommands = nextState.commands?.map((cmd) => (typeof cmd === "string" ? cmd.trim() : "")) ?? [];
+            await openCliLayoutInNewTab(
+                {
+                    rows: preset.rows,
+                    cols: preset.cols,
+                    paths: openPaths,
+                    commands: openCommands,
+                    connection: nextState.connection,
+                    updatedTs: Date.now(),
+                },
+                getCliLayoutPresetLabel(preset),
+                preset.key
+            );
+        }
+    }
+
+    private buildFavoritesOpenMenuItems(items: FavoriteItem[], currentConnection?: string): ContextMenuItem[] {
+        if (!items?.length) {
+            return [
+                {
+                    label: i18next.t("favorites.empty"),
+                    enabled: false,
+                },
+            ];
+        }
+
+        const normalizedCurrentConn = normalizeConnectionName(currentConnection);
+        const blockId = this.blockId;
+        const favoritesModel = FavoritesModel.getInstance();
+
+        const runInThisTerminal = (fav: FavoriteItem, cliCommand?: string) => {
+            if (isCategoryPath(fav.path)) {
+                return;
+            }
+            const normalizedPath = fav.path?.trim() ?? "";
+            if (isBlank(normalizedPath)) {
+                return;
+            }
+
+            const escapedPath = normalizedPath.replace(/"/g, '\\"');
+            const command = typeof cliCommand === "string" ? cliCommand.trim() : "";
+            const inputScript = isBlank(command)
+                ? `cd "${escapedPath}"\n`
+                : `cd "${escapedPath}"\n${command}\n`;
+
+            const favConn = normalizeConnectionName(fav.connection);
+
+            if (favConn !== normalizedCurrentConn) {
+                const meta: Record<string, any> = {
+                    controller: "shell",
+                    view: "term",
+                    "cmd:cwd": normalizedPath,
+                };
+                if (!isBlank(favConn)) {
+                    meta.connection = favConn;
+                }
+                if (!isBlank(command)) {
+                    meta["term:autoCmd"] = command;
+                    meta["cmd:initscript"] = `${command}\n`;
+                }
+                if (!isBlank(command)) {
+                    favoritesModel.updateFavoriteAutoCmd(fav.id, command);
+                    window.dispatchEvent(new Event("favorites-updated"));
+                }
+                createBlock({ meta });
+                return;
+            }
+
+            fireAndForget(async () => {
+                const meta: Record<string, any> = {
+                    "cmd:cwd": normalizedPath,
+                };
+                if (!isBlank(command)) {
+                    meta["term:autoCmd"] = command;
+                }
+                await RpcApi.SetMetaCommand(TabRpcClient, {
+                    oref: WOS.makeORef("block", blockId),
+                    meta,
+                });
+                await RpcApi.ControllerInputCommand(TabRpcClient, {
+                    blockid: blockId,
+                    inputdata64: stringToBase64(inputScript),
+                });
+                if (!isBlank(command)) {
+                    favoritesModel.updateFavoriteAutoCmd(fav.id, command);
+                    window.dispatchEvent(new Event("favorites-updated"));
+                }
+            });
+        };
+
+        const buildCommandMenuItems = (fav: FavoriteItem): ContextMenuItem[] => {
+            const defaultCmd = typeof fav.autoCmd === "string" ? fav.autoCmd.trim() : "";
+            const defaultMarker = i18next.t("favorites.defaultMarker");
+            const menuItems: ContextMenuItem[] = [
+                ...(isBlank(defaultCmd)
+                    ? []
+                    : [
+                          {
+                              label: i18next.t("favorites.openDefault"),
+                              sublabel: defaultCmd,
+                              click: () => runInThisTerminal(fav, defaultCmd),
+                          },
+                          {
+                              label: i18next.t("favorites.clearDefaultCommand"),
+                              click: () => {
+                                  favoritesModel.updateFavoriteAutoCmd(fav.id, undefined);
+                                  window.dispatchEvent(new Event("favorites-updated"));
+                              },
+                          },
+                          { type: "separator" as const },
+                      ]),
+                {
+                    label: i18next.t("favorites.cdHere"),
+                    click: () => runInThisTerminal(fav),
+                },
+                { type: "separator" },
+                ...AI_LAUNCH_COMMANDS.map((item) => ({
+                    label: !isBlank(defaultCmd) && item.command === defaultCmd ? `${item.label}${defaultMarker}` : item.label,
+                    click: () => runInThisTerminal(fav, item.command),
+                })),
+            ];
+            return menuItems;
+        };
+
+        const buildPathMenuItems = (favItems: FavoriteItem[]): ContextMenuItem[] => {
+            return favItems.map((fav) => {
+                const hasChildren = (fav.children?.length ?? 0) > 0;
+                const isCategory = isCategoryPath(fav.path);
+                const favConn = normalizeConnectionName(fav.connection);
+                const sublabelParts: string[] = [];
+                if (!isBlank(favConn)) {
+                    sublabelParts.push(favConn);
+                }
+                if (!isBlank(fav.path) && !isCategory) {
+                    sublabelParts.push(fav.path);
+                }
+                const sublabel = sublabelParts.length ? sublabelParts.join(" · ") : undefined;
+
+                if (hasChildren || isCategory) {
+                    const submenu = buildPathMenuItems(fav.children ?? []);
+                    return {
+                        label: fav.label || fav.path,
+                        sublabel,
+                        enabled: submenu.length > 0,
+                        submenu,
+                    };
+                }
+
+                return {
+                    label: fav.label || fav.path,
+                    sublabel,
+                    submenu: buildCommandMenuItems(fav),
+                };
+            });
+        };
+
+        return buildPathMenuItems(items);
+    }
+
     getContextMenuItems(): ContextMenuItem[] {
         const menu: ContextMenuItem[] = [];
         const hasSelection = this.termRef.current?.terminal?.hasSelection();
@@ -790,6 +1157,15 @@ export class TermViewModel implements ViewModel {
                         }
                         aiModel.focusInput();
                     }
+                },
+            });
+            menu.push({
+                label: i18next.t("term.translateSelection"),
+                click: () => {
+                    if (!selection) {
+                        return;
+                    }
+                    modalsModel.pushModal("CodexTranslateModal", { text: selection });
                 },
             });
 
@@ -829,21 +1205,49 @@ export class TermViewModel implements ViewModel {
             menu.push({ type: "separator" });
         }
 
+        const favoritesModel = FavoritesModel.getInstance();
+        const blockData = globalStore.get(this.blockAtom);
+        const currentPath = blockData?.meta?.["cmd:cwd"] || "~";
+        const connection = blockData?.meta?.connection;
+
         menu.push({
             label: i18next.t("favorites.add"),
             click: () => {
-                const blockData = globalStore.get(this.blockAtom);
-                const currentPath = blockData?.meta?.["cmd:cwd"] || "~";
-                const connection = blockData?.meta?.connection;
-                const favoritesModel = FavoritesModel.getInstance();
-                favoritesModel.addFavorite(currentPath, undefined, undefined, connection);
+                const currentAutoCmd =
+                    typeof blockData?.meta?.["term:autoCmd"] === "string" ? String(blockData.meta["term:autoCmd"]).trim() : "";
+                favoritesModel.addFavorite(
+                    currentPath,
+                    undefined,
+                    undefined,
+                    connection,
+                    isBlank(currentAutoCmd) ? undefined : currentAutoCmd
+                );
                 window.dispatchEvent(new Event("favorites-updated"));
             },
         });
 
-        const blockData = globalStore.get(this.blockAtom);
-        const currentPath = blockData?.meta?.["cmd:cwd"] || "~";
-        const connection = blockData?.meta?.connection;
+        menu.push({
+            label: i18next.t("favorites.title"),
+            submenu: this.buildFavoritesOpenMenuItems(favoritesModel.getItems(), connection),
+        });
+
+        menu.push({
+            label: i18next.t("block.addToLayout"),
+            submenu: CLI_LAYOUT_PRESETS.map((preset) => ({
+                label: getCliLayoutPresetLabel(preset),
+                submenu: [
+                    {
+                        label: i18next.t("clilayout.addOnly"),
+                        click: () => fireAndForget(() => this.addCurrentPathToLayoutPreset(preset, false)),
+                    },
+                    {
+                        label: i18next.t("clilayout.addAndOpen"),
+                        click: () => fireAndForget(() => this.addCurrentPathToLayoutPreset(preset, true)),
+                    },
+                ],
+            })),
+        });
+
         const openAiSubmenu: ContextMenuItem[] = AI_LAUNCH_COMMANDS.map((item) => ({
             label: i18next.t("preview.openAiHere", { ai: item.label }),
             click: () => {
@@ -881,6 +1285,12 @@ export class TermViewModel implements ViewModel {
             label: magnified ? i18next.t("block.unMagnifyBlock") : i18next.t("block.magnifyBlock"),
             click: () => {
                 this.nodeModel.toggleMagnify();
+            },
+        });
+        menu.push({
+            label: i18next.t("term.reflowHistory"),
+            click: () => {
+                fireAndForget(() => this.termRef.current?.reflowHistoryToCurrentWidth("context-menu"));
             },
         });
 
@@ -981,8 +1391,9 @@ export class TermViewModel implements ViewModel {
         }
 
         const submenu: ContextMenuItem[] = termThemeKeys.map((themeName) => {
+            const theme = termThemes[themeName];
             return {
-                label: termThemes[themeName]["display:name"] ?? themeName,
+                label: getTermThemeMenuLabel(themeName, theme),
                 type: "checkbox",
                 checked: curThemeName == themeName,
                 click: () => this.setTerminalTheme(themeName),
@@ -1069,6 +1480,50 @@ export class TermViewModel implements ViewModel {
         });
         fullMenu.push({ type: "separator" });
         const advancedSubmenu: ContextMenuItem[] = [];
+
+        const defaultBellNotify = globalStore.get(getSettingsKeyAtom("term:bellnotify")) ?? true;
+        const bellNotify = blockData?.meta?.["term:bellnotify"];
+        advancedSubmenu.push({
+            label: i18next.t("term.bellNotify"),
+            submenu: [
+                {
+                    label: i18next.t("common.defaultWithValue", {
+                        value: defaultBellNotify ? i18next.t("common.on") : i18next.t("common.off"),
+                    }),
+                    type: "checkbox",
+                    checked: bellNotify == null,
+                    click: () => {
+                        RpcApi.SetMetaCommand(TabRpcClient, {
+                            oref: WOS.makeORef("block", this.blockId),
+                            meta: { "term:bellnotify": null },
+                        });
+                    },
+                },
+                {
+                    label: i18next.t("common.on"),
+                    type: "checkbox",
+                    checked: bellNotify === true,
+                    click: () => {
+                        RpcApi.SetMetaCommand(TabRpcClient, {
+                            oref: WOS.makeORef("block", this.blockId),
+                            meta: { "term:bellnotify": true },
+                        });
+                    },
+                },
+                {
+                    label: i18next.t("common.off"),
+                    type: "checkbox",
+                    checked: bellNotify === false,
+                    click: () => {
+                        RpcApi.SetMetaCommand(TabRpcClient, {
+                            oref: WOS.makeORef("block", this.blockId),
+                            meta: { "term:bellnotify": false },
+                        });
+                    },
+                },
+            ],
+        });
+
         const allowBracketedPaste = blockData?.meta?.["term:allowbracketedpaste"];
         advancedSubmenu.push({
             label: i18next.t("term.allowBracketedPasteMode"),
@@ -1253,4 +1708,3 @@ export function getAllBasicTermModels(): TermViewModel[] {
     }
     return termModels;
 }
-

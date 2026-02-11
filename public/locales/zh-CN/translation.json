@@ -25,6 +25,7 @@
     "cut": "剪切",
     "copy": "复制",
     "paste": "粘贴",
+    "pasteAndMatchStyle": "粘贴并匹配样式",
     "delete": "删除",
     "selectAll": "全选",
     "services": "服务",
@@ -69,14 +70,19 @@
     "on": "开启",
     "off": "关闭",
     "moreOptions": "更多选项",
-    "closeWindow": "????",
-    "confirm": "??",
-    "confirmQuitMessage": "????? {{appName}} ??",
-    "confirmQuitTitle": "????",
-    "deleteWorkspace": "?????",
-    "dismiss": "??",
-    "learnMore": "????",
-    "quit": "??"
+    "closeWindow": "关闭窗口",
+    "confirm": "确认",
+    "confirmQuitMessage": "确定要退出 {{appName}} 吗？",
+    "confirmQuitTitle": "确认退出",
+    "deleteWorkspace": "删除工作区",
+    "dismiss": "忽略",
+    "learnMore": "了解更多",
+    "quit": "退出"
+  },
+  "notification": {
+    "cannotBeCleared": "无法清除",
+    "clickToCopyMessage": "点击复制消息",
+    "clickToOpen": "点击跳转"
   },
   "favorites": {
     "title": "收藏夹",
@@ -86,7 +92,50 @@
     "addCurrentFolder": "添加当前文件夹到收藏夹",
     "remove": "从收藏夹移除",
     "addCategory": "新建分类",
-    "enterCategoryName": "请输入分类名称"
+    "enterCategoryName": "请输入分类名称",
+    "empty": "暂无收藏",
+    "openDefault": "打开（默认）",
+    "clearDefaultCommand": "清除默认命令",
+    "cdHere": "cd 到此处",
+    "defaultMarker": "（默认）",
+    "currentMarker": "（当前）",
+    "applyToCurrentTerminal": "应用到当前终端",
+    "defaultCommand": "默认命令",
+    "autoCommand": "自动命令"
+  },
+  "clilayout": {
+    "menu": "布局",
+    "saveCurrent": "保存当前",
+    "refresh": "刷新",
+    "quickPresets": "快速分屏",
+    "savedConfigs": "已保存配置",
+    "noSavedLayouts": "暂无保存布局",
+    "recent": "最近",
+    "includesCommand": "含启动命令",
+    "restoreRecentPresetTitle": "恢复最近的 {{preset}}",
+    "createNewPresetTitle": "创建新的 {{preset}}",
+    "promptSaveName": "保存布局名称",
+    "defaultSavedName": "布局 {{datetime}}",
+    "layoutTitle": "布局 {{rows}}×{{cols}}",
+    "addOnly": "仅加入预设",
+    "addAndOpen": "加入并打开",
+    "saveToSlot": "保存到 {{slot}}",
+    "loadSlot": "加载 {{slot}}",
+    "presets": {
+      "2": "两分屏",
+      "3": "三分屏",
+      "4": "四分屏",
+      "6": "六分屏",
+      "6-2col": "六分屏（2列）",
+      "8": "八分屏",
+      "8-2col": "八分屏（2列）",
+      "9": "九分屏"
+    },
+    "slots": {
+      "layout1": "布局方案 1",
+      "layout2": "布局方案 2",
+      "layout3": "布局方案 3"
+    }
   },
   "explorer": {
     "thisPC": "此电脑",
@@ -349,8 +398,8 @@
     "apps": "应用",
     "noLocalAppsFound": "未找到本地应用",
     "localWaveAppsTooltip": "本地 WaveApp",
-    "confirmCloseWindowUnsavedTabs": "????????????????????????\\n\\n????",
-    "confirmDeleteWorkspace": "?????????????\\n\\n????",
+    "confirmCloseWindowUnsavedTabs": "窗口中有未保存的标签页，关闭窗口将删除现有标签页。\\n\\n是否继续？",
+    "confirmDeleteWorkspace": "删除工作区也会删除其中的内容。\\n\\n是否继续？",
     "servers": "服务器",
     "git": "Git"
   },
@@ -599,12 +648,12 @@
       "confirmRestore": "确认还原",
       "restoring": "还原中..."
     },
-    "aiThinking": "AI ????...",
+    "aiThinking": "AI 正在思考...",
     "maxTokensOption": "{{tokens}}",
-    "maxTokensOptionDevTesting": "{{tokens}}??????",
-    "maxTokensOptionPro": "{{tokens}}????",
-    "noTextContent": "???????",
-    "waitingForToolApprovals": "???????..."
+    "maxTokensOptionDevTesting": "{{tokens}}（开发测试）",
+    "maxTokensOptionPro": "{{tokens}}（Pro）",
+    "noTextContent": "（无文本内容）",
+    "waitingForToolApprovals": "等待工具授权..."
   },
   "block": {
     "settings": "设置",
@@ -726,6 +775,13 @@
       "disabledInProgram": "当你处于 {{program}} 内时，Wave AI 集成将被禁用。"
     },
     "sendToWaveAI": "发送到 Wave AI",
+    "translateSelection": "翻译选中内容（中文）",
+    "translateSelectionTitle": "翻译",
+    "translating": "正在翻译…",
+    "translationFailed": "翻译失败",
+    "reflowHistory": "按当前宽度重排历史",
+    "bellNotify": "响铃时系统通知",
+    "bellNotifyTitle": "终端响铃",
     "openUrl": "打开链接（{{host}}）",
     "openUrlExternal": "在外部浏览器打开链接",
     "newBlockInheritCwd": "新开终端块（继承当前路径）",
@@ -733,6 +789,15 @@
     "splitVertically": "垂直拆分",
     "fileBrowser": "文件浏览器",
     "themes": "主题",
+    "themeNames": {
+      "defaultDark": "默认深色",
+      "oneDarkPro": "One Dark Pro",
+      "dracula": "德古拉",
+      "monokai": "Monokai",
+      "campbell": "Campbell",
+      "warmYellow": "暖黄",
+      "rosePine": "松玫"
+    },
     "fontSize": "字体大小",
     "transparency": "透明度",
     "transparentBackground": "透明背景",
@@ -979,27 +1044,27 @@
     "errorTitle": "更新出错",
     "errorMessage": "更新过程中发生错误。",
     "retryUpdate": "重试更新",
-    "applicationUpdateTitle": "????",
-    "downloadedDetail": "???????????????????",
-    "later": "??",
-    "noUpdatesAvailable": "?????????",
-    "restart": "??"
+    "applicationUpdateTitle": "应用更新",
+    "downloadedDetail": "新版本已下载完成。重启应用以应用更新。",
+    "later": "稍后",
+    "noUpdatesAvailable": "当前没有可用更新。",
+    "restart": "重启"
   },
   "waveai": {
     "history": {
-      "clear": "??????"
+      "clear": "清空聊天记录"
     },
     "presets": {
-      "add": "?? AI ??...",
-      "selectTitle": "?? AI ??"
+      "add": "添加 AI 预设...",
+      "selectTitle": "选择 AI 配置"
     },
     "provider": {
-      "localModel": "?????? @ {{baseUrl}}?{{model}}?",
-      "openAiDefaultEndpoint": "OpenAI ????",
-      "remoteAnthropic": "???? Anthropic API?{{model}}?",
-      "remoteModel": "?????? @ {{baseUrl}}?{{model}}?",
-      "remotePerplexity": "???? Perplexity API?{{model}}?",
-      "waveProxy": "?? Wave ? AI ???{{model}}?"
+      "localModel": "使用本地模型 @ {{baseUrl}}（{{model}}）",
+      "openAiDefaultEndpoint": "OpenAI 默认端点",
+      "remoteAnthropic": "使用远程 Anthropic API（{{model}}）",
+      "remoteModel": "使用远程模型 @ {{baseUrl}}（{{model}}）",
+      "remotePerplexity": "使用远程 Perplexity API（{{model}}）",
+      "waveProxy": "使用 Wave 的 AI 代理（{{model}}）"
     }
   }
 }

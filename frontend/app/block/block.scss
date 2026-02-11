@@ -85,6 +85,11 @@
                 border-bottom: 1px solid var(--border-color);
                 border-radius: var(--block-border-radius) var(--block-border-radius) 0 0;
 
+                &.term-unread {
+                    border-bottom-color: rgb(from var(--warning-color) r g b / 60%);
+                    background-color: rgb(from var(--warning-color) r g b / 12%);
+                }
+
                 .block-frame-default-header-iconview {
                     display: flex;
                     flex-shrink: 3;
@@ -125,6 +130,12 @@
                         flex-grow: 0;
                     }
 
+                    &.term-cwd {
+                        color: var(--accent-color);
+                        opacity: 0.9;
+                        font-weight: 500;
+                    }
+
                     &.preview-filename {
                         direction: rtl;
                         text-align: left;
@@ -143,6 +154,40 @@
                         width: 100%;
                         min-width: 0;
                     }
+                }
+
+                & .connection-terminal-label {
+                    color: var(--conn-icon-color-3);
+                    opacity: 0.9;
+                    font-weight: 500;
+                    direction: rtl;
+                    text-align: left;
+                    unicode-bidi: isolate;
+                }
+
+                &.term-running .connection-terminal-label {
+                    color: var(--accent-color);
+                }
+
+                &.term-stopped .connection-terminal-label {
+                    color: var(--term-magenta);
+                }
+
+                & .connection-unread {
+                    background-color: rgb(from var(--warning-color) r g b / 16%);
+                }
+
+                & .connection-unread:hover {
+                    background-color: rgb(from var(--warning-color) r g b / 22%);
+                }
+
+                & .connection-unread .connection-terminal-label {
+                    color: var(--warning-color);
+                    opacity: 0.95;
+                }
+
+                &.term-stopped .connection-unread {
+                    background-color: rgb(from var(--warning-color) r g b / 18%);
                 }
 
                 .connection-button {
@@ -294,6 +339,19 @@
         &.ephemeral {
             background-color: rgb(from var(--block-bg-color) r g b / var(--magnified-block-opacity));
             backdrop-filter: blur(var(--magnified-block-blur));
+        }
+
+        &.term-unread:not(.block-focused) {
+            .block-mask {
+                border-color: rgb(from var(--warning-color) r g b / 55%);
+            }
+
+            .block-frame-default-inner {
+                background-image: linear-gradient(
+                    rgb(from var(--warning-color) r g b / 6%),
+                    rgb(from var(--warning-color) r g b / 6%)
+                );
+            }
         }
 
         .connstatus-overlay {

@@ -118,6 +118,7 @@ function makeEditMenu(fullConfig?: FullConfigType): Electron.MenuItemConstructor
         },
         {
             role: "pasteAndMatchStyle",
+            label: i18next.t('menu.pasteAndMatchStyle'),
             accelerator: unamePlatform === "darwin" ? "Command+Shift+V" : "",
         },
         {
@@ -145,6 +146,7 @@ function makeFileMenu(
         },
         {
             role: "close",
+            label: i18next.t('menu.closeWindow'),
             accelerator: "",
             click: () => {
                 focusedWaveWindow?.close();

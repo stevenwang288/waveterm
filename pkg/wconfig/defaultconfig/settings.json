@@ -26,8 +26,10 @@
     "telemetry:enabled": true,
     "term:bellsound": false,
     "term:bellindicator": true,
+    "term:bellnotify": true,
     "term:copyonselect": true,
     "term:durable": false,
+    "term:wheellinescroll": true,
     "waveai:showcloudmodes": true,
     "waveai:defaultmode": "waveai@balanced"
 }

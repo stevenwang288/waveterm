@@ -91,6 +91,10 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
     const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", nodeModel.blockId));
     const isFocused = jotai.useAtomValue(nodeModel.isFocused);
     const aiPanelVisible = jotai.useAtomValue(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
+    const unreadAtom = React.useMemo(() => {
+        return useBlockAtom(nodeModel.blockId, "term:unread", () => jotai.atom(false) as jotai.PrimitiveAtom<boolean>);
+    }, [nodeModel.blockId]);
+    const hasUnread = jotai.useAtomValue(unreadAtom as jotai.PrimitiveAtom<boolean>);
     const viewIconUnion = util.useAtomValueSafe(viewModel?.viewIcon) ?? blockViewToIcon(blockData?.meta?.view);
     const customBg = util.useAtomValueSafe(viewModel?.blockBg);
     const manageConnection = util.useAtomValueSafe(viewModel?.manageConnection);
@@ -144,6 +148,7 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
     }, [manageConnection, blockData]);
 
     const viewIconElem = getViewIconElem(viewIconUnion, blockData);
+    const isTerminalBlock = blockData?.meta?.view === "term";
     let innerStyle: React.CSSProperties = {};
     if (!preview) {
         innerStyle = computeBgStyleFromMeta(customBg);
@@ -159,6 +164,7 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
                 "block-focused": isFocused || preview,
                 "block-preview": preview,
                 "block-no-highlight": numBlocksInTab === 1 && !aiPanelVisible,
+                "term-unread": isTerminalBlock && hasUnread,
                 ephemeral: isEphemeral,
                 magnified: isMagnified,
             })}

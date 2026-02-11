@@ -5,6 +5,7 @@ import * as electron from "electron";
 import { FastAverageColor } from "fast-average-color";
 import fs from "fs";
 import * as child_process from "node:child_process";
+import * as os from "node:os";
 import * as path from "path";
 import { promisify } from "node:util";
 import { PNG } from "pngjs";
@@ -245,6 +246,83 @@ function saveImageFileWithNativeDialog(defaultFileName: string, mimeType: string
         });
 }
 
+const MaxCodexTranslateChars = 20_000;
+
+async function runCodexTranslate(text: string): Promise<string> {
+    if (typeof text !== "string") {
+        throw new Error("Invalid text");
+    }
+    if (text.includes("\0")) {
+        throw new Error("Invalid text");
+    }
+    const trimmed = text.trim();
+    if (!trimmed) {
+        throw new Error("No text to translate");
+    }
+    if (text.length > MaxCodexTranslateChars) {
+        throw new Error(`Text too long (${text.length} chars). Please select less text.`);
+    }
+
+    const outPath = path.join(
+        os.tmpdir(),
+        `wave-codex-translate-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`
+    );
+
+    const prompt = [
+        "Translate the text between <<<WAVE_TEXT_START>>> and <<<WAVE_TEXT_END>>> into Simplified Chinese.",
+        "- Preserve formatting, code blocks, inline code, commands, file paths, and URLs.",
+        "- Output only the translation and nothing else.",
+        "",
+        "<<<WAVE_TEXT_START>>>",
+        text,
+        "<<<WAVE_TEXT_END>>>",
+        "",
+    ].join("\n");
+
+    const args = [
+        "exec",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--sandbox",
+        "read-only",
+        "--color",
+        "never",
+        "--output-last-message",
+        outPath,
+        "-",
+    ];
+
+    let stdout = "";
+    let stderr = "";
+
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const proc = child_process.spawn("codex", args, { windowsHide: true });
+            proc.on("error", (err) => reject(err));
+            proc.stdout.on("data", (d) => {
+                stdout += d.toString();
+            });
+            proc.stderr.on("data", (d) => {
+                stderr += d.toString();
+            });
+            proc.on("close", (code) => {
+                if (code !== 0) {
+                    const msg = stderr.trim() || stdout.trim() || `codex exited with code ${code}`;
+                    reject(new Error(msg));
+                    return;
+                }
+                resolve();
+            });
+            proc.stdin.end(prompt);
+        });
+
+        const result = await fs.promises.readFile(outPath, "utf8");
+        return result.replace(/\r\n/g, "\n").trimEnd();
+    } finally {
+        await fs.promises.unlink(outPath).catch(() => {});
+    }
+}
+
 export function initIpcHandlers() {
     electron.ipcMain.on("open-external", (event, url) => {
         if (url && typeof url === "string") {
@@ -430,6 +508,10 @@ export function initIpcHandlers() {
 
     electron.ipcMain.handle("git-run", async (_event, cwd: string, args: string[]) => {
         return runGitCommand(cwd, args);
+    });
+
+    electron.ipcMain.handle("codex-translate", async (_event, text: string) => {
+        return runCodexTranslate(text);
     });
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {
