@@ -54,7 +54,7 @@ function getDurableIconProps(
     let titleText = t("block.durableSession.base");
     const status = jobStatus?.status;
     if (status === "connected") {
-        color = "text-sky-500";
+        color = "text-green-500";
         titleText = t("block.durableSession.attached");
     } else if (status === "disconnected") {
         color = "text-sky-300";
