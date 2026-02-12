@@ -344,11 +344,11 @@ func handleDomainSocketClient(conn net.Conn, readCallback func()) {
 		defer func() {
 			conn.Close()
 			close(proxy.FromRemoteCh)
-			close(proxy.ToRemoteCh)
 			linkId := linkIdContainer.Load()
 			if linkId != baseds.NoLinkId {
 				DefaultRouter.UnregisterLink(baseds.LinkId(linkId))
 			}
+			close(proxy.ToRemoteCh)
 		}()
 		AdaptStreamToMsgCh(conn, proxy.FromRemoteCh, readCallback)
 	}()
