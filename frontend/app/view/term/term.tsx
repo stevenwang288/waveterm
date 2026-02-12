@@ -336,11 +336,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
                 if (delayMs === 500) {
                     fireAndForget(() => termWrap.resyncController("magnify resize"));
                     if (isMagnified) {
-                        const buffer = termWrap.terminal?.buffer?.active;
-                        const isAtBottom = buffer != null && buffer.baseY === buffer.viewportY;
-                        if (isAtBottom) {
-                            fireAndForget(() => termWrap.reflowHistoryToCurrentWidth("magnify-auto"));
-                        }
+                        fireAndForget(() => termWrap.reflowHistoryToCurrentWidth("magnify-auto"));
                     }
                 }
             }, delayMs)

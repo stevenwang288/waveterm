@@ -107,6 +107,9 @@
         "term:scrollback": {
           "type": "integer"
         },
+        "term:activitywindowms": {
+          "type": "integer"
+        },
         "term:copyonselect": {
           "type": "boolean"
         },
@@ -190,6 +193,12 @@
         },
         "tab:preset": {
           "type": "string"
+        },
+        "tab:sidepanelbuttonorder": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "widget:*": {
           "type": "boolean"

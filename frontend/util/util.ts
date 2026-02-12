@@ -167,13 +167,31 @@ function makeIconClass(icon: string, fw: boolean, opts?: { spin?: boolean; defau
 }
 
 /**
- * A wrapper function for running a promise and catching any errors
- * @param f The promise to run
+ * A wrapper function for running an async task and catching any errors.
+ *
+ * Prefer passing a function, but for safety we also accept an already-created
+ * promise. This avoids runtime crashes when callsites accidentally invoke an
+ * async function and pass the resulting promise.
  */
-function fireAndForget(f: () => Promise<any>) {
-    f()?.catch((e) => {
+function fireAndForget(f: (() => any) | Promise<any>) {
+    try {
+        if (typeof f === "function") {
+            const result = f();
+            if (result && typeof (result as any).catch === "function") {
+                (result as Promise<any>).catch((e) => {
+                    console.log("fireAndForget error", e);
+                });
+            }
+            return;
+        }
+        if (f && typeof (f as any).catch === "function") {
+            (f as Promise<any>).catch((e) => {
+                console.log("fireAndForget error", e);
+            });
+        }
+    } catch (e) {
         console.log("fireAndForget error", e);
-    });
+    }
 }
 
 const promiseWeakMap = new WeakMap<Promise<any>, ResolvedValue<any>>();

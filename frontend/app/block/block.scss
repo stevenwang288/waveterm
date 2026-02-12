@@ -166,11 +166,15 @@
                 }
 
                 &.term-running .connection-terminal-label {
-                    color: var(--accent-color);
+                    color: var(--term-green);
                 }
 
                 &.term-stopped .connection-terminal-label {
                     color: var(--term-magenta);
+                }
+
+                &.term-stopped.term-ai-ready .connection-terminal-label {
+                    color: var(--term-blue);
                 }
 
                 & .connection-unread {

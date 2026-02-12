@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { computeConnColorNum } from "@/app/block/blockutil";
+import { ContextMenuModel } from "@/app/store/contextmenu";
 import { getConnStatusAtom, getLocalHostDisplayNameAtom, recordTEvent } from "@/app/store/global";
 import { IconButton } from "@/element/iconbutton";
 import * as util from "@/util/util";
@@ -38,6 +39,7 @@ export const ConnectionButton = React.memo(
             const connStatusAtom = getConnStatusAtom(connection);
             const connStatus = jotai.useAtomValue(connStatusAtom);
             const localName = jotai.useAtomValue(getLocalHostDisplayNameAtom());
+            const terminalLabelTrimmed = isTerminalBlock && typeof terminalLabel === "string" ? terminalLabel.trim() : "";
             let showDisconnectedSlash = false;
             let connIconElem: React.ReactNode = null;
             const connColorNum = computeConnColorNum(connStatus);
@@ -98,10 +100,9 @@ export const ConnectionButton = React.memo(
                 }
                 connDisplayName = localDefaultName;
                 if (isTerminalBlock) {
-                    const labelOverride = typeof terminalLabel === "string" ? terminalLabel.trim() : "";
-                    connDisplayName = util.isBlank(labelOverride) ? localDefaultName : labelOverride;
-                    if (!util.isBlank(labelOverride)) {
-                        titleText = labelOverride;
+                    connDisplayName = util.isBlank(terminalLabelTrimmed) ? localDefaultName : terminalLabelTrimmed;
+                    if (!util.isBlank(terminalLabelTrimmed)) {
+                        titleText = terminalLabelTrimmed;
                     }
                     extraDisplayNameClassName = "text-muted group-hover:text-secondary";
                 }
@@ -156,6 +157,24 @@ export const ConnectionButton = React.memo(
             const wshProblem = connection && !connStatus?.wshenabled && connStatus?.status == "connected";
             const showNoWshButton = wshProblem && !isLocal;
 
+            const handleTerminalLabelContextMenu = React.useCallback(
+                (e: React.MouseEvent) => {
+                    if (!isTerminalBlock || util.isBlank(terminalLabelTrimmed)) {
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const menu: ContextMenuItem[] = [
+                        {
+                            label: t("preview.copyFullPath"),
+                            click: () => util.fireAndForget(() => navigator.clipboard.writeText(terminalLabelTrimmed)),
+                        },
+                    ];
+                    ContextMenuModel.showContextMenu(menu, e);
+                },
+                [isTerminalBlock, t, terminalLabelTrimmed]
+            );
+
             return (
                 <>
                     <div
@@ -208,6 +227,7 @@ export const ConnectionButton = React.memo(
                                               }
                                             : undefined
                                     }
+                                    onContextMenu={handleTerminalLabelContextMenu}
                                 >
                                     {connDisplayName}
                                 </div>

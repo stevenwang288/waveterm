@@ -19,11 +19,34 @@ import { WOS, globalStore } from "@/store/global";
 import { adaptFromReactOrNativeKeyEvent, checkKeyPressed } from "@/util/keyutil";
 import { fireAndForget, useAtomValueSafe } from "@/util/util";
 import clsx from "clsx";
-import { WebviewTag } from "electron";
 import { Atom, PrimitiveAtom, atom, useAtomValue, useSetAtom } from "jotai";
 import { Fragment, createRef, memo, useCallback, useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import "./webview.scss";
+
+type WaveWebviewTag = HTMLElement & {
+    canGoBack: () => boolean;
+    canGoForward: () => boolean;
+    isAudioMuted: () => boolean;
+    setAudioMuted: (muted: boolean) => void;
+    goBack: () => void;
+    goForward: () => void;
+    stop: () => void;
+    reload: () => void;
+    focus: () => void;
+    getURL: () => string;
+    loadURL: (url: string) => Promise<void>;
+    clearHistory: () => void;
+    getWebContentsId?: () => number;
+    setZoomFactor: (factor: number) => void;
+    getZoomFactor: () => number;
+    isDevToolsOpened: () => boolean;
+    openDevTools: () => void;
+    closeDevTools: () => void;
+    findInPage: (text: string, options?: any) => void;
+    stopFindInPage: (action: "clearSelection" | "keepSelection" | "activateSelection") => void;
+    setUserAgent: (userAgent: string) => void;
+};
 
 // User agent strings for mobile emulation
 const USER_AGENT_IPHONE =
@@ -60,7 +83,7 @@ export class WebViewModel implements ViewModel {
     isLoading: PrimitiveAtom<boolean>;
     urlWrapperClassName: PrimitiveAtom<string>;
     refreshIcon: PrimitiveAtom<string>;
-    webviewRef: React.RefObject<WebviewTag>;
+    webviewRef: React.RefObject<WaveWebviewTag>;
     urlInputRef: React.RefObject<HTMLInputElement>;
     nodeModel: BlockNodeModel;
     endIconButtons?: Atom<IconButtonDecl[]>;
@@ -96,7 +119,7 @@ export class WebViewModel implements ViewModel {
         this.viewName = atom("Web");
         this.hideViewName = atom(true);
         this.urlInputRef = createRef<HTMLInputElement>();
-        this.webviewRef = createRef<WebviewTag>();
+        this.webviewRef = createRef<WaveWebviewTag>();
         this.domReady = atom(false);
         this.hideNav = getBlockMetaKeyAtom(blockId, "web:hidenav");
         this.typeaheadOpen = atom(false);

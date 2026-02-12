@@ -4,11 +4,9 @@
 package wshutil
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/wavetermdev/waveterm/pkg/baseds"
-	"github.com/wavetermdev/waveterm/pkg/panichandler"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
 )
 
@@ -43,13 +41,14 @@ func (p *WshRpcProxy) SetPeerInfo(peerInfo string) {
 	p.PeerInfo = peerInfo
 }
 
-func (p *WshRpcProxy) SendRpcMessage(msg []byte, ingressLinkId baseds.LinkId, debugStr string) bool {
+func (p *WshRpcProxy) SendRpcMessage(msg []byte, ingressLinkId baseds.LinkId, debugStr string) (sent bool) {
+	// This method is called by the router in hot paths.
+	// During teardown, the underlying channel may be closed; treat that as a
+	// normal "send failed" condition rather than a panic+stack trace spam.
 	defer func() {
-		panicCtx := "WshRpcProxy.SendRpcMessage"
-		if debugStr != "" {
-			panicCtx = fmt.Sprintf("%s:%s", panicCtx, debugStr)
+		if recover() != nil {
+			sent = false
 		}
-		panichandler.PanicHandler(panicCtx, recover())
 	}()
 	select {
 	case p.ToRemoteCh <- msg:

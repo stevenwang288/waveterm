@@ -59,6 +59,9 @@ You can also install Wave Terminal directly from: [www.waveterm.dev/download](ht
 Use these examples after downloading a release artifact to your current directory.
 
 ```bash
+# Ubuntu/Debian quick install (from this repo's GitHub Releases)
+curl -fsSL https://raw.githubusercontent.com/stevenwang288/waveterm/master/scripts/install-ubuntu.sh | bash
+
 # Ubuntu / Debian (.deb)
 sudo apt-get update
 sudo apt-get install -y ./WaveCN-linux-x64-<version>.deb

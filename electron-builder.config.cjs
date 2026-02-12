@@ -75,10 +75,14 @@ const config = {
     ],
     win: {
         target: ["nsis"],
+        icon: "build/icon.ico",
     },
     nsis: {
         oneClick: false,
-        allowToChangeInstallationDirectory: true
+        allowToChangeInstallationDirectory: true,
+        installerIcon: "build/icon.ico",
+        uninstallerIcon: "build/icon.ico",
+        installerHeaderIcon: "build/icon.ico",
     },
     publish: null,
     beforePack: (context) => {

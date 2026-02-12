@@ -248,6 +248,66 @@ function saveImageFileWithNativeDialog(defaultFileName: string, mimeType: string
 
 const MaxCodexTranslateChars = 20_000;
 
+function getUserCodexHome(): string {
+    const envHome = process.env.CODEX_HOME;
+    if (envHome && envHome.trim()) {
+        return envHome.trim();
+    }
+    return path.join(os.homedir(), ".codex");
+}
+
+type CodexAuthJson = {
+    OPENAI_API_KEY?: string;
+    [key: string]: unknown;
+};
+
+async function readCodexAuthJson(codexHome: string): Promise<CodexAuthJson | null> {
+    try {
+        const authPath = path.join(codexHome, "auth.json");
+        const raw = await fs.promises.readFile(authPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (parsed != null && typeof parsed === "object" && !Array.isArray(parsed)) {
+            return parsed as CodexAuthJson;
+        }
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function codexAuthReadyFromAuthJson(auth: CodexAuthJson | null): boolean {
+    const key = auth?.OPENAI_API_KEY;
+    return typeof key === "string" && key.trim().length > 0;
+}
+
+async function makeCodexHomeForChildProcess(): Promise<{ home: string; cleanup: () => Promise<void> }> {
+    const tmpHome = await fs.promises.mkdtemp(path.join(os.tmpdir(), "wave-codex-home-"));
+    const cleanup = async () => {
+        await fs.promises.rm(tmpHome, { recursive: true, force: true }).catch(() => {});
+    };
+
+    try {
+        const userCodexHome = getUserCodexHome();
+        const userAuth = await readCodexAuthJson(userCodexHome);
+        const envApiKey = process.env.OPENAI_API_KEY;
+        const outAuth: CodexAuthJson = {};
+
+        if (codexAuthReadyFromAuthJson(userAuth)) {
+            outAuth.OPENAI_API_KEY = String(userAuth.OPENAI_API_KEY);
+        } else if (typeof envApiKey === "string" && envApiKey.trim()) {
+            outAuth.OPENAI_API_KEY = envApiKey.trim();
+        }
+
+        if (codexAuthReadyFromAuthJson(outAuth)) {
+            await fs.promises.writeFile(path.join(tmpHome, "auth.json"), JSON.stringify(outAuth, null, 2), "utf8");
+        }
+    } catch {
+        // ignore
+    }
+
+    return { home: tmpHome, cleanup };
+}
+
 async function runCodexTranslate(text: string): Promise<string> {
     if (typeof text !== "string") {
         throw new Error("Invalid text");
@@ -294,10 +354,14 @@ async function runCodexTranslate(text: string): Promise<string> {
 
     let stdout = "";
     let stderr = "";
+    const codexHomeCtx = await makeCodexHomeForChildProcess();
 
     try {
         await new Promise<void>((resolve, reject) => {
-            const proc = child_process.spawn("codex", args, { windowsHide: true });
+            const proc = child_process.spawn("codex", args, {
+                windowsHide: true,
+                env: { ...process.env, CODEX_HOME: codexHomeCtx.home },
+            });
             proc.on("error", (err) => reject(err));
             proc.stdout.on("data", (d) => {
                 stdout += d.toString();
@@ -319,6 +383,7 @@ async function runCodexTranslate(text: string): Promise<string> {
         const result = await fs.promises.readFile(outPath, "utf8");
         return result.replace(/\r\n/g, "\n").trimEnd();
     } finally {
+        await codexHomeCtx.cleanup();
         await fs.promises.unlink(outPath).catch(() => {});
     }
 }
@@ -512,6 +577,15 @@ export function initIpcHandlers() {
 
     electron.ipcMain.handle("codex-translate", async (_event, text: string) => {
         return runCodexTranslate(text);
+    });
+
+    electron.ipcMain.handle("codex-auth-ready", async () => {
+        const envKey = process.env.OPENAI_API_KEY;
+        if (typeof envKey === "string" && envKey.trim()) {
+            return true;
+        }
+        const auth = await readCodexAuthJson(getUserCodexHome());
+        return codexAuthReadyFromAuthJson(auth);
     });
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {

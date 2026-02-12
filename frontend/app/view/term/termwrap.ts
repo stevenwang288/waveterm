@@ -366,6 +366,9 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
             if (terminal.buffer.active.type === "alternate") {
                 terminal.write("\x1b[?1049l");
             }
+            setTimeout(() => {
+                globalStore.set(termWrap.altBufAtom, terminal.buffer.active.type === "alternate");
+            }, 0);
             break;
     }
 
@@ -413,9 +416,11 @@ export class TermWrap {
     nodeModel: BlockNodeModel; // this can be null
     unreadAtom: jotai.PrimitiveAtom<boolean>;
     lastOutputTsAtom: jotai.PrimitiveAtom<number>;
+    altBufAtom: jotai.PrimitiveAtom<boolean>;
     private isReflowReloading: boolean = false;
     private lastReflowReloadTermSize: TermSize | null = null;
     private lastBellNotifyTs: number = 0;
+    private savedScrollPosition: number | null = null; // preserved scroll position for reflow reloads
 
     // IME composition state tracking
     // Prevents duplicate input when switching input methods during composition (e.g., using Capslock)
@@ -449,6 +454,9 @@ export class TermWrap {
         this.lastOutputTsAtom = useBlockAtom(this.blockId, "term:lastoutputts", () => {
             return jotai.atom(0) as jotai.PrimitiveAtom<number>;
         }) as jotai.PrimitiveAtom<number>;
+        this.altBufAtom = useBlockAtom(this.blockId, "term:altbuf", () => {
+            return jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
+        }) as jotai.PrimitiveAtom<boolean>;
         this.ptyOffset = 0;
         this.dataBytesProcessed = 0;
         this.hasResized = false;
@@ -549,6 +557,7 @@ export class TermWrap {
         this.handleResize_debounced = debounce(50, this.handleResize.bind(this));
         this.terminal.open(this.connectElem);
         this.handleResize();
+        this.updateAltBufState();
 
         const wheelLineScrollAtom = getOverrideConfigAtom(this.blockId, "term:wheellinescroll");
         const wheelLineScrollEnabled = globalStore.get(wheelLineScrollAtom) ?? true;
@@ -924,6 +933,7 @@ export class TermWrap {
                 }
                 globalStore.set(this.lastOutputTsAtom, Date.now());
                 this.doTerminalWrite(decodedData, null);
+                this.updateAltBufState();
             } else {
                 this.heldData.push(decodedData);
             }
@@ -931,6 +941,40 @@ export class TermWrap {
             console.log("bad fileop for terminal", msg);
             return;
         }
+    }
+
+    // Preserve the current scroll position so we can restore it after a reflow reload.
+    saveScrollPosition(): void {
+        if (!this.terminal) {
+            return;
+        }
+        const buffer = this.terminal.buffer.active;
+        if (buffer) {
+            this.savedScrollPosition = buffer.viewportY;
+        }
+    }
+
+    // Restore the previously preserved scroll position (best-effort).
+    restoreScrollPosition(): void {
+        if (!this.terminal || this.savedScrollPosition == null) {
+            return;
+        }
+        const buffer = this.terminal.buffer.active;
+        if (buffer) {
+            // 确保目标位置在有效范围内
+            const maxScroll = Math.max(0, buffer.baseY);
+            const targetY = Math.min(Math.max(this.savedScrollPosition, 0), maxScroll);
+            this.terminal.scrollToLine(targetY);
+        }
+        this.savedScrollPosition = null;
+    }
+
+    // Scroll to the bottom (latest output).
+    scrollToBottom(): void {
+        if (!this.terminal) {
+            return;
+        }
+        this.terminal.scrollToBottom();
     }
 
     async reflowHistoryToCurrentWidth(reason: string) {
@@ -946,6 +990,9 @@ export class TermWrap {
         if (this.terminal.buffer.active.type === "alternate") {
             return;
         }
+
+        // Preserve scroll position across reloads so the viewport doesn't jump.
+        this.saveScrollPosition();
         // Avoid downloading/replaying huge histories on the UI thread.
         if (this.ptyOffset > ReflowReloadMaxBytes) {
             console.warn("term reflow reload skipped (history too large)", this.blockId, {
@@ -1000,6 +1047,8 @@ export class TermWrap {
                 await this.doTerminalWrite(deltaData, null);
             }
             this.lastReflowReloadTermSize = { rows: this.terminal.rows, cols: this.terminal.cols };
+            // Restore scroll position after reflow reload.
+            this.restoreScrollPosition();
         } catch (e) {
             console.error("term reflow reload failed", this.blockId, reason, e);
         } finally {
@@ -1057,6 +1106,8 @@ export class TermWrap {
         if (mainFile != null) {
             await this.doTerminalWrite(mainData, null);
         }
+        // After initial load, show the latest output.
+        this.scrollToBottom();
     }
 
     async resyncController(reason: string) {
@@ -1086,6 +1137,14 @@ export class TermWrap {
             this.hasResized = true;
             this.resyncController("initial resize");
         }
+    }
+
+    private updateAltBufState() {
+        const buffer = this.terminal?.buffer?.active;
+        if (!buffer) {
+            return;
+        }
+        globalStore.set(this.altBufAtom, buffer.type === "alternate");
     }
 
     processAndCacheData() {

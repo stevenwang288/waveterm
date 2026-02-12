@@ -28,6 +28,7 @@
     "term:bellindicator": true,
     "term:bellnotify": true,
     "term:copyonselect": true,
+    "term:activitywindowms": 60000,
     "term:durable": false,
     "term:wheellinescroll": true,
     "waveai:showcloudmodes": true,

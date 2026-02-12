@@ -1257,6 +1257,7 @@ declare global {
         "term:localshellopts"?: string[];
         "term:gitbashpath"?: string;
         "term:scrollback"?: number;
+        "term:activitywindowms"?: number;
         "term:copyonselect"?: boolean;
         "term:transparency"?: number;
         "term:allowbracketedpaste"?: boolean;
@@ -1285,6 +1286,7 @@ declare global {
         "markdown:fixedfontsize"?: number;
         "preview:showhiddenfiles"?: boolean;
         "tab:preset"?: string;
+        "tab:sidepanelbuttonorder"?: string[];
         "widget:*"?: boolean;
         "widget:showhelp"?: boolean;
         "window:*"?: boolean;

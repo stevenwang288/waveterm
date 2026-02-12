@@ -43,6 +43,7 @@ const (
 	ConfigKey_TermLocalShellOpts             = "term:localshellopts"
 	ConfigKey_TermGitBashPath                = "term:gitbashpath"
 	ConfigKey_TermScrollback                 = "term:scrollback"
+	ConfigKey_TermActivityWindowMs           = "term:activitywindowms"
 	ConfigKey_TermCopyOnSelect               = "term:copyonselect"
 	ConfigKey_TermTransparency               = "term:transparency"
 	ConfigKey_TermAllowBracketedPaste        = "term:allowbracketedpaste"
@@ -77,6 +78,7 @@ const (
 	ConfigKey_PreviewShowHiddenFiles         = "preview:showhiddenfiles"
 
 	ConfigKey_TabPreset                      = "tab:preset"
+	ConfigKey_TabSidePanelButtonOrder        = "tab:sidepanelbuttonorder"
 
 	ConfigKey_WidgetClear                    = "widget:*"
 	ConfigKey_WidgetShowHelp                 = "widget:showhelp"

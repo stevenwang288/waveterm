@@ -10,7 +10,7 @@ import {
 } from "@/app/block/blockutil";
 import { ConnectionButton } from "@/app/block/connectionbutton";
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { getConnStatusAtom, recordTEvent, useBlockAtom, WOS } from "@/app/store/global";
+import { atoms, getConnStatusAtom, getOverrideConfigAtom, recordTEvent, useBlockAtom, WOS } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -278,6 +278,31 @@ const BlockFrame_Header = ({
         }) as jotai.PrimitiveAtom<number>;
     }, [isTerminalBlock, nodeModel.blockId]);
     const lastOutputTs = util.useAtomValueSafe(lastOutputTsAtom as any) as number;
+    const altBufAtom = React.useMemo(() => {
+        if (!isTerminalBlock) {
+            return null;
+        }
+        return useBlockAtom(nodeModel.blockId, "term:altbuf", () => {
+            return jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
+        }) as jotai.PrimitiveAtom<boolean>;
+    }, [isTerminalBlock, nodeModel.blockId]);
+    const isAltBuf = util.useAtomValueSafe(altBufAtom as any) as boolean;
+
+    const activityWindowMsAtom = React.useMemo(() => {
+        if (!isTerminalBlock) {
+            return null;
+        }
+        return getOverrideConfigAtom(nodeModel.blockId, "term:activitywindowms");
+    }, [isTerminalBlock, nodeModel.blockId]);
+    const activityWindowMsRaw = util.useAtomValueSafe(activityWindowMsAtom as any) as number;
+    const activityWindowMs = React.useMemo(() => {
+        const defaultMs = 60000;
+        const raw = Number(activityWindowMsRaw);
+        if (!Number.isFinite(raw) || raw < 0) {
+            return defaultMs;
+        }
+        return Math.min(Math.floor(raw), 10 * 60 * 1000);
+    }, [activityWindowMsRaw]);
     const [activityTick, setActivityTick] = React.useState(0);
     React.useEffect(() => {
         if (!isTerminalBlock) {
@@ -286,9 +311,12 @@ const BlockFrame_Header = ({
         if (shellState != null) {
             return;
         }
+        if (isAltBuf) {
+            return;
+        }
         const iv = window.setInterval(() => setActivityTick((v) => v + 1), 1000);
         return () => window.clearInterval(iv);
-    }, [isTerminalBlock, shellState]);
+    }, [isAltBuf, isTerminalBlock, shellState]);
     const termLifeClass = React.useMemo(() => {
         if (!isTerminalBlock) {
             return null;
@@ -299,14 +327,16 @@ const BlockFrame_Header = ({
         if (shellState === "ready") {
             return "term-stopped";
         }
+        if (isAltBuf) {
+            return "term-running";
+        }
         // No shell integration. Fall back to recent output activity (best effort).
         const ts = Number(lastOutputTs) || 0;
         if (ts <= 0) {
             return "term-stopped";
         }
-        const ActivityWindowMs = 15000;
-        return Date.now() - ts < ActivityWindowMs ? "term-running" : "term-stopped";
-    }, [activityTick, isTerminalBlock, lastOutputTs, shellState]);
+        return Date.now() - ts < activityWindowMs ? "term-running" : "term-stopped";
+    }, [activityTick, activityWindowMs, isAltBuf, isTerminalBlock, lastOutputTs, shellState]);
     const terminalPathLabel = React.useMemo(() => {
         if (!isTerminalBlock) {
             return undefined;
@@ -315,6 +345,8 @@ const BlockFrame_Header = ({
         const pathLabel = getPathDisplayLabel(cwd);
         return util.isBlank(pathLabel) ? undefined : pathLabel;
     }, [blockData?.meta, isTerminalBlock]);
+
+    const codexAuthReady = util.useAtomValueSafe(atoms.codexAuthReadyAtom) ?? false;
 
     React.useEffect(() => {
         if (magnified && !preview && !prevMagifiedState.current) {
@@ -369,6 +401,7 @@ const BlockFrame_Header = ({
                 "block-frame-default-header",
                 useTermHeader && "!pl-[2px]",
                 termLifeClass,
+                isTerminalBlock && termLifeClass === "term-stopped" && codexAuthReady && "term-ai-ready",
                 isTerminalBlock && hasUnread && "term-unread"
             )}
             data-role="block-header"

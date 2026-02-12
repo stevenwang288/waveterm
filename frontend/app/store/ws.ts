@@ -47,6 +47,7 @@ class WSControl {
     eoOpts: ElectronOverrideOpts;
     noReconnect: boolean = false;
     onOpenTimeoutId: NodeJS.Timeout = null;
+    pingIntervalId: ReturnType<typeof setInterval> | null = null;
 
     constructor(
         baseHostPort: string,
@@ -59,12 +60,52 @@ class WSControl {
         this.stableId = stableId;
         this.open = false;
         this.eoOpts = electronOverrideOpts;
-        setInterval(this.sendPing.bind(this), 5000);
+        this.pingIntervalId = setInterval(this.sendPing.bind(this), 5000);
     }
 
     shutdown() {
         this.noReconnect = true;
-        this.wsConn.close();
+        if (this.onOpenTimeoutId) {
+            clearTimeout(this.onOpenTimeoutId);
+            this.onOpenTimeoutId = null;
+        }
+        if (this.pingIntervalId) {
+            clearInterval(this.pingIntervalId);
+            this.pingIntervalId = null;
+        }
+        this.safeClose("shutdown");
+    }
+
+    onerror(event: any) {
+        // In the browser, an error typically leads to an onclose callback.
+        // In Node (we use the `ws` package when `window` is undefined), an
+        // unhandled 'error' event can terminate the process. Always attach an
+        // error handler to keep the app alive.
+        dlog("connection error", event);
+    }
+
+    private safeSend(raw: string, context: string) {
+        const wsConn = this.wsConn as any;
+        if (!wsConn || typeof wsConn.send !== "function") {
+            return;
+        }
+        try {
+            wsConn.send(raw);
+        } catch (e) {
+            console.log("ws send error", context, e);
+        }
+    }
+
+    private safeClose(context: string) {
+        const wsConn = this.wsConn as any;
+        if (!wsConn || typeof wsConn.close !== "function") {
+            return;
+        }
+        try {
+            wsConn.close();
+        } catch (e) {
+            console.log("ws close error", context, e);
+        }
     }
 
     connectNow(desc: string) {
@@ -91,8 +132,15 @@ class WSControl {
         this.wsConn.onclose = (e: CloseEvent) => {
             this.onclose(e);
         };
-        // turns out onerror is not necessary (onclose always follows onerror)
-        // this.wsConn.onerror = this.onerror;
+        this.wsConn.onerror = (e: Event) => {
+            this.onerror(e);
+        };
+        const wsConnAny = this.wsConn as any;
+        if (typeof wsConnAny.on === "function") {
+            wsConnAny.on("error", (e: any) => {
+                this.onerror(e);
+            });
+        }
     }
 
     reconnect(forceClose?: boolean) {
@@ -101,7 +149,7 @@ class WSControl {
         }
         if (this.open) {
             if (forceClose) {
-                this.wsConn.close(); // this will force a reconnect
+                this.safeClose("reconnect");
             }
             return;
         }
@@ -130,6 +178,7 @@ class WSControl {
         // console.log("close", event);
         if (this.onOpenTimeoutId) {
             clearTimeout(this.onOpenTimeoutId);
+            this.onOpenTimeoutId = null;
         }
         if (event.wasClean) {
             dlog("connection closed");
@@ -173,14 +222,36 @@ class WSControl {
 
     onmessage(event: MessageEvent) {
         let eventData = null;
-        if (event.data != null) {
-            eventData = JSON.parse(event.data);
+        if ((event as any)?.data != null) {
+            const raw = (event as any).data;
+            let rawStr: string = null;
+            if (typeof raw === "string") {
+                rawStr = raw;
+            } else if (raw instanceof ArrayBuffer) {
+                rawStr = new TextDecoder().decode(new Uint8Array(raw));
+            } else if (ArrayBuffer.isView(raw)) {
+                rawStr = new TextDecoder().decode(
+                    new Uint8Array((raw as ArrayBufferView).buffer, (raw as ArrayBufferView).byteOffset, raw.byteLength)
+                );
+            }
+
+            if (rawStr == null) {
+                // Unexpected payload type; ignore to avoid crashing the app.
+                return;
+            }
+
+            try {
+                eventData = JSON.parse(rawStr);
+            } catch (e) {
+                dlog("error parsing ws message", e);
+                return;
+            }
         }
         if (eventData == null) {
             return;
         }
         if (eventData.type == "ping") {
-            this.wsConn.send(JSON.stringify({ type: "pong", stime: Date.now() }));
+            this.safeSend(JSON.stringify({ type: "pong", stime: Date.now() }), "pong");
             return;
         }
         if (eventData.type == "pong") {
@@ -200,7 +271,7 @@ class WSControl {
         if (!this.open) {
             return;
         }
-        this.wsConn.send(JSON.stringify({ type: "ping", stime: Date.now() }));
+        this.safeSend(JSON.stringify({ type: "ping", stime: Date.now() }), "ping");
     }
 
     sendMessage(data: WSCommandType) {
@@ -216,7 +287,7 @@ class WSControl {
         if (byteSize > WarnWebSocketSendSize) {
             console.log("ws message large", byteSize, data.wscommand, msg.substring(0, 100));
         }
-        this.wsConn.send(msg);
+        this.safeSend(msg, "sendMessage");
     }
 
     pushMessage(data: WSCommandType) {

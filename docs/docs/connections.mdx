@@ -10,6 +10,8 @@ import { VersionBadge } from "@site/src/components/versionbadge";
 
 Wave allows users to connect to various machines and unify them together in a way that preserves the unique behavior of each. At the moment, this extends to SSH remote connections, local WSL connections, and AWS S3 buckets.
 
+Connection configuration is stored in `connections.json` (`~/.config/waveterm-zhcn/connections.json`, dev builds use `~/.config/waveterm-zhcn-dev/connections.json`).
+
 ## Access a Connection in a Block
 
 The easiest way to access connections is to click the <i className="fa-sharp fa-laptop"/> icon. From there, you can type one of the following to depending on the connection you want:
@@ -252,7 +254,7 @@ While Wave provides an option disable `wsh` when first connecting to a remote, t
 {
     <... other connections go here ...>,
     "root@wshless" : {
-        "conn:enablewsh": false,
+        "conn:wshenabled": false
     },
     <... other connections go here ...>
 }

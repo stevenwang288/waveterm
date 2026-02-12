@@ -22,6 +22,7 @@ declare global {
         controlShiftDelayAtom: jotai.PrimitiveAtom<boolean>;
         prefersReducedMotionAtom: jotai.Atom<boolean>;
         documentHasFocus: jotai.PrimitiveAtom<boolean>;
+        codexAuthReadyAtom: jotai.PrimitiveAtom<boolean>;
         updaterStatusAtom: jotai.PrimitiveAtom<UpdaterStatus>;
         modalOpen: jotai.PrimitiveAtom<boolean>;
         allConnStatus: jotai.Atom<ConnStatus[]>;
@@ -135,6 +136,7 @@ declare global {
         incrementTermCommands: () => void; // increment-term-commands
         nativePaste: () => void; // native-paste
         codexTranslate: (text: string) => Promise<string>; // codex-translate
+        codexAuthReady: () => Promise<boolean>; // codex-auth-ready
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh

@@ -13,9 +13,9 @@ import { VersionBadge } from "@site/src/components/versionbadge";
 <PlatformSelectorButton />
 <div style={{ marginBottom: 20 }}></div>
 
-Wave's configuration files are located at `~/.config/waveterm/`.
+WaveCN's configuration files are located at `~/.config/waveterm-zhcn/` (dev builds use `~/.config/waveterm-zhcn-dev/`).
 
-The main configuration file is `settings.json` (`~/.config/waveterm/settings.json`).
+The main configuration file is `settings.json` (`~/.config/waveterm-zhcn/settings.json`).
 
 The file is structured as a mostly flat JSON file. Instead of using sub-objects we prefer to
 use ":" as level separators.
@@ -61,6 +61,7 @@ wsh editconfig
 | term:copyonselect                    | bool     | set to false to disable terminal copy-on-select                                                                                                                                                                                                               |
 | term:wheellinescroll                 | bool     | when enabled, mouse wheels scroll the terminal by 1 line per notch (touchpads remain smooth). defaults to true                                                                                                                                              |
 | term:scrollback                      | int      | size of terminal scrollback buffer, max is 10000                                                                                                                                                                                                              |
+| term:activitywindowms                | int      | used to infer a terminal's "running" state when shell integration is unavailable. defaults to 60000 (60s)                                                                                                                                                   |
 | term:theme                           | string   | preset name of terminal theme to apply by default (default is "default-dark")                                                                                                                                                                                 |
 | term:transparency                    | float64  | set the background transparency of terminal theme (default 0.5, 0 = not transparent, 1.0 = fully transparent)                                                                                                                                                 |
 | term:allowbracketedpaste             | bool     | allow bracketed paste mode in terminal (default false)                                                                                                                                                                                                        |
@@ -85,6 +86,7 @@ wsh editconfig
 | autoupdate:installonquit             | bool     | whether to automatically install updates on quit (requires app restart)                                                                                                                                                                                       |
 | autoupdate:channel                   | string   | the auto update channel "latest" (stable builds), or "beta" (updated more frequently) (requires app restart)                                                                                                                                                  |
 | tab:preset                           | string   | a "bg@" preset to automatically apply to new tabs. e.g. `bg@green`. should match the preset key                                                                                                                                                               |
+| tab:sidepanelbuttonorder             | string[] | order of the top bar quick buttons that open the left side panel. defaults to `["ai","favorites","servers","layouts","git"]`                                                                                                                                 |
 | widget:showhelp                      | bool     | whether to show help/tips widgets in right sidebar                                                                                                                                                                                                            |
 | window:transparent                   | bool     | set to true to enable window transparency (cannot be combined with `window:blur`) (macOS and Windows only, requires app restart, see [note on Windows compatibility](https://www.electronjs.org/docs/latest/tutorial/custom-window-styles#limitations))       |
 | window:blur                          | bool     | set to enable window background blurring (cannot be combined with `window:transparent`) (macOS and Windows only, requires app restart, see [note on Windows compatibility](https://www.electronjs.org/docs/latest/tutorial/custom-window-styles#limitations)) |

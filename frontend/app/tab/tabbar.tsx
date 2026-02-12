@@ -3,6 +3,8 @@
 
 import { Button } from "@/app/element/button";
 import { modalsModel } from "@/app/store/modalmodel";
+import { RpcApi } from "@/app/store/wshclientapi";
+import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { SidePanelView, WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { deleteLayoutModelForTab } from "@/layout/index";
 import { atoms, createTab, getApi, globalStore, setActiveTab } from "@/store/global";
@@ -10,7 +12,7 @@ import { isMacOS, isWindows } from "@/util/platformutil";
 import { fireAndForget } from "@/util/util";
 import { useAtomValue } from "jotai";
 import { OverlayScrollbars } from "overlayscrollbars";
-import { createRef, memo, useCallback, useEffect, useRef, useState } from "react";
+import { createRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { debounce } from "throttle-debounce";
 import { IconButton } from "../element/iconbutton";
 import { WorkspaceService } from "../store/services";
@@ -41,6 +43,62 @@ const OSOptions = {
 
 interface TabBarProps {
     workspace: Workspace;
+}
+
+const DefaultSidePanelButtonOrder: SidePanelView[] = ["ai", "favorites", "servers", "layouts", "git"];
+
+function normalizeSidePanelButtonOrder(raw: unknown): SidePanelView[] {
+    const normalized: SidePanelView[] = [];
+    if (Array.isArray(raw)) {
+        for (const item of raw) {
+            if (typeof item !== "string") {
+                continue;
+            }
+            const view = item as SidePanelView;
+            if (!DefaultSidePanelButtonOrder.includes(view)) {
+                continue;
+            }
+            if (!normalized.includes(view)) {
+                normalized.push(view);
+            }
+        }
+    }
+    for (const view of DefaultSidePanelButtonOrder) {
+        if (!normalized.includes(view)) {
+            normalized.push(view);
+        }
+    }
+    return normalized;
+}
+
+function sidePanelButtonOrderIsEqual(a: SidePanelView[], b: SidePanelView[]): boolean {
+    if (a === b) {
+        return true;
+    }
+    if (a == null || b == null) {
+        return false;
+    }
+    if (a.length !== b.length) {
+        return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function moveSidePanelButton(order: SidePanelView[], dragging: SidePanelView, over: SidePanelView): SidePanelView[] {
+    const fromIndex = order.indexOf(dragging);
+    const toIndex = order.indexOf(over);
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+        return order;
+    }
+    const next = [...order];
+    next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, dragging);
+    return next;
 }
 
 const SidePanelToggleButton = memo(
@@ -250,6 +308,99 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const isFullScreen = useAtomValue(atoms.isFullScreen);
     const zoomFactor = useAtomValue(atoms.zoomFactorAtom);
     const settings = useAtomValue(atoms.settingsAtom);
+    const sidePanelOrderSetting = settings?.["tab:sidepanelbuttonorder"];
+
+    const [sidePanelButtonOrder, setSidePanelButtonOrder] = useState<SidePanelView[]>(() =>
+        normalizeSidePanelButtonOrder(sidePanelOrderSetting)
+    );
+    const sidePanelButtonOrderRef = useRef<SidePanelView[]>(sidePanelButtonOrder);
+    useEffect(() => {
+        sidePanelButtonOrderRef.current = sidePanelButtonOrder;
+    }, [sidePanelButtonOrder]);
+
+    const draggingSidePanelButtonRef = useRef<SidePanelView | null>(null);
+    const isDraggingSidePanelButtonsRef = useRef(false);
+    const didDropSidePanelButtonsRef = useRef(false);
+
+    useEffect(() => {
+        if (isDraggingSidePanelButtonsRef.current) {
+            return;
+        }
+        const normalized = normalizeSidePanelButtonOrder(sidePanelOrderSetting);
+        setSidePanelButtonOrder((prev) => (sidePanelButtonOrderIsEqual(prev, normalized) ? prev : normalized));
+    }, [sidePanelOrderSetting]);
+
+    const persistSidePanelButtonOrder = useCallback(() => {
+        const order = sidePanelButtonOrderRef.current;
+        fireAndForget(async () => {
+            try {
+                await RpcApi.SetConfigCommand(TabRpcClient, { "tab:sidepanelbuttonorder": order });
+            } catch (e) {
+                console.warn("failed to persist side panel button order", e);
+            }
+        });
+    }, []);
+
+    const handleSidePanelButtonDragStart = useCallback((view: SidePanelView, e: React.DragEvent<HTMLDivElement>) => {
+        isDraggingSidePanelButtonsRef.current = true;
+        didDropSidePanelButtonsRef.current = false;
+        draggingSidePanelButtonRef.current = view;
+        try {
+            e.dataTransfer.setData("text/plain", view);
+        } catch {
+            // ignore
+        }
+        e.dataTransfer.effectAllowed = "move";
+    }, []);
+
+    const handleSidePanelButtonDragOver = useCallback((over: SidePanelView, e: React.DragEvent<HTMLDivElement>) => {
+        const dragging = draggingSidePanelButtonRef.current;
+        if (!dragging || dragging === over) {
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setSidePanelButtonOrder((prev) => moveSidePanelButton(prev, dragging, over));
+    }, []);
+
+    const handleSidePanelButtonDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+        if (!isDraggingSidePanelButtonsRef.current) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        didDropSidePanelButtonsRef.current = true;
+        persistSidePanelButtonOrder();
+        draggingSidePanelButtonRef.current = null;
+        isDraggingSidePanelButtonsRef.current = false;
+    }, [persistSidePanelButtonOrder]);
+
+    const handleSidePanelButtonDragEnd = useCallback(() => {
+        if (!isDraggingSidePanelButtonsRef.current) {
+            return;
+        }
+        if (!didDropSidePanelButtonsRef.current) {
+            persistSidePanelButtonOrder();
+        }
+        draggingSidePanelButtonRef.current = null;
+        isDraggingSidePanelButtonsRef.current = false;
+        didDropSidePanelButtonsRef.current = false;
+    }, [persistSidePanelButtonOrder]);
+
+    const sidePanelButtonRefs: Record<SidePanelView, React.RefObject<HTMLDivElement>> = {
+        ai: aiButtonRef,
+        favorites: favoritesButtonRef,
+        servers: serversButtonRef,
+        layouts: layoutButtonRef,
+        git: gitButtonRef,
+    };
+    const sidePanelButtonComponents: Record<SidePanelView, React.ComponentType> = {
+        ai: WaveAIButton,
+        favorites: FavoritesQuickButton,
+        servers: ServersQuickButton,
+        layouts: LayoutQuickButton,
+        git: GitQuickButton,
+    };
 
     let prevDelta: number;
     let prevDragDirection: string;
@@ -721,21 +872,24 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                     <i className="fa fa-ellipsis" />
                 </div>
             )}
-            <div ref={aiButtonRef}>
-                <WaveAIButton />
-            </div>
-            <div ref={favoritesButtonRef}>
-                <FavoritesQuickButton />
-            </div>
-            <div ref={serversButtonRef}>
-                <ServersQuickButton />
-            </div>
-            <div ref={layoutButtonRef}>
-                <LayoutQuickButton />
-            </div>
-            <div ref={gitButtonRef}>
-                <GitQuickButton />
-            </div>
+            {sidePanelButtonOrder.map((view) => {
+                const Btn = sidePanelButtonComponents[view];
+                const wrapperRef = sidePanelButtonRefs[view];
+                return (
+                    <div
+                        key={view}
+                        ref={wrapperRef}
+                        draggable
+                        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                        onDragStart={(e) => handleSidePanelButtonDragStart(view, e)}
+                        onDragOver={(e) => handleSidePanelButtonDragOver(view, e)}
+                        onDrop={handleSidePanelButtonDrop}
+                        onDragEnd={handleSidePanelButtonDragEnd}
+                    >
+                        <Btn />
+                    </div>
+                );
+            })}
             <WorkspaceSwitcher ref={workspaceSwitcherRef} />
             <div className="tab-bar" ref={tabBarRef} data-overlayscrollbars-initialize>
                 <div className="tabs-wrapper" ref={tabsWrapperRef} style={{ width: `${tabsWrapperWidth}px` }}>

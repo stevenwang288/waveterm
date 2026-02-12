@@ -159,6 +159,25 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
         });
     }
 
+    const codexAuthReadyAtom = atom(false) as PrimitiveAtom<boolean>;
+    if (globalThis.window != null) {
+        const refreshCodexAuthReady = async () => {
+            try {
+                const ready = await getApi().codexAuthReady();
+                globalStore.set(codexAuthReadyAtom, !!ready);
+            } catch {
+                globalStore.set(codexAuthReadyAtom, false);
+            }
+        };
+        fireAndForget(refreshCodexAuthReady);
+        window.addEventListener("focus", () => {
+            fireAndForget(refreshCodexAuthReady);
+        });
+        window.setInterval(() => {
+            fireAndForget(refreshCodexAuthReady);
+        }, 30_000);
+    }
+
     const modalOpen = atom(false);
     const allConnStatusAtom = atom<ConnStatus[]>((get) => {
         const connStatusMap = get(ConnStatusMapAtom);
@@ -188,6 +207,7 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
         updaterStatusAtom,
         prefersReducedMotionAtom,
         documentHasFocus: documentHasFocusAtom,
+        codexAuthReadyAtom,
         modalOpen,
         allConnStatus: allConnStatusAtom,
         flashErrors: flashErrorsAtom,

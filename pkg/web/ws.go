@@ -195,6 +195,7 @@ func WriteLoop(conn *websocket.Conn, outputCh chan any, closeCh chan any, routeI
 					break
 				}
 			}
+			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWaitTimeout)) // no error
 			err = conn.WriteMessage(websocket.TextMessage, barr)
 			if err != nil {
 				conn.Close()
