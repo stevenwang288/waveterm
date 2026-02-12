@@ -41,6 +41,9 @@ const dlog = debug("wave:termwrap");
 const TermFileName = "term";
 const TermCacheFileName = "cache:term:full";
 const MinDataProcessedForCache = 100 * 1024;
+const TerminalWriteBatchMaxBytes = 256 * 1024;
+const TerminalStateSaveMinQuietMs = 1500;
+const TerminalStateSaveMinIntervalMs = 30_000;
 export const SupportsImageInput = true;
 
 // detect webgl support
@@ -89,6 +92,12 @@ export class TermWrap {
     shellIntegrationStatusAtom: jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     nodeModel: BlockNodeModel; // this can be null
+    private pendingWriteChunks: Uint8Array[] = [];
+    private pendingWriteHead: number = 0;
+    private pendingWriteBytes: number = 0;
+    private writeLoopRunning: boolean = false;
+    private writeSequence: number = 0;
+    private lastTerminalStateSaveTs: number = 0;
 
     // IME composition state tracking
     // Prevents duplicate input when switching input methods during composition (e.g., using Capslock)
@@ -383,10 +392,14 @@ export class TermWrap {
         if (msg.fileop == "truncate") {
             this.terminal.clear();
             this.heldData = [];
+            this.writeSequence++;
+            this.pendingWriteChunks = [];
+            this.pendingWriteHead = 0;
+            this.pendingWriteBytes = 0;
         } else if (msg.fileop == "append") {
             const decodedData = base64ToArray(msg.data64);
             if (this.loaded) {
-                this.doTerminalWrite(decodedData, null);
+                this.enqueueTerminalBytes(decodedData);
             } else {
                 this.heldData.push(decodedData);
             }
@@ -414,6 +427,94 @@ export class TermWrap {
         return prtn;
     }
 
+    private enqueueTerminalBytes(data: Uint8Array) {
+        if (!data || data.length === 0) {
+            return;
+        }
+        this.pendingWriteChunks.push(data);
+        this.pendingWriteBytes += data.length;
+        fireAndForget(() => this.flushTerminalWriteQueue());
+    }
+
+    private takeWriteBatch(): Uint8Array | null {
+        if (this.pendingWriteHead >= this.pendingWriteChunks.length) {
+            // Compact to reclaim memory when we’ve advanced through the queue.
+            this.pendingWriteChunks = [];
+            this.pendingWriteHead = 0;
+            this.pendingWriteBytes = 0;
+            return null;
+        }
+
+        const start = this.pendingWriteHead;
+        let end = start;
+        let totalBytes = 0;
+        while (end < this.pendingWriteChunks.length) {
+            const next = this.pendingWriteChunks[end];
+            if (totalBytes > 0 && totalBytes + next.length > TerminalWriteBatchMaxBytes) {
+                break;
+            }
+            totalBytes += next.length;
+            end++;
+            if (totalBytes >= TerminalWriteBatchMaxBytes) {
+                break;
+            }
+        }
+
+        if (end <= start) {
+            return null;
+        }
+
+        let batch: Uint8Array;
+        if (end - start === 1) {
+            batch = this.pendingWriteChunks[start];
+        } else {
+            const combined = new Uint8Array(totalBytes);
+            let offset = 0;
+            for (let i = start; i < end; i++) {
+                const chunk = this.pendingWriteChunks[i];
+                combined.set(chunk, offset);
+                offset += chunk.length;
+            }
+            batch = combined;
+        }
+
+        this.pendingWriteHead = end;
+        this.pendingWriteBytes = Math.max(0, this.pendingWriteBytes - totalBytes);
+
+        // Periodic compaction to avoid O(n) growth due to head advancement.
+        if (this.pendingWriteHead > 1024) {
+            this.pendingWriteChunks = this.pendingWriteChunks.slice(this.pendingWriteHead);
+            this.pendingWriteHead = 0;
+        }
+
+        return batch;
+    }
+
+    private async flushTerminalWriteQueue() {
+        if (!this.loaded) {
+            return;
+        }
+        if (this.writeLoopRunning) {
+            return;
+        }
+
+        const seq = this.writeSequence;
+        this.writeLoopRunning = true;
+        try {
+            while (seq === this.writeSequence) {
+                const batch = this.takeWriteBatch();
+                if (!batch) {
+                    break;
+                }
+                await this.doTerminalWrite(batch, null);
+            }
+        } catch (e) {
+            console.error("terminal write loop failed", this.blockId, e);
+        } finally {
+            this.writeLoopRunning = false;
+        }
+    }
+
     async loadInitialTerminalData(): Promise<void> {
         const startTs = Date.now();
         const zoneId = this.getZoneId();
@@ -433,7 +534,7 @@ export class TermWrap {
                     this.terminal.resize(fileTermSize.cols, fileTermSize.rows);
                     didResize = true;
                 }
-                this.doTerminalWrite(cacheData, ptyOffset);
+                await this.doTerminalWrite(cacheData, ptyOffset);
                 if (didResize) {
                     this.terminal.resize(curTermSize.cols, curTermSize.rows);
                 }
@@ -481,9 +582,20 @@ export class TermWrap {
         if (this.dataBytesProcessed < MinDataProcessedForCache) {
             return;
         }
+        const now = Date.now();
+        if (now - this.lastUpdated < TerminalStateSaveMinQuietMs) {
+            return;
+        }
+        if (this.writeLoopRunning || this.pendingWriteBytes > 0) {
+            return;
+        }
+        if (this.lastTerminalStateSaveTs > 0 && now - this.lastTerminalStateSaveTs < TerminalStateSaveMinIntervalMs) {
+            return;
+        }
         const serializedOutput = this.serializeAddon.serialize();
         const termSize: TermSize = { rows: this.terminal.rows, cols: this.terminal.cols };
         console.log("idle timeout term", this.dataBytesProcessed, serializedOutput.length, termSize);
+        this.lastTerminalStateSaveTs = now;
         fireAndForget(() =>
             services.BlockService.SaveTerminalState(this.blockId, serializedOutput, "full", this.ptyOffset, termSize)
         );
