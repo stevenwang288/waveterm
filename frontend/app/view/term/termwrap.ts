@@ -512,6 +512,9 @@ export class TermWrap {
             console.error("terminal write loop failed", this.blockId, e);
         } finally {
             this.writeLoopRunning = false;
+            if (this.pendingWriteBytes > 0) {
+                fireAndForget(() => this.flushTerminalWriteQueue());
+            }
         }
     }
 
