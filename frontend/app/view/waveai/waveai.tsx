@@ -16,7 +16,6 @@ import { atoms, createBlock, fetchWaveFile, getApi, globalStore, WOS } from "@/s
 import { BlockService, ObjectService } from "@/store/services";
 import { adaptFromReactOrNativeKeyEvent, checkKeyPressed } from "@/util/keyutil";
 import { fireAndForget, isBlank, makeIconClass, mergeMeta } from "@/util/util";
-import i18next from "@/app/i18n";
 import { atom, Atom, PrimitiveAtom, useAtomValue, WritableAtom } from "jotai";
 import { splitAtom } from "jotai/utils";
 import type { OverlayScrollbars } from "overlayscrollbars";
@@ -104,7 +103,7 @@ export class WaveAiModel implements ViewModel {
         this.viewType = "waveai";
         this.blockAtom = WOS.getWaveObjectAtom<Block>(`block:${blockId}`);
         this.viewIcon = atom("sparkles");
-        this.viewName = atom(i18next.t("waveai.title"));
+        this.viewName = atom("Wave AI");
         this.messagesAtom = atom([]);
         this.messagesSplitAtom = splitAtom(this.messagesAtom);
         this.latestMessageAtom = atom((get) => get(this.messagesAtom).slice(-1)[0]);
@@ -215,7 +214,7 @@ export class WaveAiModel implements ViewModel {
                     viewTextChildren.push({
                         elemtype: "iconbutton",
                         icon: "globe",
-                        title: i18next.t("waveai.provider.remoteAnthropic", { model: aiOpts.model }),
+                        title: `Using Remote Anthropic API (${aiOpts.model})`,
                         noAction: true,
                     });
                     break;
@@ -223,7 +222,7 @@ export class WaveAiModel implements ViewModel {
                     viewTextChildren.push({
                         elemtype: "iconbutton",
                         icon: "globe",
-                        title: i18next.t("waveai.provider.remotePerplexity", { model: aiOpts.model }),
+                        title: `Using Remote Perplexity API (${aiOpts.model})`,
                         noAction: true,
                     });
                     break;
@@ -232,24 +231,24 @@ export class WaveAiModel implements ViewModel {
                         viewTextChildren.push({
                             elemtype: "iconbutton",
                             icon: "cloud",
-                            title: i18next.t("waveai.provider.waveProxy", { model: "gpt-5-mini" }),
+                            title: "Using Wave's AI Proxy (gpt-5-mini)",
                             noAction: true,
                         });
                     } else {
-                        const baseUrl = aiOpts.baseurl ?? i18next.t("waveai.provider.openAiDefaultEndpoint");
+                        const baseUrl = aiOpts.baseurl ?? "OpenAI Default Endpoint";
                         const modelName = aiOpts.model;
                         if (baseUrl.startsWith("http://localhost") || baseUrl.startsWith("http://127.0.0.1")) {
                             viewTextChildren.push({
                                 elemtype: "iconbutton",
                                 icon: "location-dot",
-                                title: i18next.t("waveai.provider.localModel", { baseUrl, model: modelName }),
+                                title: `Using Local Model @ ${baseUrl} (${modelName})`,
                                 noAction: true,
                             });
                         } else {
                             viewTextChildren.push({
                                 elemtype: "iconbutton",
                                 icon: "globe",
-                                title: i18next.t("waveai.provider.remoteModel", { baseUrl, model: modelName }),
+                                title: `Using Remote Model @ ${baseUrl} (${modelName})`,
                                 noAction: true,
                             });
                         }
@@ -271,7 +270,7 @@ export class WaveAiModel implements ViewModel {
                         }) as MenuItem
                 );
             dropdownItems.push({
-                label: i18next.t("waveai.presets.add"),
+                label: "Add AI preset...",
                 onClick: () => {
                     fireAndForget(async () => {
                         const path = `${getApi().getConfigDir()}/presets/ai.json`;
@@ -288,7 +287,7 @@ export class WaveAiModel implements ViewModel {
             viewTextChildren.push({
                 elemtype: "menubutton",
                 text: presetName,
-                title: i18next.t("waveai.presets.selectTitle"),
+                title: "Select AI Configuration",
                 items: dropdownItems,
             });
             return viewTextChildren;
@@ -297,7 +296,7 @@ export class WaveAiModel implements ViewModel {
             let clearButton: IconButtonDecl = {
                 elemtype: "iconbutton",
                 icon: "delete-left",
-                title: i18next.t("waveai.history.clear"),
+                title: "Clear Chat History",
                 click: this.clearMessages.bind(this),
             };
             return [clearButton];
@@ -687,7 +686,7 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 onChange={onChange}
                 onKeyDown={onKeyDown}
                 style={{ fontSize: baseFontSize }}
-                placeholder={i18next.t("waveai.placeholder")}
+                placeholder="Ask anything..."
                 value={value}
             ></textarea>
         );
@@ -851,11 +850,11 @@ const WaveAi = ({ model }: { model: WaveAiModel; blockId: string }) => {
 
     let buttonClass = "waveai-submit-button";
     let buttonIcon = makeIconClass("arrow-up", false);
-    let buttonTitle = i18next.t("waveai.actions.run");
+    let buttonTitle = "run";
     if (locked) {
         buttonClass = "waveai-submit-button stop";
         buttonIcon = makeIconClass("stop", false);
-        buttonTitle = i18next.t("waveai.actions.stop");
+        buttonTitle = "stop";
     }
     const handleButtonPress = useCallback(() => {
         if (locked) {
@@ -875,14 +874,14 @@ const WaveAi = ({ model }: { model: WaveAiModel; blockId: string }) => {
                 <div className="flex items-start gap-3 px-4 py-2 bg-orange-500/25 border-b border-orange-500/50 text-sm">
                     <i className="fa-sharp fa-solid fa-triangle-exclamation text-orange-300 mt-0.5"></i>
                     <span className="text-primary/90">
-                        {i18next.t("waveai.proxyDeprecated.prefix")}{" "}
+                        Wave AI Proxy is deprecated and will be removed. Please use the new{" "}
                         <button
                             onClick={handleOpenAIPanel}
                             className="text-accent hover:text-accent/80 underline cursor-pointer"
                         >
-                            {i18next.t("waveai.proxyDeprecated.panel")}
+                            Wave AI panel
                         </button>{" "}
-                        {i18next.t("waveai.proxyDeprecated.suffix")}
+                        instead (better model, terminal integration, tool support, image uploads).
                     </span>
                 </div>
             )}

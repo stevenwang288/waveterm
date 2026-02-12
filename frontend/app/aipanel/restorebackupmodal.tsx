@@ -5,7 +5,6 @@ import { Modal } from "@/app/modals/modal";
 import { recordTEvent } from "@/app/store/global";
 import { useAtomValue } from "jotai";
 import { memo } from "react";
-import { Trans, useTranslation } from "react-i18next";
 import { WaveUIMessagePart } from "./aitypes";
 import { WaveAIModel } from "./waveai-model";
 
@@ -14,7 +13,6 @@ interface RestoreBackupModalProps {
 }
 
 export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
-    const { t } = useTranslation();
     const model = WaveAIModel.getInstance();
     const toolData = part.data;
     const status = useAtomValue(model.restoreBackupStatus);
@@ -42,22 +40,12 @@ export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
 
     if (status === "success") {
         return (
-            <Modal
-                className="restore-backup-modal pb-5 pr-5"
-                onClose={handleClose}
-                onOk={handleClose}
-                okLabel={t("common.close")}
-            >
+            <Modal className="restore-backup-modal pb-5 pr-5" onClose={handleClose} onOk={handleClose} okLabel="Close">
                 <div className="flex flex-col gap-4 pt-4 pb-4 max-w-xl">
-                    <div className="font-semibold text-lg text-accent">
-                        {t("aipanel.restoreBackup.successTitle")}
-                    </div>
+                    <div className="font-semibold text-lg text-green-500">Backup Successfully Restored</div>
                     <div className="text-sm text-gray-300 leading-relaxed">
-                        <Trans
-                            i18nKey="aipanel.restoreBackup.successDesc"
-                            values={{ filename: toolData.inputfilename }}
-                            components={[<span key="filename" className="font-mono text-white break-all" />]}
-                        />
+                        The file <span className="font-mono text-white break-all">{toolData.inputfilename}</span> has
+                        been restored to its previous state.
                     </div>
                 </div>
             </Modal>
@@ -66,16 +54,11 @@ export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
 
     if (status === "error") {
         return (
-            <Modal
-                className="restore-backup-modal pb-5 pr-5"
-                onClose={handleClose}
-                onOk={handleClose}
-                okLabel={t("common.close")}
-            >
+            <Modal className="restore-backup-modal pb-5 pr-5" onClose={handleClose} onOk={handleClose} okLabel="Close">
                 <div className="flex flex-col gap-4 pt-4 pb-4 max-w-xl">
-                    <div className="font-semibold text-lg text-red-500">{t("aipanel.restoreBackup.errorTitle")}</div>
+                    <div className="font-semibold text-lg text-red-500">Failed to Restore Backup</div>
                     <div className="text-sm text-gray-300 leading-relaxed">
-                        {t("aipanel.restoreBackup.errorDesc")}
+                        An error occurred while restoring the backup:
                     </div>
                     <div className="text-sm text-red-400 font-mono bg-zinc-800 p-3 rounded break-all">{error}</div>
                 </div>
@@ -91,25 +74,20 @@ export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
             onClose={handleCancel}
             onCancel={handleCancel}
             onOk={handleConfirm}
-            okLabel={isProcessing ? t("aipanel.restoreBackup.restoring") : t("aipanel.restoreBackup.confirmRestore")}
-            cancelLabel={t("common.cancel")}
+            okLabel={isProcessing ? "Restoring..." : "Confirm Restore"}
+            cancelLabel="Cancel"
             okDisabled={isProcessing}
             cancelDisabled={isProcessing}
         >
             <div className="flex flex-col gap-4 pt-4 pb-4 max-w-xl">
-                <div className="font-semibold text-lg">{t("aipanel.restoreBackup.confirmTitle")}</div>
+                <div className="font-semibold text-lg">Restore File Backup</div>
                 <div className="text-sm text-gray-300 leading-relaxed">
-                    <Trans
-                        i18nKey="aipanel.restoreBackup.confirmDesc"
-                        values={{
-                            filename: toolData.inputfilename,
-                            timestamp: toolData.runts ? ` (${formatTimestamp(toolData.runts)})` : "",
-                        }}
-                        components={[<span key="filename" className="font-mono text-white break-all" />]}
-                    />
+                    This will restore <span className="font-mono text-white break-all">{toolData.inputfilename}</span>{" "}
+                    to its state before this edit was made
+                    {toolData.runts && <span> ({formatTimestamp(toolData.runts)})</span>}.
                 </div>
                 <div className="text-sm text-gray-300 leading-relaxed">
-                    {t("aipanel.restoreBackup.confirmWarning")}
+                    Any changes made by this edit and subsequent edits will be lost.
                 </div>
             </div>
         </Modal>

@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/uctypes"
-	"github.com/wavetermdev/waveterm/pkg/util/fileutil"
 )
 
 func TestReadDirCallback(t *testing.T) {
@@ -65,16 +64,16 @@ func TestReadDirCallback(t *testing.T) {
 		t.Errorf("Expected 3 entries, got %d", entryCount)
 	}
 
-	entries, ok := resultMap["entries"].([]fileutil.DirEntryOut)
+	entries, ok := resultMap["entries"].([]map[string]any)
 	if !ok {
-		t.Fatalf("entries is not a slice of DirEntryOut")
+		t.Fatalf("entries is not a slice of maps")
 	}
 
 	// Check that we have the expected entries
 	foundFiles := 0
 	foundDirs := 0
 	for _, entry := range entries {
-		if entry.Dir {
+		if entry["is_dir"].(bool) {
 			foundDirs++
 		} else {
 			foundFiles++
@@ -209,12 +208,12 @@ func TestReadDirSortBeforeTruncate(t *testing.T) {
 	}
 
 	resultMap := result.(map[string]any)
-	entries := resultMap["entries"].([]fileutil.DirEntryOut)
+	entries := resultMap["entries"].([]map[string]any)
 
 	// Count directories in the result
 	dirCount := 0
 	for _, entry := range entries {
-		if entry.Dir {
+		if entry["is_dir"].(bool) {
 			dirCount++
 		}
 	}
@@ -226,7 +225,7 @@ func TestReadDirSortBeforeTruncate(t *testing.T) {
 
 	// First 3 entries should be directories
 	for i := 0; i < 3; i++ {
-		if !entries[i].Dir {
+		if !entries[i]["is_dir"].(bool) {
 			t.Errorf("Expected entry %d to be a directory, but it was a file", i)
 		}
 	}

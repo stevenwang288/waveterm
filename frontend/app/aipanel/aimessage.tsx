@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { WaveStreamdown } from "@/app/element/streamdown";
-import i18next from "@/app/i18n";
 import { cn } from "@/util/util";
 import { memo, useEffect, useRef } from "react";
 import { getFileIcon } from "./ai-utils";
@@ -13,7 +12,7 @@ import { WaveAIModel } from "./waveai-model";
 
 const AIThinking = memo(
     ({
-        message = i18next.t("aipanel.aiThinking"),
+        message = "AI is thinking...",
         reasoningText,
         isWaitingApproval = false,
     }: {
@@ -191,14 +190,14 @@ const getThinkingMessage = (
     );
 
     if (hasPendingApprovals) {
-        return { message: i18next.t("aipanel.waitingForToolApprovals"), isWaitingApproval: true };
+        return { message: "Waiting for Tool Approvals...", isWaitingApproval: true };
     }
 
     const lastPart = parts[parts.length - 1];
 
     if (lastPart?.type === "reasoning") {
         const reasoningContent = lastPart.text || "";
-        return { message: i18next.t("aipanel.aiThinking"), reasoningText: reasoningContent };
+        return { message: "AI is thinking...", reasoningText: reasoningContent };
     }
 
     if (lastPart?.type === "text" && lastPart.text) {
@@ -229,7 +228,7 @@ export const AIMessage = memo(({ message, isStreaming }: AIMessageProps) => {
                 )}
             >
                 {displayParts.length === 0 && !isStreaming && !thinkingData ? (
-                    <div className="whitespace-pre-wrap break-words">{i18next.t("aipanel.noTextContent")}</div>
+                    <div className="whitespace-pre-wrap break-words">(no text content)</div>
                 ) : (
                     <>
                         {groupedParts.map((group, index: number) =>

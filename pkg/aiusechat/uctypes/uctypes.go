@@ -154,6 +154,10 @@ const (
 	ThinkingLevelLow    = "low"
 	ThinkingLevelMedium = "medium"
 	ThinkingLevelHigh   = "high"
+
+	VerbosityLevelLow    = "low"
+	VerbosityLevelMedium = "medium"
+	VerbosityLevelHigh   = "high"
 )
 
 const (
@@ -278,6 +282,7 @@ type AIOptsType struct {
 	MaxTokens     int      `json:"maxtokens,omitempty"`
 	TimeoutMs     int      `json:"timeoutms,omitempty"`
 	ThinkingLevel string   `json:"thinkinglevel,omitempty"` // ThinkingLevelLow, ThinkingLevelMedium, or ThinkingLevelHigh
+	Verbosity     string   `json:"verbosity,omitempty"`     // Text verbosity level (OpenAI Responses API only, ignored by other backends)
 	AIMode        string   `json:"aimode,omitempty"`
 	Capabilities  []string `json:"capabilities,omitempty"`
 	WaveAIPremium bool     `json:"waveaipremium,omitempty"`

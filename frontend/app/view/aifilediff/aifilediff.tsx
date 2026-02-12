@@ -8,10 +8,8 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { base64ToString } from "@/util/util";
 import { DiffViewer } from "@/app/view/codeeditor/diffviewer";
 import { globalStore, WOS } from "@/store/global";
-import i18next from "i18next";
 import * as jotai from "jotai";
 import { useEffect } from "react";
-import { useTranslation } from "react-i18next";
 
 type DiffData = {
     original: string;
@@ -41,7 +39,7 @@ export class AiFileDiffViewModel implements ViewModel {
         this.errorAtom = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
         this.loadingAtom = jotai.atom<boolean>(true);
         this.viewIcon = jotai.atom("file-lines");
-        this.viewName = jotai.atom(i18next.t("aifilediff.viewName"));
+        this.viewName = jotai.atom("AI Diff Viewer");
         this.viewText = jotai.atom((get) => {
             const diffData = get(this.diffDataAtom);
             return diffData?.fileName ?? "";
@@ -58,7 +56,6 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
     const diffData = jotai.useAtomValue(model.diffDataAtom);
     const error = jotai.useAtomValue(model.errorAtom);
     const loading = jotai.useAtomValue(model.loadingAtom);
-    const { t } = useTranslation();
 
     useEffect(() => {
         async function loadDiffData() {
@@ -67,13 +64,13 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
             const fileName = blockData?.meta?.file;
 
             if (!chatId || !toolCallId) {
-                globalStore.set(model.errorAtom, t("aifilediff.errors.missingIds"));
+                globalStore.set(model.errorAtom, "Missing chatId or toolCallId in block metadata");
                 globalStore.set(model.loadingAtom, false);
                 return;
             }
 
             if (!fileName) {
-                globalStore.set(model.errorAtom, t("aifilediff.errors.missingFileName"));
+                globalStore.set(model.errorAtom, "Missing file name in block metadata");
                 globalStore.set(model.loadingAtom, false);
                 return;
             }
@@ -85,7 +82,7 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
                 });
 
                 if (!result) {
-                    globalStore.set(model.errorAtom, t("aifilediff.errors.noDataReturned"));
+                    globalStore.set(model.errorAtom, "No diff data returned from server");
                     globalStore.set(model.loadingAtom, false);
                     return;
                 }
@@ -101,19 +98,18 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
                 globalStore.set(model.loadingAtom, false);
             } catch (e) {
                 console.error("Error loading diff data:", e);
-                const errorMessage = e instanceof Error ? e.message : String(e);
-                globalStore.set(model.errorAtom, t("aifilediff.errors.loadFailed", { errorMessage }));
+                globalStore.set(model.errorAtom, `Error loading diff data: ${e.message}`);
                 globalStore.set(model.loadingAtom, false);
             }
         }
 
         loadDiffData();
-    }, [blockData?.meta?.["aifilediff:chatid"], blockData?.meta?.["aifilediff:toolcallid"], blockData?.meta?.file, t]);
+    }, [blockData?.meta?.["aifilediff:chatid"], blockData?.meta?.["aifilediff:toolcallid"], blockData?.meta?.file]);
 
     if (loading) {
         return (
             <div className="flex items-center justify-center w-full h-full">
-                <div className="text-secondary">{t("aifilediff.loading")}</div>
+                <div className="text-secondary">Loading diff...</div>
             </div>
         );
     }
@@ -129,7 +125,7 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
     if (!diffData) {
         return (
             <div className="flex items-center justify-center w-full h-full">
-                <div className="text-secondary">{t("aifilediff.noDataAvailable")}</div>
+                <div className="text-secondary">No diff data available</div>
             </div>
         );
     }
