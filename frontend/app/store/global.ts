@@ -174,6 +174,9 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
             fireAndForget(refreshCodexAuthReady);
         });
         window.setInterval(() => {
+            if (!document.hasFocus()) {
+                return;
+            }
             fireAndForget(refreshCodexAuthReady);
         }, 30_000);
     }

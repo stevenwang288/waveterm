@@ -303,6 +303,7 @@ const BlockFrame_Header = ({
         }
         return Math.min(Math.floor(raw), 10 * 60 * 1000);
     }, [activityWindowMsRaw]);
+    const documentHasFocus = util.useAtomValueSafe(atoms.documentHasFocus) ?? true;
     const [activityTick, setActivityTick] = React.useState(0);
     React.useEffect(() => {
         if (!isTerminalBlock) {
@@ -314,9 +315,24 @@ const BlockFrame_Header = ({
         if (isAltBuf) {
             return;
         }
-        const iv = window.setInterval(() => setActivityTick((v) => v + 1), 1000);
-        return () => window.clearInterval(iv);
-    }, [isAltBuf, isTerminalBlock, shellState]);
+        if (!documentHasFocus) {
+            return;
+        }
+        // No shell integration. Only update when the "recent output" window expires
+        // (and avoid running per-block 1s intervals, especially in background windows).
+        const ts = Number(lastOutputTs) || 0;
+        if (ts <= 0) {
+            return;
+        }
+        const now = Date.now();
+        const msUntilStopped = ts + activityWindowMs - now;
+        if (msUntilStopped <= 0) {
+            return;
+        }
+        const timeoutMs = Math.min(msUntilStopped + 50, 10 * 60 * 1000);
+        const timeoutId = window.setTimeout(() => setActivityTick((v) => v + 1), timeoutMs);
+        return () => window.clearTimeout(timeoutId);
+    }, [activityWindowMs, documentHasFocus, isAltBuf, isTerminalBlock, lastOutputTs, shellState]);
     const termLifeClass = React.useMemo(() => {
         if (!isTerminalBlock) {
             return null;
@@ -336,7 +352,7 @@ const BlockFrame_Header = ({
             return "term-stopped";
         }
         return Date.now() - ts < activityWindowMs ? "term-running" : "term-stopped";
-    }, [activityTick, activityWindowMs, isAltBuf, isTerminalBlock, lastOutputTs, shellState]);
+    }, [activityTick, activityWindowMs, documentHasFocus, isAltBuf, isTerminalBlock, lastOutputTs, shellState]);
     const terminalPathLabel = React.useMemo(() => {
         if (!isTerminalBlock) {
             return undefined;

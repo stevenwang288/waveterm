@@ -47,7 +47,6 @@ class WSControl {
     eoOpts: ElectronOverrideOpts;
     noReconnect: boolean = false;
     onOpenTimeoutId: NodeJS.Timeout = null;
-    pingIntervalId: ReturnType<typeof setInterval> | null = null;
 
     constructor(
         baseHostPort: string,
@@ -60,7 +59,6 @@ class WSControl {
         this.stableId = stableId;
         this.open = false;
         this.eoOpts = electronOverrideOpts;
-        this.pingIntervalId = setInterval(this.sendPing.bind(this), 5000);
     }
 
     shutdown() {
@@ -68,10 +66,6 @@ class WSControl {
         if (this.onOpenTimeoutId) {
             clearTimeout(this.onOpenTimeoutId);
             this.onOpenTimeoutId = null;
-        }
-        if (this.pingIntervalId) {
-            clearInterval(this.pingIntervalId);
-            this.pingIntervalId = null;
         }
         this.safeClose("shutdown");
     }
@@ -265,13 +259,6 @@ class WSControl {
                 console.log("[error] messageCallback", e);
             }
         }
-    }
-
-    sendPing() {
-        if (!this.open) {
-            return;
-        }
-        this.safeSend(JSON.stringify({ type: "ping", stime: Date.now() }), "ping");
     }
 
     sendMessage(data: WSCommandType) {
