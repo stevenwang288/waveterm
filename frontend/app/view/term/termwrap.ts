@@ -732,7 +732,7 @@ export class TermWrap {
         if (!isBlank(cwd)) {
             targetParts.push(cwd);
         }
-        const targetLabel = targetParts.join(" бд ");
+        const targetLabel = targetParts.join(" · ");
 
         const bodyParts: string[] = [];
         if (!isBlank(tabName)) {
@@ -747,7 +747,7 @@ export class TermWrap {
         pushNotification({
             icon: "bell",
             title: i18next.t("term.bellNotifyTitle"),
-            message: bodyParts.join(" бд ") || "",
+            message: bodyParts.join(" · ") || "",
             timestamp: new Date(now).toISOString(),
             expiration: now + 2 * 60 * 1000,
             type: "warning",
@@ -1052,6 +1052,9 @@ export class TermWrap {
         } finally {
             this.writeLoopRunning = false;
             this.maybeUpdateAltBufState(true);
+            if (this.pendingWriteBytes > 0) {
+                fireAndForget(() => this.flushTerminalWriteQueue());
+            }
         }
     }
 

@@ -135,6 +135,19 @@ function isNonEmptyUnsavedWorkspace(workspace: Workspace): boolean {
     return !workspace.name && !workspace.icon && workspace.tabids?.length > 1;
 }
 
+function serializeErrorForLog(error: unknown): Record<string, unknown> {
+    if (error instanceof Error) {
+        return {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+        };
+    }
+    return {
+        value: error,
+    };
+}
+
 export class WaveBrowserWindow extends BaseWindow {
     waveWindowId: string;
     workspaceId: string;
@@ -505,7 +518,15 @@ export class WaveBrowserWindow extends BaseWindow {
 
     private async _queueActionInternal(entry: WindowActionQueueEntry) {
         if (this.actionQueue.length >= 2) {
+            const replacedEntry = this.actionQueue[1];
             this.actionQueue[1] = entry;
+            console.log("action queue replaced pending entry", {
+                waveWindowId: this.waveWindowId,
+                workspaceId: this.workspaceId,
+                replacedEntry,
+                nextEntry: entry,
+                queueLength: this.actionQueue.length,
+            });
             return;
         }
         const wasEmpty = this.actionQueue.length === 0;
@@ -527,11 +548,12 @@ export class WaveBrowserWindow extends BaseWindow {
     // we replace [1] because there is no point to run an action that is going to be overwritten
     private async processActionQueue() {
         while (this.actionQueue.length > 0) {
+            let entry: WindowActionQueueEntry = null;
             try {
                 if (this.isDestroyed()) {
                     break;
                 }
-                const entry = this.actionQueue[0];
+                entry = this.actionQueue[0];
                 let tabId: string = null;
                 // have to use "===" here to get the typechecker to work :/
                 switch (entry.op) {
@@ -589,7 +611,15 @@ export class WaveBrowserWindow extends BaseWindow {
                 const primaryStartupTabFlag = entry.op === "switchtab" ? (entry.primaryStartupTab ?? false) : false;
                 await this.setTabViewIntoWindow(tabView, tabInitialized, primaryStartupTabFlag);
             } catch (e) {
-                console.log("error caught in processActionQueue", e);
+                console.log("error caught in processActionQueue", {
+                    waveWindowId: this.waveWindowId,
+                    workspaceId: this.workspaceId,
+                    isDestroyed: this.isDestroyed(),
+                    queueLength: this.actionQueue.length,
+                    activeTabId: this.activeTabView?.waveTabId,
+                    entry,
+                    error: serializeErrorForLog(e),
+                });
             } finally {
                 this.actionQueue.shift();
             }
@@ -617,13 +647,29 @@ export class WaveBrowserWindow extends BaseWindow {
             console.log("cannot remove active tab", tabId, this.waveWindowId);
             return;
         }
+        if (this.isDestroyed()) {
+            console.log("removeTabView skipped: window destroyed", tabId, this.waveWindowId);
+            return;
+        }
         const tabView = this.allLoadedTabViews.get(tabId);
         if (tabView == null) {
             console.log("removeTabView -- tabView not found", tabId, this.waveWindowId);
             // the tab was never loaded, so just return
             return;
         }
-        this.contentView.removeChildView(tabView);
+        if (tabView.webContents?.isDestroyed()) {
+            console.log("removeTabView: webContents already destroyed", tabId, this.waveWindowId);
+        } else {
+            try {
+                this.contentView.removeChildView(tabView);
+            } catch (e) {
+                console.log("removeTabView failed to remove child view", {
+                    tabId,
+                    waveWindowId: this.waveWindowId,
+                    error: serializeErrorForLog(e),
+                });
+            }
+        }
         this.allLoadedTabViews.delete(tabId);
         tabView.destroy();
     }
