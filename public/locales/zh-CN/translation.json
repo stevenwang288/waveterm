@@ -646,7 +646,13 @@
     "feedback": {
       "good": "好的回复",
       "bad": "不佳的回复",
-      "copyMessage": "复制消息"
+      "copyMessage": "复制消息",
+      "readLocal": "语音播报（本地）",
+      "readApi": "语音播报（OpenAI兼容API）",
+      "stopSpeech": "停止播报",
+      "localSpeechUnavailable": "当前环境不支持本地语音合成。",
+      "apiSpeechUnavailable": "当前 AI 模式未配置 OpenAI 兼容语音端点。请配置 ai:endpoint 和 ai:apitoken。",
+      "apiSpeechPlaybackFailed": "API 语音音频播放失败。"
     },
     "restoreBackup": {
       "successTitle": "备份已成功还原",

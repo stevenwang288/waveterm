@@ -174,7 +174,7 @@ func StartWslShellProcNoWsh(ctx context.Context, termSize waveobj.TermSize, cmdS
 		// so we send an initial `cd` into the interactive shell.
 		_, _ = cmdPty.Write([]byte(fmt.Sprintf("cd %s\n", shellutil.HardQuote(cmdOpts.Cwd))))
 	}
-	cmdWrap := MakeCmdWrap(ecmd, cmdPty)
+	cmdWrap := MakeCmdWrap(ecmd, cmdPty, true)
 	return &ShellProc{Cmd: cmdWrap, ConnName: conn.GetName(), CloseOnce: &sync.Once{}, DoneCh: make(chan any)}, nil
 }
 

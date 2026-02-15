@@ -275,7 +275,11 @@ func DestroyBlockController(blockId string) {
 }
 
 func sendConnMonitorInputNotification(controller Controller) {
-	connName := controller.GetConnName()
+	status := controller.GetRuntimeStatus()
+	if status == nil {
+		return
+	}
+	connName := status.ShellProcConnName
 	if connName == "" || conncontroller.IsLocalConnName(connName) || conncontroller.IsWslConnName(connName) {
 		return
 	}

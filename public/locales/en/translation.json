@@ -658,7 +658,13 @@
     "feedback": {
       "good": "Good Response",
       "bad": "Bad Response",
-      "copyMessage": "Copy Message"
+      "copyMessage": "Copy Message",
+      "readLocal": "Read Aloud (Local)",
+      "readApi": "Read Aloud (OpenAI-Compatible API)",
+      "stopSpeech": "Stop Speech",
+      "localSpeechUnavailable": "Local speech synthesis is not available in this environment.",
+      "apiSpeechUnavailable": "Current mode has no OpenAI-compatible speech endpoint. Configure ai:endpoint and ai:apitoken.",
+      "apiSpeechPlaybackFailed": "Failed to play speech audio from API."
     },
     "restoreBackup": {
       "successTitle": "Backup Successfully Restored",
