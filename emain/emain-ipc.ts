@@ -280,6 +280,26 @@ function codexAuthReadyFromAuthJson(auth: CodexAuthJson | null): boolean {
     return typeof key === "string" && key.trim().length > 0;
 }
 
+async function copyCodexUserConfigToEphemeralHome(userCodexHome: string, tmpHome: string): Promise<void> {
+    try {
+        const configSrc = path.join(userCodexHome, "config.toml");
+        const configDst = path.join(tmpHome, "config.toml");
+        await fs.promises.copyFile(configSrc, configDst);
+    } catch {
+        // ignore
+    }
+
+    try {
+        const rulesSrc = path.join(userCodexHome, "rules", "default.rules");
+        const rulesDir = path.join(tmpHome, "rules");
+        const rulesDst = path.join(rulesDir, "default.rules");
+        await fs.promises.mkdir(rulesDir, { recursive: true });
+        await fs.promises.copyFile(rulesSrc, rulesDst);
+    } catch {
+        // ignore
+    }
+}
+
 async function makeCodexHomeForChildProcess(): Promise<{ home: string; cleanup: () => Promise<void> }> {
     const tmpHome = await fs.promises.mkdtemp(path.join(os.tmpdir(), "wave-codex-home-"));
     const cleanup = async () => {
@@ -301,6 +321,10 @@ async function makeCodexHomeForChildProcess(): Promise<{ home: string; cleanup: 
         if (codexAuthReadyFromAuthJson(outAuth)) {
             await fs.promises.writeFile(path.join(tmpHome, "auth.json"), JSON.stringify(outAuth, null, 2), "utf8");
         }
+
+        // Keep Codex behavior consistent with the user's setup (e.g. approval_policy=never),
+        // while still running in an isolated ephemeral CODEX_HOME.
+        await copyCodexUserConfigToEphemeralHome(userCodexHome, tmpHome);
     } catch {
         // ignore
     }
@@ -340,6 +364,8 @@ async function runCodexTranslate(text: string): Promise<string> {
     ].join("\n");
 
     const args = [
+        "--ask-for-approval",
+        "never",
         "exec",
         "--skip-git-repo-check",
         "--ephemeral",

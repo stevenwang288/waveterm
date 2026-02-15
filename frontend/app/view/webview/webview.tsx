@@ -5,7 +5,15 @@ import { BlockNodeModel } from "@/app/block/blocktypes";
 import i18next from "@/app/i18n";
 import type { TabModel } from "@/app/store/tab-model";
 import { Search, useSearch } from "@/app/element/search";
-import { createBlock, getApi, getBlockMetaKeyAtom, getSettingsKeyAtom, openLink } from "@/app/store/global";
+import {
+    createBlock,
+    getApi,
+    getBlockMetaKeyAtom,
+    getSettingsKeyAtom,
+    openLink,
+    setTabIndicator,
+    useBlockAtom,
+} from "@/app/store/global";
 import { getSimpleControlShiftAtom } from "@/app/store/keymodel";
 import { ObjectService } from "@/app/store/services";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -65,6 +73,191 @@ function getWebviewPreloadUrl() {
         return null;
     }
     return "file://" + webviewPreloadUrl;
+}
+
+type ClawXRuntimeStatus = "inactive" | "running" | "idle";
+type ClawXAttentionAction = "set" | "clear" | "ignore";
+const CLAWX_LOCAL_URL = "http://127.0.0.1:5173";
+const CLAWX_DEFAULT_LAUNCH_PATHS = [
+    "AppData/Local/Programs/ClawX/ClawX.exe",
+    "AppData/Local/Programs/clawx/ClawX.exe",
+    "AppData/Local/ClawX/ClawX.exe",
+    "AppData/Roaming/ClawX/ClawX.exe",
+    "C:/Program Files/ClawX/ClawX.exe",
+    "C:/Program Files (x86)/ClawX/ClawX.exe",
+];
+
+function normalizeCandidatePath(pathValue: string): string {
+    const trimmedPath = String(pathValue ?? "").trim().replace(/^["']|["']$/g, "");
+    if (!trimmedPath) {
+        return "";
+    }
+    return trimmedPath.replace(/\\/g, "/");
+}
+
+function buildClawXLaunchCandidates(homePath: string, configuredPath: string): string[] {
+    const normalizedHomePath = normalizeCandidatePath(homePath).replace(/[\\/]+$/, "");
+    const candidatePaths = new Set<string>();
+    const normalizedConfiguredPath = normalizeCandidatePath(configuredPath);
+    if (normalizedConfiguredPath) {
+        candidatePaths.add(normalizedConfiguredPath);
+    }
+    for (const relativePath of CLAWX_DEFAULT_LAUNCH_PATHS) {
+        const normalizedRelativePath = normalizeCandidatePath(relativePath);
+        if (!normalizedRelativePath) {
+            continue;
+        }
+        if (/^[a-zA-Z]:\//.test(normalizedRelativePath) || normalizedRelativePath.startsWith("//")) {
+            candidatePaths.add(normalizedRelativePath);
+            continue;
+        }
+        if (normalizedHomePath) {
+            candidatePaths.add(`${normalizedHomePath}/${normalizedRelativePath}`);
+        }
+    }
+    return Array.from(candidatePaths);
+}
+
+function parseClawXTitleSignals(titleValue: string): { hasUnread: boolean; isRunning: boolean; shouldClearUnread: boolean } {
+    const trimmedTitle = String(titleValue ?? "").trim();
+    const normalizedTitle = trimmedTitle.toLowerCase();
+
+    const unreadCountMatch = trimmedTitle.match(/^\s*[\(\[]\s*(\d{1,3})\s*[\)\]]/);
+    const hasUnreadCount = unreadCountMatch != null && Number(unreadCountMatch[1]) > 0;
+    const hasUnreadKeyword = /未读|unread|new message|new messages|needs input|action required|需要处理|需要确认/.test(
+        normalizedTitle
+    );
+    const shouldClearUnread = /all caught up|no unread|已读|已处理|无需处理|resolved/.test(normalizedTitle);
+
+    const runningKeywordRegex =
+        /thinking|running|processing|executing|generating|streaming|in progress|思考中|执行中|运行中|处理中|生成中|进行中/;
+    const isRunning = runningKeywordRegex.test(normalizedTitle);
+
+    return {
+        hasUnread: hasUnreadCount || hasUnreadKeyword,
+        isRunning,
+        shouldClearUnread,
+    };
+}
+
+type ClawXBridgeStatusPayload = {
+    type?: string;
+    payload?: Record<string, any>;
+};
+
+function parseClawXRuntimeStatus(statusValue: unknown): ClawXRuntimeStatus | null {
+    const normalizedStatus = String(statusValue ?? "").trim().toLowerCase();
+    if (!normalizedStatus) {
+        return null;
+    }
+    if (
+        [
+            "running",
+            "busy",
+            "processing",
+            "streaming",
+            "thinking",
+            "working",
+            "in_progress",
+            "inprogress",
+            "executing",
+            "generating",
+            "tool_running",
+            "tool_calling",
+        ].includes(normalizedStatus)
+    ) {
+        return "running";
+    }
+    if (
+        [
+            "idle",
+            "ready",
+            "waiting",
+            "paused",
+            "done",
+            "complete",
+            "completed",
+            "finished",
+            "awaiting_input",
+            "awaiting-user",
+            "action_required",
+            "needs_attention",
+            "needs_human",
+        ].includes(normalizedStatus)
+    ) {
+        return "idle";
+    }
+    if (["inactive", "stopped", "offline"].includes(normalizedStatus)) {
+        return "inactive";
+    }
+    if (["attention", "unread"].includes(normalizedStatus)) {
+        return "idle";
+    }
+    return null;
+}
+
+function hasOwnField(payload: Record<string, any>, fieldName: string): boolean {
+    return Object.prototype.hasOwnProperty.call(payload, fieldName);
+}
+
+/**
+ * Supported `clawx-status` payload contract (sent by preload bridge):
+ * - `type`: status event type (e.g. running, idle, needs_human, attention_cleared)
+ * - `payload.status|state|phase`: normalized runtime status
+ * - `payload.unreadCount|unread|hasUnread|requiresAction|needsHuman|needsInput`: attention signal
+ * - `payload.title|message`: optional title fallback for keyword parsing
+ */
+function parseClawXBridgeStatusPayload(rawPayload: unknown): {
+    status: ClawXRuntimeStatus | null;
+    title: string;
+    attentionAction: ClawXAttentionAction;
+} {
+    const normalizedStatusPayload = (rawPayload ?? {}) as ClawXBridgeStatusPayload;
+    const payloadData = (normalizedStatusPayload.payload ?? normalizedStatusPayload) as Record<string, any>;
+    const payloadType = String(normalizedStatusPayload.type ?? payloadData?.type ?? "status").toLowerCase();
+
+    const statusFromType = parseClawXRuntimeStatus(payloadType);
+    const statusFromPayload = parseClawXRuntimeStatus(payloadData?.status ?? payloadData?.state ?? payloadData?.phase);
+    const status = statusFromPayload ?? statusFromType;
+
+    const titleValue = String(payloadData?.title ?? payloadData?.message ?? "");
+    const unreadCount = Number(payloadData?.unreadCount ?? payloadData?.unread ?? 0);
+    const hasUnreadFromType = ["attention", "unread", "action_required", "needs_attention", "needs_human"].includes(
+        payloadType
+    );
+    const clearUnreadFromType = ["attention_cleared", "read", "resolved", "ack", "acknowledged"].includes(payloadType);
+    const hasUnreadField = hasOwnField(payloadData, "unreadCount") || hasOwnField(payloadData, "unread");
+    const hasUnreadFlagTrue =
+        payloadData?.hasUnread === true ||
+        payloadData?.requiresAction === true ||
+        payloadData?.needsAttention === true ||
+        payloadData?.needsHuman === true ||
+        payloadData?.needsInput === true;
+    const hasUnreadFlagFalse =
+        payloadData?.hasUnread === false ||
+        payloadData?.requiresAction === false ||
+        payloadData?.needsAttention === false ||
+        payloadData?.needsHuman === false ||
+        payloadData?.needsInput === false;
+    const hasUnreadCount = Number.isFinite(unreadCount) && unreadCount > 0;
+    const hasClearedUnreadCount = Number.isFinite(unreadCount) && unreadCount <= 0;
+    let attentionAction: ClawXAttentionAction = "ignore";
+    if (hasUnreadFromType || hasUnreadFlagTrue || (hasUnreadField && hasUnreadCount)) {
+        attentionAction = "set";
+    } else if (
+        clearUnreadFromType ||
+        hasUnreadFlagFalse ||
+        (hasUnreadField && hasClearedUnreadCount) ||
+        status === "inactive"
+    ) {
+        attentionAction = "clear";
+    }
+
+    return {
+        status,
+        title: titleValue,
+        attentionAction,
+    };
 }
 
 export class WebViewModel implements ViewModel {
@@ -838,6 +1031,8 @@ interface WebViewProps {
 
 const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps) => {
     const blockData = useAtomValue(model.blockAtom);
+    const isNodeFocused = useAtomValue(model.nodeModel.isFocused);
+    const isClawXView = model.viewType === "clawx";
     const defaultUrl = useAtomValue(model.homepageUrl);
     const defaultSearchAtom = getSettingsKeyAtom("web:defaultsearch");
     const defaultSearch = useAtomValue(defaultSearchAtom);
@@ -849,6 +1044,15 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
     const metaPartition = useAtomValue(getBlockMetaKeyAtom(model.blockId, "web:partition"));
     const webPartition = partitionOverride || metaPartition || undefined;
     const userAgentType = useAtomValue(model.userAgentType) || "default";
+    const clawxAttentionAtom = useBlockAtom(model.blockId, "term:attention", () => {
+        return atom(false) as PrimitiveAtom<boolean>;
+    }) as PrimitiveAtom<boolean>;
+    const clawxAIActiveAtom = useBlockAtom(model.blockId, "term:aiactive", () => {
+        return atom(false) as PrimitiveAtom<boolean>;
+    }) as PrimitiveAtom<boolean>;
+    const clawxStatusAtom = useBlockAtom(model.blockId, "clawx:status", () => {
+        return atom("inactive") as PrimitiveAtom<ClawXRuntimeStatus>;
+    }) as PrimitiveAtom<ClawXRuntimeStatus>;
 
     // Determine user agent string based on type
     let userAgent: string | undefined = undefined;
@@ -918,6 +1122,69 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
     const domReady = useAtomValue(model.domReady);
 
     const [errorText, setErrorText] = useState("");
+    const clawxBackgroundLoadRef = useRef(false);
+    const clawxLaunchAttemptedRef = useRef(false);
+    const resolveClawXLaunchCandidates = useCallback(() => {
+        const configuredPath = globalStore.get(getSettingsKeyAtom("clawx:exepath"));
+        return buildClawXLaunchCandidates(
+            getApi().getHomeDir(),
+            typeof configuredPath === "string" ? configuredPath : ""
+        );
+    }, []);
+    const tryLaunchClawX = useCallback(async (): Promise<string> => {
+        const candidates = resolveClawXLaunchCandidates();
+        for (const candidatePath of candidates) {
+            try {
+                const fileInfo = await RpcApi.FileInfoCommand(TabRpcClient, {
+                    info: { path: candidatePath },
+                });
+                if (fileInfo?.notfound || fileInfo?.isdir) {
+                    continue;
+                }
+                getApi().openNativePath(candidatePath);
+                return candidatePath;
+            } catch {
+                continue;
+            }
+        }
+        return "";
+    }, [resolveClawXLaunchCandidates]);
+
+    const applyClawXStatusFromTitle = useCallback(
+        (titleValue: string, loadingOverride?: boolean) => {
+            if (!isClawXView) {
+                return;
+            }
+            const titleSignals = parseClawXTitleSignals(titleValue);
+            const wasActive = globalStore.get(clawxAIActiveAtom) ?? false;
+            const isRunning = loadingOverride === true ? true : titleSignals.isRunning;
+            const isActive = wasActive || isRunning;
+
+            globalStore.set(clawxAIActiveAtom, isActive);
+            const nextStatus: ClawXRuntimeStatus = isRunning ? "running" : isActive ? "idle" : "inactive";
+            globalStore.set(clawxStatusAtom, nextStatus);
+
+            if (titleSignals.hasUnread && !isNodeFocused) {
+                globalStore.set(clawxAttentionAtom, true);
+                setTabIndicator(model.tabModel.tabId, {
+                    icon: "bell",
+                    color: "var(--warning-color)",
+                    clearonfocus: true,
+                    priority: 1,
+                });
+            } else if (titleSignals.shouldClearUnread || isNodeFocused) {
+                globalStore.set(clawxAttentionAtom, false);
+            }
+        },
+        [clawxAIActiveAtom, clawxAttentionAtom, clawxStatusAtom, isClawXView, isNodeFocused, model.tabModel.tabId]
+    );
+
+    useEffect(() => {
+        if (!isClawXView || !isNodeFocused) {
+            return;
+        }
+        globalStore.set(clawxAttentionAtom, false);
+    }, [clawxAttentionAtom, isClawXView, isNodeFocused]);
 
     function setBgColor() {
         const webview = model.webviewRef.current;
@@ -1005,6 +1272,9 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         }
         const navigateListener = (e: any) => {
             setErrorText("");
+            if (isClawXView) {
+                clawxLaunchAttemptedRef.current = false;
+            }
             if (e.isMainFrame) {
                 model.handleNavigate(e.url);
             }
@@ -1018,17 +1288,59 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             model.setRefreshIcon("xmark-large");
             model.setIsLoading(true);
             webview.style.backgroundColor = "transparent";
+            if (isClawXView) {
+                clawxBackgroundLoadRef.current = !isNodeFocused;
+            }
         };
         const stopLoadingHandler = () => {
             model.setRefreshIcon("rotate-right");
             model.setIsLoading(false);
             setBgColor();
+            if (isClawXView) {
+                if (clawxBackgroundLoadRef.current && !isNodeFocused) {
+                    globalStore.set(clawxAttentionAtom, true);
+                }
+                clawxBackgroundLoadRef.current = false;
+                fireAndForget(() =>
+                    webview
+                        .executeJavaScript("document.title")
+                        .then((titleValue) => applyClawXStatusFromTitle(String(titleValue ?? "")))
+                        .catch(() => globalStore.set(clawxStatusAtom, "idle"))
+                );
+            }
         };
         const failLoadHandler = (e: any) => {
             if (e.errorCode === -3) {
                 console.warn("Suppressed ERR_ABORTED error", e);
             } else {
-                const errorMessage = `Failed to load ${e.validatedURL}: ${e.errorDescription}`;
+                let errorMessage = `Failed to load ${e.validatedURL}: ${e.errorDescription}`;
+                if (isClawXView && e?.errorCode === -102) {
+                    const launchCandidates = resolveClawXLaunchCandidates();
+                    if (!clawxLaunchAttemptedRef.current) {
+                        clawxLaunchAttemptedRef.current = true;
+                        fireAndForget(async () => {
+                            const launchedPath = await tryLaunchClawX();
+                            const launchLine = launchedPath
+                                ? `已尝试自动启动：${launchedPath}`
+                                : "未找到可用的 ClawX 可执行文件（可在设置里配置 clawx:exepath）";
+                            setErrorText(
+                                [
+                                    `ClawX 本地服务未启动（${e.errorDescription}）`,
+                                    launchLine,
+                                    `请确认 ${CLAWX_LOCAL_URL} 可访问后再点刷新`,
+                                ].join("\n")
+                            );
+                        });
+                    }
+                    errorMessage = [
+                        `ClawX 本地服务未启动（${e.errorDescription}）`,
+                        launchCandidates.length > 0
+                            ? `候选启动路径：${launchCandidates[0]}`
+                            : "未找到 ClawX 启动路径",
+                        `如仍失败，请先手动启动 ClawX 或打开：${CLAWX_LOCAL_URL}`,
+                        "启动后在本窗口点击刷新",
+                    ].join("\n");
+                }
                 console.error(errorMessage);
                 setErrorText(errorMessage);
                 if (onFailLoad) {
@@ -1040,6 +1352,9 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         const webviewFocus = () => {
             getApi().setWebviewFocus(webview.getWebContentsId());
             model.nodeModel.focusNode();
+            if (isClawXView) {
+                globalStore.set(clawxAttentionAtom, false);
+            }
         };
         const webviewBlur = () => {
             getApi().setWebviewFocus(null);
@@ -1053,6 +1368,41 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         };
         const handleMediaPaused = () => {
             model.setMediaPlaying(false);
+        };
+        const pageTitleUpdatedHandler = (event: any) => {
+            if (!isClawXView) {
+                return;
+            }
+            const nextTitle = String(event?.title ?? "");
+            applyClawXStatusFromTitle(nextTitle);
+        };
+        const ipcMessageHandler = (event: any) => {
+            if (!isClawXView) {
+                return;
+            }
+            if (event?.channel !== "clawx-status") {
+                return;
+            }
+            const payload = parseClawXBridgeStatusPayload(event?.args?.[0]);
+            if (payload.title) {
+                applyClawXStatusFromTitle(payload.title, payload.status === "running");
+            }
+            if (payload.status != null) {
+                const nextActive = payload.status !== "inactive";
+                globalStore.set(clawxAIActiveAtom, nextActive);
+                globalStore.set(clawxStatusAtom, payload.status);
+            }
+            if (payload.attentionAction === "set" && !isNodeFocused) {
+                globalStore.set(clawxAttentionAtom, true);
+                setTabIndicator(model.tabModel.tabId, {
+                    icon: "bell",
+                    color: "var(--warning-color)",
+                    clearonfocus: true,
+                    priority: 1,
+                });
+            } else if (payload.attentionAction === "clear" || isNodeFocused) {
+                globalStore.set(clawxAttentionAtom, false);
+            }
         };
 
         webview.addEventListener("did-frame-navigate", navigateListener);
@@ -1068,6 +1418,8 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         webview.addEventListener("media-started-playing", handleMediaPlaying);
         webview.addEventListener("media-paused", handleMediaPaused);
         webview.addEventListener("found-in-page", onFoundInPage);
+        webview.addEventListener("page-title-updated", pageTitleUpdatedHandler);
+        webview.addEventListener("ipc-message", ipcMessageHandler as any);
 
         // Clean up event listeners on component unmount
         return () => {
@@ -1084,8 +1436,20 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             webview.removeEventListener("media-started-playing", handleMediaPlaying);
             webview.removeEventListener("media-paused", handleMediaPaused);
             webview.removeEventListener("found-in-page", onFoundInPage);
+            webview.removeEventListener("page-title-updated", pageTitleUpdatedHandler);
+            webview.removeEventListener("ipc-message", ipcMessageHandler as any);
         };
-    }, []);
+    }, [
+        applyClawXStatusFromTitle,
+        clawxAIActiveAtom,
+        clawxAttentionAtom,
+        clawxStatusAtom,
+        isClawXView,
+        isNodeFocused,
+        model.tabModel.tabId,
+        resolveClawXLaunchCandidates,
+        tryLaunchClawX,
+    ]);
 
     return (
         <Fragment>

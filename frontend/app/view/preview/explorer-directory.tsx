@@ -53,6 +53,7 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Amp", command: "amp" },
     { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
+    { label: "ClawX", command: "clawx" },
 ];
 
 type CliLayoutPreset = {

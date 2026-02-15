@@ -398,10 +398,16 @@
     "apps": "应用",
     "noLocalAppsFound": "未找到本地应用",
     "localWaveAppsTooltip": "本地 WaveApp",
+    "clawx": "ClawX",
+    "clawxTooltip": "打开 ClawX",
+    "openClawxDefault": "打开 ClawX（默认地址）",
+    "openClawxLocal": "打开 ClawX（127.0.0.1:5173）",
+    "openClawxLocalhost": "打开 ClawX（localhost:5173）",
     "confirmCloseWindowUnsavedTabs": "窗口中有未保存的标签页，关闭窗口将删除现有标签页。\\n\\n是否继续？",
     "confirmDeleteWorkspace": "删除工作区也会删除其中的内容。\\n\\n是否继续？",
     "servers": "服务器",
-    "git": "Git"
+    "git": "Git",
+    "ai": "智能"
   },
   "about": {
     "title": "Wave Terminal",
@@ -658,7 +664,11 @@
     "maxTokensOptionDevTesting": "{{tokens}}（开发测试）",
     "maxTokensOptionPro": "{{tokens}}（Pro）",
     "noTextContent": "（无文本内容）",
-    "waitingForToolApprovals": "等待工具授权..."
+    "waitingForToolApprovals": "等待工具授权...",
+    "streamIssueMissingAssistant": "本轮响应结束时没有助手消息，可能发生了截断。",
+    "streamIssueNoRenderableContent": "本轮响应已结束，但没有渲染出可见内容。",
+    "refreshHistory": "刷新历史",
+    "unlockInput": "解锁输入"
   },
   "block": {
     "settings": "设置",
@@ -675,6 +685,7 @@
       "terminal": "终端",
       "preview": "预览",
       "web": "网页",
+      "clawx": "ClawX",
       "waveai": "Wave AI",
       "help": "帮助",
       "tips": "提示"

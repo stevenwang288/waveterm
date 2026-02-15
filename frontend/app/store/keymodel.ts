@@ -117,6 +117,18 @@ function shouldDispatchToBlock(e: WaveKeyboardEvent): boolean {
     return true;
 }
 
+function shouldHandleTabPaneSwitch(waveEvent: WaveKeyboardEvent): boolean {
+    if (!shouldDispatchToBlock(waveEvent)) {
+        return false;
+    }
+    if (globalStore.get(atoms.waveWindowType) != "tab") {
+        return false;
+    }
+    const layoutModel = getLayoutModelForStaticTab();
+    const numLeafs = globalStore.get(layoutModel.numLeafs) ?? 0;
+    return numLeafs > 1;
+}
+
 function getStaticTabBlockCount(): number {
     const tabId = globalStore.get(atoms.staticTabId);
     const tabORef = WOS.makeORef("tab", tabId);
@@ -661,6 +673,20 @@ function registerGlobalKeys() {
         return true;
     });
     globalKeyMap.set("Ctrl:Shift:Tab", () => {
+        switchBlockByCycle(-1);
+        return true;
+    });
+    globalKeyMap.set("Tab", (waveEvent) => {
+        if (!shouldHandleTabPaneSwitch(waveEvent)) {
+            return false;
+        }
+        switchBlockByCycle(1);
+        return true;
+    });
+    globalKeyMap.set("Shift:Tab", (waveEvent) => {
+        if (!shouldHandleTabPaneSwitch(waveEvent)) {
+            return false;
+        }
         switchBlockByCycle(-1);
         return true;
     });

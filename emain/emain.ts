@@ -348,6 +348,39 @@ process.on("uncaughtException", (error) => {
     setUserConfirmedQuit(true);
     electronApp.quit();
 });
+process.on("unhandledRejection", (reason, promise) => {
+    const rejectionError = reason as { message?: string; stack?: string; name?: string } | undefined;
+    console.log("Unhandled Rejection captured in main process", {
+        message: rejectionError?.message ?? String(reason),
+        name: rejectionError?.name ?? "",
+        stack: rejectionError?.stack ?? "",
+        promise: String(promise),
+    });
+});
+electronApp.on("render-process-gone", (_event, webContents, details) => {
+    let currentUrl = "";
+    try {
+        currentUrl = webContents.isDestroyed() ? "" : webContents.getURL();
+    } catch {
+        currentUrl = "";
+    }
+    console.log("app render-process-gone", {
+        webContentsId: webContents.id,
+        reason: details?.reason,
+        exitCode: details?.exitCode,
+        url: currentUrl,
+    });
+});
+electronApp.on("child-process-gone", (_event, details) => {
+    const childDetails = details as any;
+    console.log("app child-process-gone", {
+        type: childDetails?.type,
+        reason: childDetails?.reason,
+        exitCode: childDetails?.exitCode,
+        serviceName: childDetails?.serviceName,
+        name: childDetails?.name,
+    });
+});
 
 let lastWaveWindowCount = 0;
 let lastIsBuilderWindowActive = false;

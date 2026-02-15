@@ -9,6 +9,7 @@ import { ContextMenuModel } from "@/store/contextmenu";
 import {
     atoms,
     createBlock,
+    getApi,
     getSettingsPrefixAtom,
     globalStore,
     isDev,
@@ -218,6 +219,67 @@ const AppKeyHandlers = () => {
     return null;
 };
 
+const AppRuntimeErrorLogger = () => {
+    useEffect(() => {
+        const sendRendererLog = (eventType: string, payload: Record<string, unknown>) => {
+            const logPayload = {
+                eventType,
+                ts: new Date().toISOString(),
+                ...payload,
+            };
+            console.error("[renderer-runtime]", logPayload);
+            try {
+                getApi().sendLog(`[renderer-runtime] ${JSON.stringify(logPayload)}`);
+            } catch {
+                // ignore bridge errors
+            }
+        };
+
+        const onWindowError = (event: ErrorEvent) => {
+            const runtimeError = event.error as { name?: string; message?: string; stack?: string } | undefined;
+            sendRendererLog("window.error", {
+                message: event.message ?? runtimeError?.message ?? "",
+                filename: event.filename ?? "",
+                line: event.lineno ?? 0,
+                column: event.colno ?? 0,
+                errorName: runtimeError?.name ?? "",
+                stack: runtimeError?.stack ?? "",
+            });
+        };
+
+        const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+            const reason = event.reason as { name?: string; message?: string; stack?: string } | unknown;
+            if (reason instanceof Error) {
+                sendRendererLog("window.unhandledrejection", {
+                    message: reason.message,
+                    errorName: reason.name,
+                    stack: reason.stack ?? "",
+                });
+                return;
+            }
+            let fallbackMessage = "";
+            try {
+                fallbackMessage = typeof reason === "string" ? reason : JSON.stringify(reason ?? {});
+            } catch {
+                fallbackMessage = String(reason ?? "");
+            }
+            sendRendererLog("window.unhandledrejection", {
+                message: fallbackMessage,
+            });
+        };
+
+        window.addEventListener("error", onWindowError);
+        window.addEventListener("unhandledrejection", onUnhandledRejection);
+
+        return () => {
+            window.removeEventListener("error", onWindowError);
+            window.removeEventListener("unhandledrejection", onUnhandledRejection);
+        };
+    }, []);
+
+    return null;
+};
+
 const TabIndicatorAutoClearing = () => {
     return null;
 };
@@ -321,6 +383,7 @@ const AppInner = () => {
         >
             <AppBackground />
             <AppKeyHandlers />
+            <AppRuntimeErrorLogger />
             <AppFocusHandler />
             <AppSettingsUpdater />
             <TabIndicatorAutoClearing />

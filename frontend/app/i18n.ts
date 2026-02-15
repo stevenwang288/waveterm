@@ -6,7 +6,7 @@ import zhCNTranslation from "../../public/locales/zh-CN/translation.json";
 
 i18n.use(initReactI18next).init({
     lng: "zh-CN",
-    fallbackLng: "en",
+    fallbackLng: "zh-CN",
     debug: false,
     interpolation: {
         escapeValue: false,

@@ -220,6 +220,17 @@ export class WaveTabView extends WebContentsView {
                 errorStack: error?.stack,
             });
         });
+        this.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+            if (level < 2) {
+                return;
+            }
+            logTabViewWebContentsEvent(this, "console-message", {
+                level,
+                message,
+                line,
+                sourceId,
+            });
+        });
         this.webContents.on("destroyed", () => {
             wcIdToWaveTabMap.delete(this.webContents.id);
             removeWaveTabView(this.waveTabId);

@@ -106,6 +106,11 @@ func MakeBlockShortDesc(block *waveobj.Block) string {
 			return fmt.Sprintf("web browser widget pointing at %q", url)
 		}
 		return "web browser widget"
+	case "clawx":
+		if url, hasUrl := block.Meta["url"].(string); hasUrl && url != "" {
+			return fmt.Sprintf("ClawX widget pointing at %q", url)
+		}
+		return "ClawX widget"
 	case "waveai":
 		return "AI chat widget"
 	case "cpuplot":
@@ -192,7 +197,7 @@ func GenerateTabStateAndTools(ctx context.Context, tabid string, widgetAccess bo
 			tools = append(tools, GetTermGetScrollbackToolDefinition(tabid))
 			// tools = append(tools, GetTermCommandOutputToolDefinition(tabid))
 		}
-		if viewTypes["web"] {
+		if viewTypes["web"] || viewTypes["clawx"] {
 			tools = append(tools, GetWebNavigateToolDefinition(tabid))
 		}
 	}

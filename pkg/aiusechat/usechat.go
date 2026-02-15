@@ -199,6 +199,22 @@ func getUsage(msgs []uctypes.GenAIMessage) uctypes.AIUsage {
 	return rtn
 }
 
+func summarizeMessageRoles(msgs []uctypes.GenAIMessage) map[string]int {
+	roleCounts := make(map[string]int)
+	for _, msg := range msgs {
+		if msg == nil {
+			roleCounts["<nil>"]++
+			continue
+		}
+		role := strings.TrimSpace(msg.GetRole())
+		if role == "" {
+			role = "<empty>"
+		}
+		roleCounts[role]++
+	}
+	return roleCounts
+}
+
 func GetChatUsage(chat *uctypes.AIChat) uctypes.AIUsage {
 	usage := getUsage(chat.NativeMessages)
 	usage.APIType = chat.APIType
@@ -436,6 +452,20 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 		if stopReason != nil {
 			logutil.DevPrintf("stopreason: %s (%s) (%s) (%s)\n", stopReason.Kind, stopReason.ErrorText, stopReason.ErrorType, stopReason.RawReason)
 		}
+		stopKind := ""
+		if stopReason != nil {
+			stopKind = string(stopReason.Kind)
+		}
+		log.Printf(
+			"waveai-step chat=%s step=%d req=%d status=%s err=%v msgs=%d roles=%v\n",
+			chatOpts.ChatId,
+			stepNum,
+			metrics.RequestCount,
+			stopKind,
+			err != nil,
+			len(rtnMessages),
+			summarizeMessageRoles(rtnMessages),
+		)
 		if len(rtnMessages) > 0 {
 			usage := getUsage(rtnMessages)
 			log.Printf("usage: input=%d output=%d websearch=%d\n", usage.InputTokens, usage.OutputTokens, usage.NativeWebSearchCount)
@@ -717,6 +747,7 @@ func WaveAIPostMessageHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create SSE handler and set up streaming
 	sseHandler := sse.MakeSSEHandlerCh(w, r.Context())
+	sseHandler.SetTraceLabel(fmt.Sprintf("chat=%s tab=%s builder=%s", req.ChatID, req.TabId, req.BuilderId))
 	defer sseHandler.Close()
 
 	if err := WaveAIPostMessageWrap(r.Context(), sseHandler, &req.Msg, chatOpts); err != nil {

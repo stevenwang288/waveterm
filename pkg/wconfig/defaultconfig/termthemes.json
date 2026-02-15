@@ -2,7 +2,7 @@
     "default-dark": {
         "display:name": "Default Dark",
         "display:order": 1,
-        "black": "#757575",
+        "black": "#000000",
         "red": "#cc685c",
         "green": "#76c266",
         "yellow": "#cbca9b",

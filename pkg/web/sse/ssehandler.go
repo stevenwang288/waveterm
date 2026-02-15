@@ -7,9 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wavetermdev/waveterm/pkg/utilds"
@@ -55,6 +58,16 @@ const (
 	AiMsgError               = "error"
 )
 
+func shouldEnableSSETrace() bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv("WAVEAI_SSE_TRACE")))
+	switch raw {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // SSEMessage represents a message to be written to the SSE stream
 type SSEMessage struct {
 	Type      SSEMessageType
@@ -77,20 +90,50 @@ type SSEHandlerCh struct {
 	wg              sync.WaitGroup
 	onCloseHandlers utilds.IdList[func()]
 	handlersRun     bool
+
+	traceEnabled bool
+	traceLabel   string
+	traceSeq     uint64
 }
 
 // MakeSSEHandlerCh creates a new channel-based SSE handler
 func MakeSSEHandlerCh(w http.ResponseWriter, ctx context.Context) *SSEHandlerCh {
 	return &SSEHandlerCh{
-		w:       w,
-		rc:      http.NewResponseController(w),
-		ctx:     ctx,
-		writeCh: make(chan SSEMessage, 10), // Buffered to prevent blocking
+		w:            w,
+		rc:           http.NewResponseController(w),
+		ctx:          ctx,
+		writeCh:      make(chan SSEMessage, 10), // Buffered to prevent blocking
+		traceEnabled: shouldEnableSSETrace(),
 	}
 }
 
 func (h *SSEHandlerCh) Context() context.Context {
 	return h.ctx
+}
+
+func (h *SSEHandlerCh) SetTraceLabel(label string) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	h.traceLabel = strings.TrimSpace(label)
+}
+
+func (h *SSEHandlerCh) traceEvent(eventType string, fields map[string]interface{}) {
+	if !h.traceEnabled {
+		return
+	}
+	seq := atomic.AddUint64(&h.traceSeq, 1)
+	h.lock.Lock()
+	traceLabel := h.traceLabel
+	h.lock.Unlock()
+	if fields == nil {
+		fields = map[string]interface{}{}
+	}
+	fields["queueLen"] = len(h.writeCh)
+	if traceLabel != "" {
+		log.Printf("[waveai:sse] label=%s seq=%d event=%s payload=%v\n", traceLabel, seq, eventType, fields)
+		return
+	}
+	log.Printf("[waveai:sse] seq=%d event=%s payload=%v\n", seq, eventType, fields)
 }
 
 // SetupSSE configures the response headers and starts the writer goroutine
@@ -126,6 +169,7 @@ func (h *SSEHandlerCh) SetupSSE() error {
 	// Start the writer goroutine
 	h.wg.Add(1)
 	go h.writerLoop()
+	h.traceEvent("setup", map[string]interface{}{"initialized": true})
 
 	return nil
 }
@@ -144,11 +188,13 @@ func (h *SSEHandlerCh) writerLoop() {
 			if !ok {
 				// Channel closed, send [DONE] and exit
 				h.writeDirectly("[DONE]", SSEMsgData)
+				h.traceEvent("writer-exit", map[string]interface{}{"reason": "closed"})
 				return
 			}
 
 			if err := h.writeMessage(msg); err != nil {
 				h.setError(err)
+				h.traceEvent("writer-error", map[string]interface{}{"reason": err.Error()})
 				return
 			}
 
@@ -160,6 +206,7 @@ func (h *SSEHandlerCh) writerLoop() {
 
 		case <-h.ctx.Done():
 			h.setError(h.ctx.Err())
+			h.traceEvent("writer-exit", map[string]interface{}{"reason": h.ctx.Err().Error()})
 			return
 		}
 	}
@@ -284,6 +331,7 @@ func (h *SSEHandlerCh) WriteJsonData(data interface{}) error {
 
 // WriteError queues an error message and closes the handler
 func (h *SSEHandlerCh) WriteError(errorMsg string) error {
+	h.traceEvent("write-error", map[string]interface{}{"errorTextLen": len(errorMsg)})
 	errorResp := map[string]interface{}{
 		"type":      AiMsgError,
 		"errorText": errorMsg,
@@ -366,6 +414,7 @@ func (h *SSEHandlerCh) Close() {
 // AI message writing methods
 
 func (h *SSEHandlerCh) AiMsgStart(messageId string) error {
+	h.traceEvent(AiMsgStart, map[string]interface{}{"messageId": messageId})
 	resp := map[string]interface{}{
 		"type":      AiMsgStart,
 		"messageId": messageId,
@@ -374,6 +423,7 @@ func (h *SSEHandlerCh) AiMsgStart(messageId string) error {
 }
 
 func (h *SSEHandlerCh) AiMsgTextStart(textId string) error {
+	h.traceEvent(AiMsgTextStart, map[string]interface{}{"id": textId})
 	resp := map[string]interface{}{
 		"type": AiMsgTextStart,
 		"id":   textId,
@@ -382,6 +432,7 @@ func (h *SSEHandlerCh) AiMsgTextStart(textId string) error {
 }
 
 func (h *SSEHandlerCh) AiMsgTextDelta(textId string, text string) error {
+	h.traceEvent(AiMsgTextDelta, map[string]interface{}{"id": textId, "deltaLen": len(text)})
 	resp := map[string]interface{}{
 		"type":  AiMsgTextDelta,
 		"id":    textId,
@@ -391,6 +442,7 @@ func (h *SSEHandlerCh) AiMsgTextDelta(textId string, text string) error {
 }
 
 func (h *SSEHandlerCh) AiMsgTextEnd(textId string) error {
+	h.traceEvent(AiMsgTextEnd, map[string]interface{}{"id": textId})
 	resp := map[string]interface{}{
 		"type": AiMsgTextEnd,
 		"id":   textId,
@@ -399,6 +451,7 @@ func (h *SSEHandlerCh) AiMsgTextEnd(textId string) error {
 }
 
 func (h *SSEHandlerCh) AiMsgFinish(finishReason string, usage interface{}) error {
+	h.traceEvent(AiMsgFinish, map[string]interface{}{"finishReason": finishReason})
 	resp := map[string]interface{}{
 		"type": AiMsgFinish,
 	}
@@ -406,6 +459,7 @@ func (h *SSEHandlerCh) AiMsgFinish(finishReason string, usage interface{}) error
 }
 
 func (h *SSEHandlerCh) AiMsgReasoningStart(reasoningId string) error {
+	h.traceEvent(AiMsgReasoningStart, map[string]interface{}{"id": reasoningId})
 	resp := map[string]interface{}{
 		"type": AiMsgReasoningStart,
 		"id":   reasoningId,
@@ -414,6 +468,7 @@ func (h *SSEHandlerCh) AiMsgReasoningStart(reasoningId string) error {
 }
 
 func (h *SSEHandlerCh) AiMsgReasoningDelta(reasoningId string, reasoning string) error {
+	h.traceEvent(AiMsgReasoningDelta, map[string]interface{}{"id": reasoningId, "deltaLen": len(reasoning)})
 	resp := map[string]interface{}{
 		"type":  AiMsgReasoningDelta,
 		"id":    reasoningId,
@@ -423,6 +478,7 @@ func (h *SSEHandlerCh) AiMsgReasoningDelta(reasoningId string, reasoning string)
 }
 
 func (h *SSEHandlerCh) AiMsgReasoningEnd(reasoningId string) error {
+	h.traceEvent(AiMsgReasoningEnd, map[string]interface{}{"id": reasoningId})
 	resp := map[string]interface{}{
 		"type": AiMsgReasoningEnd,
 		"id":   reasoningId,
@@ -431,6 +487,7 @@ func (h *SSEHandlerCh) AiMsgReasoningEnd(reasoningId string) error {
 }
 
 func (h *SSEHandlerCh) AiMsgToolInputStart(toolCallId, toolName string) error {
+	h.traceEvent(AiMsgToolInputStart, map[string]interface{}{"toolCallId": toolCallId, "toolName": toolName})
 	resp := map[string]interface{}{
 		"type":       AiMsgToolInputStart,
 		"toolCallId": toolCallId,
@@ -440,6 +497,7 @@ func (h *SSEHandlerCh) AiMsgToolInputStart(toolCallId, toolName string) error {
 }
 
 func (h *SSEHandlerCh) AiMsgToolInputDelta(toolCallId, inputTextDelta string) error {
+	h.traceEvent(AiMsgToolInputDelta, map[string]interface{}{"toolCallId": toolCallId, "deltaLen": len(inputTextDelta)})
 	resp := map[string]interface{}{
 		"type":           AiMsgToolInputDelta,
 		"toolCallId":     toolCallId,
@@ -449,6 +507,7 @@ func (h *SSEHandlerCh) AiMsgToolInputDelta(toolCallId, inputTextDelta string) er
 }
 
 func (h *SSEHandlerCh) AiMsgToolInputAvailable(toolCallId, toolName string, input json.RawMessage) error {
+	h.traceEvent(AiMsgToolInputAvailable, map[string]interface{}{"toolCallId": toolCallId, "toolName": toolName})
 	resp := map[string]interface{}{
 		"type":       AiMsgToolInputAvailable,
 		"toolCallId": toolCallId,
@@ -459,6 +518,7 @@ func (h *SSEHandlerCh) AiMsgToolInputAvailable(toolCallId, toolName string, inpu
 }
 
 func (h *SSEHandlerCh) AiMsgStartStep() error {
+	h.traceEvent(AiMsgStartStep, nil)
 	resp := map[string]interface{}{
 		"type": AiMsgStartStep,
 	}
@@ -466,6 +526,7 @@ func (h *SSEHandlerCh) AiMsgStartStep() error {
 }
 
 func (h *SSEHandlerCh) AiMsgFinishStep() error {
+	h.traceEvent(AiMsgFinishStep, nil)
 	resp := map[string]interface{}{
 		"type": AiMsgFinishStep,
 	}
@@ -473,6 +534,7 @@ func (h *SSEHandlerCh) AiMsgFinishStep() error {
 }
 
 func (h *SSEHandlerCh) AiMsgError(errText string) error {
+	h.traceEvent(AiMsgError, map[string]interface{}{"errorTextLen": len(errText)})
 	resp := map[string]interface{}{
 		"type":      AiMsgError,
 		"errorText": errText,
@@ -484,6 +546,7 @@ func (h *SSEHandlerCh) AiMsgData(dataType string, id string, data interface{}) e
 	if !strings.HasPrefix(dataType, "data-") {
 		panic(fmt.Sprintf("AiMsgData type must start with 'data-', got: %s", dataType))
 	}
+	h.traceEvent(dataType, map[string]interface{}{"id": id})
 	resp := map[string]interface{}{
 		"type": dataType,
 		"id":   id,
