@@ -9,8 +9,19 @@ import {
     renderHeaderElements,
 } from "@/app/block/blockutil";
 import { ConnectionButton } from "@/app/block/connectionbutton";
+import { resolveSpeechSettings } from "@/app/aipanel/speechsettings";
+import { speechRuntime } from "@/app/aipanel/speechruntime";
+import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { atoms, getConnStatusAtom, getOverrideConfigAtom, recordTEvent, useBlockAtom, WOS } from "@/app/store/global";
+import {
+    atoms,
+    getConnStatusAtom,
+    getOverrideConfigAtom,
+    getSettingsKeyAtom,
+    recordTEvent,
+    useBlockAtom,
+    WOS,
+} from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -179,6 +190,74 @@ type HeaderEndIconsProps = {
 const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndIconsProps) => {
     const { t } = useTranslation();
     const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
+    const aiModel = React.useMemo(() => WaveAIModel.getInstance(), []);
+    const currentMode = jotai.useAtomValue(aiModel.currentAIMode);
+    const aiModeConfigs = jotai.useAtomValue(aiModel.aiModeConfigs);
+    const currentModeConfig = aiModeConfigs?.[currentMode];
+    const latestAssistantText = jotai.useAtomValue(aiModel.latestAssistantMessageText);
+    const speechEnabled = jotai.useAtomValue(getSettingsKeyAtom("speech:enabled"));
+    const speechProvider = jotai.useAtomValue(getSettingsKeyAtom("speech:provider"));
+    const speechEndpoint = jotai.useAtomValue(getSettingsKeyAtom("speech:endpoint"));
+    const speechModel = jotai.useAtomValue(getSettingsKeyAtom("speech:model"));
+    const speechVoice = jotai.useAtomValue(getSettingsKeyAtom("speech:voice"));
+    const speechVoiceAssistant = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceassistant"));
+    const speechVoiceUser = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceuser"));
+    const speechVoiceSystem = jotai.useAtomValue(getSettingsKeyAtom("speech:voicesystem"));
+    const speechFilterUrls = jotai.useAtomValue(getSettingsKeyAtom("speech:filterurls"));
+    const speechFilterPaths = jotai.useAtomValue(getSettingsKeyAtom("speech:filterpaths"));
+    const speechFilterCode = jotai.useAtomValue(getSettingsKeyAtom("speech:filtercode"));
+    const speechAutoPlay = jotai.useAtomValue(getSettingsKeyAtom("speech:autoplay"));
+    const speechManualButton = jotai.useAtomValue(getSettingsKeyAtom("speech:manualbutton"));
+    const speechLocalEngine = jotai.useAtomValue(getSettingsKeyAtom("speech:localengine"));
+    const speechLocalModel = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodel"));
+    const speechLocalModelPath = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodelpath"));
+    const speechSettings = React.useMemo(
+        () =>
+            resolveSpeechSettings(
+                {
+                    "speech:enabled": speechEnabled,
+                    "speech:provider": speechProvider,
+                    "speech:endpoint": speechEndpoint,
+                    "speech:model": speechModel,
+                    "speech:voice": speechVoice,
+                    "speech:voiceassistant": speechVoiceAssistant,
+                    "speech:voiceuser": speechVoiceUser,
+                    "speech:voicesystem": speechVoiceSystem,
+                    "speech:filterurls": speechFilterUrls,
+                    "speech:filterpaths": speechFilterPaths,
+                    "speech:filtercode": speechFilterCode,
+                    "speech:autoplay": speechAutoPlay,
+                    "speech:manualbutton": speechManualButton,
+                    "speech:localengine": speechLocalEngine,
+                    "speech:localmodel": speechLocalModel,
+                    "speech:localmodelpath": speechLocalModelPath,
+                },
+                currentModeConfig
+            ),
+        [
+            currentModeConfig,
+            speechEnabled,
+            speechProvider,
+            speechEndpoint,
+            speechModel,
+            speechVoice,
+            speechVoiceAssistant,
+            speechVoiceUser,
+            speechVoiceSystem,
+            speechFilterUrls,
+            speechFilterPaths,
+            speechFilterCode,
+            speechAutoPlay,
+            speechManualButton,
+            speechLocalEngine,
+            speechLocalModel,
+            speechLocalModelPath,
+        ]
+    );
+    const [speechActive, setSpeechActive] = React.useState(false);
+    React.useEffect(() => {
+        return speechRuntime.subscribe(setSpeechActive);
+    }, []);
     const magnified = jotai.useAtomValue(nodeModel.isMagnified);
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
     const numLeafs = jotai.useAtomValue(nodeModel.numLeafs);
@@ -188,6 +267,30 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndI
 
     if (endIconButtons && endIconButtons.length > 0) {
         endIconsElem.push(...endIconButtons.map((button, idx) => <IconButton key={idx} decl={button} />));
+    }
+    const speechDecl: IconButtonDecl = {
+        elemtype: "iconbutton",
+        icon: speechActive ? "stop" : speechSettings.transport === "api" ? "cloud" : "volume-high",
+        title: !speechSettings.enabled
+            ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
+            : !latestAssistantText?.trim()
+              ? t("aipanel.noTextContent")
+              : speechActive
+                ? t("aipanel.feedback.stopSpeech")
+                : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" }),
+        click: () => {
+            if (speechActive) {
+                speechRuntime.stop();
+                return;
+            }
+            void speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
+                aiModel.setError(errorMessage);
+            });
+        },
+        disabled: !speechSettings.enabled || !latestAssistantText?.trim(),
+    };
+    if (speechSettings.showManualButton) {
+        endIconsElem.push(<IconButton key="speech" decl={speechDecl} className="block-frame-speech" />);
     }
     const settingsDecl: IconButtonDecl = {
         elemtype: "iconbutton",

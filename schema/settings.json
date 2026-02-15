@@ -80,6 +80,66 @@
         "ai:fixedfontsize": {
           "type": "number"
         },
+        "speech:*": {
+          "type": "boolean"
+        },
+        "speech:enabled": {
+          "type": "boolean"
+        },
+        "speech:provider": {
+          "type": "string",
+          "enum": [
+            "local",
+            "api"
+          ]
+        },
+        "speech:endpoint": {
+          "type": "string"
+        },
+        "speech:model": {
+          "type": "string"
+        },
+        "speech:voice": {
+          "type": "string"
+        },
+        "speech:voiceassistant": {
+          "type": "string"
+        },
+        "speech:voiceuser": {
+          "type": "string"
+        },
+        "speech:voicesystem": {
+          "type": "string"
+        },
+        "speech:filterurls": {
+          "type": "boolean"
+        },
+        "speech:filterpaths": {
+          "type": "boolean"
+        },
+        "speech:filtercode": {
+          "type": "boolean"
+        },
+        "speech:autoplay": {
+          "type": "boolean"
+        },
+        "speech:manualbutton": {
+          "type": "boolean"
+        },
+        "speech:localengine": {
+          "type": "string",
+          "enum": [
+            "browser",
+            "edge",
+            "melo"
+          ]
+        },
+        "speech:localmodel": {
+          "type": "string"
+        },
+        "speech:localmodelpath": {
+          "type": "string"
+        },
         "waveai:showcloudmodes": {
           "type": "boolean"
         },

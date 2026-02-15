@@ -387,7 +387,7 @@ func (conn *WslConn) getPermissionToInstallWsh(ctx context.Context, clientDispla
 		QueryText:    queryText,
 		Title:        title,
 		Markdown:     true,
-		CheckBoxMsg:  "Automatically install for all connections",
+		CheckBoxMsg:  "为所有连接自动安装",
 		OkLabel:      "Install wsh",
 		CancelLabel:  "No wsh",
 	}

@@ -7,6 +7,12 @@ export const DefaultOpenAICompatibleSpeechEndpoint = "https://api.openai.com/v1/
 export const DefaultOpenAICompatibleSpeechModel = "gpt-4o-mini-tts";
 export const DefaultOpenAICompatibleSpeechVoice = "alloy";
 
+export type SpeechFilterOptions = {
+    filterUrls?: boolean;
+    filterPaths?: boolean;
+    filterCode?: boolean;
+};
+
 export type OpenAICompatibleSpeechConfig = {
     endpoint: string;
     model?: string;
@@ -14,8 +20,38 @@ export type OpenAICompatibleSpeechConfig = {
     voice?: string;
 };
 
-function normalizeSpeechInput(text: string): string {
-    return text.replace(/\s+/g, " ").trim().slice(0, MaxSpeechInputLength);
+function stripSpeechNoise(text: string, filterOptions?: SpeechFilterOptions): string {
+    const filterUrls = filterOptions?.filterUrls ?? true;
+    const filterPaths = filterOptions?.filterPaths ?? true;
+    const filterCode = filterOptions?.filterCode ?? true;
+    let cleaned = text;
+
+    if (filterCode) {
+        cleaned = cleaned.replace(/```[\s\S]*?```/g, " ");
+        cleaned = cleaned.replace(/`[^`]*`/g, " ");
+    }
+
+    if (filterUrls) {
+        cleaned = cleaned.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|www\.[^)]+)\)/gi, "$1");
+        cleaned = cleaned.replace(/\bhttps?:\/\/\S+/gi, " ");
+        cleaned = cleaned.replace(/\bwww\.\S+/gi, " ");
+    }
+
+    if (filterPaths) {
+        cleaned = cleaned.replace(/\b[a-zA-Z]:\\(?:[^\\\s]+\\)*[^\\\s]*/g, " ");
+        cleaned = cleaned.replace(/\\\\[^\s\\]+\\[^\s]+/g, " ");
+        cleaned = cleaned.replace(/(?:^|[\s(])(?:~\/|\/)(?:[^\s)]+\/)+[^\s)]+/g, " ");
+        cleaned = cleaned.replace(/\b(?:[A-Za-z0-9_.-]+\/){2,}[A-Za-z0-9_.-]+\b/g, " ");
+        cleaned = cleaned.replace(
+            /\b[\w.-]+\.(?:ts|tsx|js|jsx|go|rs|py|json|yaml|yml|md|txt|log|exe|dll|so|dylib|png|jpg|jpeg|gif|webp)\b/gi,
+            " "
+        );
+    }
+    return cleaned;
+}
+
+function normalizeSpeechInput(text: string, filterOptions?: SpeechFilterOptions): string {
+    return stripSpeechNoise(text, filterOptions).replace(/\s+/g, " ").trim().slice(0, MaxSpeechInputLength);
 }
 
 export function canUseLocalSpeechSynthesis(): boolean {
@@ -38,13 +74,14 @@ export function speakLocally(
     handlers?: {
         onDone?: () => void;
         onError?: (message: string) => void;
-    }
+    },
+    filterOptions?: SpeechFilterOptions
 ): boolean {
     if (!canUseLocalSpeechSynthesis()) {
         handlers?.onError?.("Speech synthesis is not available.");
         return false;
     }
-    const input = normalizeSpeechInput(text);
+    const input = normalizeSpeechInput(text, filterOptions);
     if (input === "") {
         handlers?.onError?.("No text content to read.");
         return false;
@@ -121,9 +158,10 @@ async function safeReadText(response: Response): Promise<string> {
 export async function requestOpenAICompatibleSpeechAudio(
     text: string,
     config: OpenAICompatibleSpeechConfig,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    filterOptions?: SpeechFilterOptions
 ): Promise<Blob> {
-    const input = normalizeSpeechInput(text);
+    const input = normalizeSpeechInput(text, filterOptions);
     if (input === "") {
         throw new Error("No text content to read.");
     }

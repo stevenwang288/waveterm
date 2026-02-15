@@ -2,16 +2,90 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { handleWaveAIContextMenu } from "@/app/aipanel/aipanel-contextmenu";
+import { getSettingsKeyAtom } from "@/app/store/global";
+import { cn, makeIconClass } from "@/util/util";
 import { useAtomValue } from "jotai";
-import { memo } from "react";
-import { WaveAIModel } from "./waveai-model";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveSpeechSettings } from "./speechsettings";
+import { speechRuntime } from "./speechruntime";
+import { WaveAIModel } from "./waveai-model";
 
 export const AIPanelHeader = memo(() => {
     const model = WaveAIModel.getInstance();
     const widgetAccess = useAtomValue(model.widgetAccessAtom);
+    const currentMode = useAtomValue(model.currentAIMode);
+    const aiModeConfigs = useAtomValue(model.aiModeConfigs);
+    const currentModeConfig = aiModeConfigs?.[currentMode];
+    const latestAssistantText = useAtomValue(model.latestAssistantMessageText);
+    const speechEnabled = useAtomValue(getSettingsKeyAtom("speech:enabled"));
+    const speechProvider = useAtomValue(getSettingsKeyAtom("speech:provider"));
+    const speechEndpoint = useAtomValue(getSettingsKeyAtom("speech:endpoint"));
+    const speechModel = useAtomValue(getSettingsKeyAtom("speech:model"));
+    const speechVoice = useAtomValue(getSettingsKeyAtom("speech:voice"));
+    const speechVoiceAssistant = useAtomValue(getSettingsKeyAtom("speech:voiceassistant"));
+    const speechVoiceUser = useAtomValue(getSettingsKeyAtom("speech:voiceuser"));
+    const speechVoiceSystem = useAtomValue(getSettingsKeyAtom("speech:voicesystem"));
+    const speechFilterUrls = useAtomValue(getSettingsKeyAtom("speech:filterurls"));
+    const speechFilterPaths = useAtomValue(getSettingsKeyAtom("speech:filterpaths"));
+    const speechFilterCode = useAtomValue(getSettingsKeyAtom("speech:filtercode"));
+    const speechAutoPlay = useAtomValue(getSettingsKeyAtom("speech:autoplay"));
+    const speechManualButton = useAtomValue(getSettingsKeyAtom("speech:manualbutton"));
+    const speechLocalEngine = useAtomValue(getSettingsKeyAtom("speech:localengine"));
+    const speechLocalModel = useAtomValue(getSettingsKeyAtom("speech:localmodel"));
+    const speechLocalModelPath = useAtomValue(getSettingsKeyAtom("speech:localmodelpath"));
     const inBuilder = model.inBuilder;
     const { t } = useTranslation();
+    const [speechActive, setSpeechActive] = useState(false);
+
+    const speechSettings = useMemo(
+        () =>
+            resolveSpeechSettings(
+                {
+                    "speech:enabled": speechEnabled,
+                    "speech:provider": speechProvider,
+                    "speech:endpoint": speechEndpoint,
+                    "speech:model": speechModel,
+                    "speech:voice": speechVoice,
+                    "speech:voiceassistant": speechVoiceAssistant,
+                    "speech:voiceuser": speechVoiceUser,
+                    "speech:voicesystem": speechVoiceSystem,
+                    "speech:filterurls": speechFilterUrls,
+                    "speech:filterpaths": speechFilterPaths,
+                    "speech:filtercode": speechFilterCode,
+                    "speech:autoplay": speechAutoPlay,
+                    "speech:manualbutton": speechManualButton,
+                    "speech:localengine": speechLocalEngine,
+                    "speech:localmodel": speechLocalModel,
+                    "speech:localmodelpath": speechLocalModelPath,
+                },
+                currentModeConfig
+            ),
+        [
+            currentModeConfig,
+            speechEnabled,
+            speechProvider,
+            speechEndpoint,
+            speechModel,
+            speechVoice,
+            speechVoiceAssistant,
+            speechVoiceUser,
+            speechVoiceSystem,
+            speechFilterUrls,
+            speechFilterPaths,
+            speechFilterCode,
+            speechAutoPlay,
+            speechManualButton,
+            speechLocalEngine,
+            speechLocalModel,
+            speechLocalModelPath,
+        ]
+    );
+    const hasReadableText = !!latestAssistantText?.trim();
+
+    useEffect(() => {
+        return speechRuntime.subscribe(setSpeechActive);
+    }, []);
 
     const handleKebabClick = (e: React.MouseEvent) => {
         handleWaveAIContextMenu(e, false);
@@ -20,6 +94,24 @@ export const AIPanelHeader = memo(() => {
     const handleContextMenu = (e: React.MouseEvent) => {
         handleWaveAIContextMenu(e, false);
     };
+
+    const handleSpeechClick = async () => {
+        if (speechActive) {
+            speechRuntime.stop();
+            return;
+        }
+        await speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
+            model.setError(errorMessage);
+        });
+    };
+
+    const speechTitle = !speechSettings.enabled
+        ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
+        : !hasReadableText
+          ? t("aipanel.noTextContent")
+          : speechActive
+            ? t("aipanel.feedback.stopSpeech")
+            : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" });
 
     return (
         <div
@@ -32,6 +124,26 @@ export const AIPanelHeader = memo(() => {
             </h2>
 
             <div className="flex items-center flex-shrink-0 whitespace-nowrap">
+                {speechSettings.showManualButton && (
+                    <button
+                        onClick={() => {
+                            void handleSpeechClick();
+                        }}
+                        className={cn(
+                            "text-gray-400 hover:text-white cursor-pointer transition-colors p-1 rounded flex-shrink-0 mr-1 focus:outline-none",
+                            (!speechSettings.enabled || !hasReadableText) && "opacity-50 cursor-not-allowed"
+                        )}
+                        title={speechTitle}
+                        disabled={!speechSettings.enabled || !hasReadableText}
+                    >
+                        <i
+                            className={makeIconClass(
+                                speechActive ? "solid@stop" : speechSettings.transport === "api" ? "solid@cloud" : "solid@volume-high",
+                                false
+                            )}
+                        />
+                    </button>
+                )}
                 {!inBuilder && (
                     <div className="flex items-center text-sm whitespace-nowrap">
                         <span className="text-gray-300 @xs:hidden mr-1 text-[12px]">{t("aipanel.context")}</span>
