@@ -26,15 +26,18 @@
 
 ### C. 不同 AI CLI 的朗读（终端块）
 - 在终端块点击朗读按钮时，会优先读取“上一条命令输出（last command）”并播报。
-- 如果 shell integration 不可用或取 last command 失败，会回退到最近 200 行滚动区输出再播报。
-- 这样 `codex / claude / gemini / amp / iflow / opencode / clawx` 等终端 AI CLI 的输出都可以朗读。
+- 如果 shell integration 不可用或取 last command 失败，会直接提示错误（不再回退读最近 200 行，以避免误读历史噪声）。
+- 这样 `codex / claude / gemini / amp / iflow / opencode / clawx` 等终端 AI CLI 的输出仍可朗读，但前提是能取到该命令的输出。
 
-### D. Voice 下拉联动修复
+### D. 仅朗读“最终回复”（避免半截内容）
+- 当 AI 正在生成（streaming）时，手动朗读会提示“请等回复完成后再朗读”，避免读到半截文本。
+
+### E. Voice 下拉联动修复
 - 人物（voice）下拉现在严格展示“当前来源/引擎支持”的 voice 列表。
 - 当切换来源/引擎导致当前选择的 voice 不受支持时，会自动回退到可用的默认 voice。
 - 浏览器语音（speechSynthesis）列表中保留 `system-default` 选项。
 
-### E. 汉化补漏（Shell Extensions 安装提示）
+### F. 汉化补漏（Shell Extensions 安装提示）
 - WSH 安装确认弹窗已补齐中文：标题、正文、确认/取消按钮文案。
 
 ## 3. 打包产物
@@ -48,6 +51,7 @@
   - 切换 local/api、edge/melo/browser，观察 voice 下拉是否联动变化。
   - 切换 voice 后再次测试播放，确认选择生效。
   - 手动按钮：用面板右上角（齿轮左侧）按钮朗读“当前轮”。
+  - 生成中点朗读：应提示“请等回复完成后再朗读”（不播放）。
   - 自动播报：打开 `自动播报新回复`，确认仅在新回复完成后触发。
   - 过滤：打开/关闭 URL/路径/代码过滤，观察读法是否符合预期。
 
