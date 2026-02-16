@@ -46,6 +46,14 @@
             "high"
           ]
         },
+        "ai:verbosity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
         "ai:endpoint": {
           "type": "string"
         },
