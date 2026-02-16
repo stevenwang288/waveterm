@@ -593,11 +593,10 @@ type WshInstallOpts struct {
 }
 
 var queryTextTemplate = strings.TrimSpace(`
-Wave requires Wave Shell Extensions to be
-installed on %q
-to ensure a seamless experience.
+Wave 需要在 %q 上安装 Wave Shell Extensions，
+以确保更顺畅的体验。
 
-Would you like to install them?
+是否现在安装？
 `)
 
 func (conn *SSHConn) UpdateWsh(ctx context.Context, clientDisplayName string, remoteInfo *wshrpc.RemoteInfo) error {
@@ -620,15 +619,15 @@ func (conn *SSHConn) UpdateWsh(ctx context.Context, clientDisplayName string, re
 func (conn *SSHConn) getPermissionToInstallWsh(ctx context.Context, clientDisplayName string) (bool, error) {
 	conn.Infof(ctx, "running getPermissionToInstallWsh...\n")
 	queryText := fmt.Sprintf(queryTextTemplate, clientDisplayName)
-	title := "Install Wave Shell Extensions"
+	title := "安装 Wave Shell Extensions"
 	request := &userinput.UserInputRequest{
 		ResponseType: "confirm",
 		QueryText:    queryText,
 		Title:        title,
 		Markdown:     true,
 		CheckBoxMsg:  "为所有连接自动安装",
-		OkLabel:      "Install wsh",
-		CancelLabel:  "No wsh",
+		OkLabel:      "安装",
+		CancelLabel:  "不安装",
 	}
 	conn.Infof(ctx, "requesting user confirmation...\n")
 	response, err := userinput.GetUserInput(ctx, request)
