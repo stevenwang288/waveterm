@@ -17,6 +17,28 @@ import i18next from "./i18n-main";
 // On Windows, it will store to %LOCALAPPDATA%/waveterm/electron
 const isDev = !app.isPackaged;
 app.setName(isDev ? "wave-dev/electron" : "wave/electron");
+
+// Allow spawning an isolated sidecar instance for smoke testing without
+// conflicting with an already-running stable WAVE instance. Electron's
+// single-instance-lock key is derived from the userData directory.
+//
+// Usage (Windows example):
+//   $env:WAVETERM_ELECTRON_USER_DATA_HOME = "$env:TEMP\\wave-sidecar\\electron"
+//   $env:WAVETERM_CONFIG_HOME = "$env:TEMP\\wave-sidecar\\config"
+//   $env:WAVETERM_DATA_HOME = "$env:TEMP\\wave-sidecar\\data"
+//   Start-Process make\\win-unpacked\\WAVE.exe
+const WaveElectronUserDataHomeVarName = "WAVETERM_ELECTRON_USER_DATA_HOME";
+const electronUserDataOverride = process.env[WaveElectronUserDataHomeVarName];
+if (electronUserDataOverride) {
+    try {
+        app.setPath("userData", ensurePathExists(electronUserDataOverride));
+    } catch (e) {
+        console.log("failed to set Electron userData override", {
+            userData: electronUserDataOverride,
+            error: e instanceof Error ? e.message : String(e),
+        });
+    }
+}
 const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;
 console.log(`Running in ${isDev ? "development" : "production"} mode`);
 if (isDev) {
