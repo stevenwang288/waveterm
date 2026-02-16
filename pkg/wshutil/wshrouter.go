@@ -338,6 +338,9 @@ func (router *WshRouter) addToBacklog_withlock(linkId baseds.LinkId, msgBytes []
 func (router *WshRouter) sendRpcMessageToLink(linkId baseds.LinkId, client AbstractRpcClient, msgBytes []byte, ingressLinkId baseds.LinkId, debugStr string) {
 	router.lock.Lock()
 	defer router.lock.Unlock()
+	if router.linkMap[linkId] == nil {
+		return
+	}
 	sent := false
 	backlog := router.linkMsgBacklog[linkId]
 	if len(backlog) == 0 {

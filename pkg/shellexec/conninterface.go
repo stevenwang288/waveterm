@@ -9,11 +9,11 @@ import (
 	"os/exec"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/creack/pty"
 	"github.com/wavetermdev/waveterm/pkg/panichandler"
+	"github.com/wavetermdev/waveterm/pkg/util/unixutil"
 	"github.com/wavetermdev/waveterm/pkg/wsl"
 	"golang.org/x/crypto/ssh"
 )
@@ -33,14 +33,16 @@ type ConnInterface interface {
 
 type CmdWrap struct {
 	Cmd      *exec.Cmd
+	IsShell  bool
 	WaitOnce *sync.Once
 	WaitErr  error
 	pty.Pty
 }
 
-func MakeCmdWrap(cmd *exec.Cmd, cmdPty pty.Pty) CmdWrap {
+func MakeCmdWrap(cmd *exec.Cmd, cmdPty pty.Pty, isShell bool) CmdWrap {
 	return CmdWrap{
 		Cmd:      cmd,
+		IsShell:  isShell,
 		WaitOnce: &sync.Once{},
 		Pty:      cmdPty,
 	}
@@ -74,9 +76,13 @@ func (cw CmdWrap) KillGraceful(timeout time.Duration) {
 		return
 	}
 	if runtime.GOOS == "windows" {
-		cw.Cmd.Process.Signal(os.Interrupt)
+		cw.Cmd.Process.Kill()
+		return
+	}
+	if cw.IsShell {
+		unixutil.SignalHup(cw.Cmd.Process.Pid)
 	} else {
-		cw.Cmd.Process.Signal(syscall.SIGTERM)
+		unixutil.SignalTerm(cw.Cmd.Process.Pid)
 	}
 	go func() {
 		defer func() {

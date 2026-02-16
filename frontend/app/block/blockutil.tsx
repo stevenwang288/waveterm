@@ -23,6 +23,9 @@ export function blockViewToIcon(view: string): string {
     if (view == "web") {
         return "globe";
     }
+    if (view == "clawx") {
+        return "rocket";
+    }
     if (view == "waveai") {
         return "sparkles";
     }
@@ -47,6 +50,9 @@ export function blockViewToName(view: string): string {
     }
     if (view == "web") {
         return i18next.t("block.viewName.web");
+    }
+    if (view == "clawx") {
+        return i18next.t("block.viewName.clawx");
     }
     if (view == "waveai") {
         return i18next.t("block.viewName.waveai");

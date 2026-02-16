@@ -13,7 +13,7 @@ import { cn } from "@/util/util";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import * as jotai from "jotai";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
 import { formatFileSizeError, isAcceptableFile, validateFileSize } from "./ai-utils";
 import { AIDroppedFiles } from "./aidroppedfiles";
@@ -22,6 +22,8 @@ import { AIPanelHeader } from "./aipanelheader";
 import { AIPanelInput } from "./aipanelinput";
 import { AIPanelMessages } from "./aipanelmessages";
 import { AIRateLimitStrip } from "./airatelimitstrip";
+import { resolveSpeechSettings } from "./speechsettings";
+import { speechRuntime } from "./speechruntime";
 import { WaveUIMessage } from "./aitypes";
 import { BYOKAnnouncement } from "./byokannouncement";
 import { TelemetryRequiredMessage } from "./telemetryrequired";
@@ -258,6 +260,24 @@ const AIPanelComponentInner = memo(() => {
     const tabModel = maybeUseTabModel();
     const defaultMode = jotai.useAtomValue(getSettingsKeyAtom("waveai:defaultmode")) ?? "waveai@balanced";
     const aiModeConfigs = jotai.useAtomValue(model.aiModeConfigs);
+    const speechEnabled = jotai.useAtomValue(getSettingsKeyAtom("speech:enabled"));
+    const speechProvider = jotai.useAtomValue(getSettingsKeyAtom("speech:provider"));
+    const speechEndpoint = jotai.useAtomValue(getSettingsKeyAtom("speech:endpoint"));
+    const speechModel = jotai.useAtomValue(getSettingsKeyAtom("speech:model"));
+    const speechVoice = jotai.useAtomValue(getSettingsKeyAtom("speech:voice"));
+    const speechVoiceAssistant = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceassistant"));
+    const speechVoiceUser = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceuser"));
+    const speechVoiceSystem = jotai.useAtomValue(getSettingsKeyAtom("speech:voicesystem"));
+    const speechFilterUrls = jotai.useAtomValue(getSettingsKeyAtom("speech:filterurls"));
+    const speechFilterPaths = jotai.useAtomValue(getSettingsKeyAtom("speech:filterpaths"));
+    const speechFilterCode = jotai.useAtomValue(getSettingsKeyAtom("speech:filtercode"));
+    const speechAutoPlay = jotai.useAtomValue(getSettingsKeyAtom("speech:autoplay"));
+    const speechManualButton = jotai.useAtomValue(getSettingsKeyAtom("speech:manualbutton"));
+    const speechLocalEngine = jotai.useAtomValue(getSettingsKeyAtom("speech:localengine"));
+    const speechLocalModel = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodel"));
+    const speechLocalModelPath = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodelpath"));
+    const currentMode = jotai.useAtomValue(model.currentAIMode);
+    const currentModeConfig = aiModeConfigs?.[currentMode];
 
     const hasCustomModes = Object.keys(aiModeConfigs).some((key) => !key.startsWith("waveai@"));
     const isUsingCustomMode = !defaultMode.startsWith("waveai@");
@@ -295,6 +315,105 @@ const AIPanelComponentInner = memo(() => {
     // console.log("AICHAT messages", messages);
     (window as any).aichatmessages = messages;
     (window as any).aichatstatus = status;
+
+    useEffect(() => {
+        let latestAssistantText = "";
+        for (let idx = messages.length - 1; idx >= 0; idx--) {
+            const message = messages[idx];
+            if (message.role !== "assistant") {
+                continue;
+            }
+            const text = (message.parts ?? [])
+                .filter((part) => part.type === "text")
+                .map((part) => part.text ?? "")
+                .join("\n\n")
+                .trim();
+            if (text) {
+                latestAssistantText = text;
+                break;
+            }
+        }
+        globalStore.set(model.latestAssistantMessageText, latestAssistantText);
+    }, [messages, model]);
+
+    const speechSettings = useMemo(
+        () =>
+            resolveSpeechSettings(
+                {
+                    "speech:enabled": speechEnabled,
+                    "speech:provider": speechProvider,
+                    "speech:endpoint": speechEndpoint,
+                    "speech:model": speechModel,
+                    "speech:voice": speechVoice,
+                    "speech:voiceassistant": speechVoiceAssistant,
+                    "speech:voiceuser": speechVoiceUser,
+                    "speech:voicesystem": speechVoiceSystem,
+                    "speech:filterurls": speechFilterUrls,
+                    "speech:filterpaths": speechFilterPaths,
+                    "speech:filtercode": speechFilterCode,
+                    "speech:autoplay": speechAutoPlay,
+                    "speech:manualbutton": speechManualButton,
+                    "speech:localengine": speechLocalEngine,
+                    "speech:localmodel": speechLocalModel,
+                    "speech:localmodelpath": speechLocalModelPath,
+                },
+                currentModeConfig
+            ),
+        [
+            currentModeConfig,
+            speechEnabled,
+            speechProvider,
+            speechEndpoint,
+            speechModel,
+            speechVoice,
+            speechVoiceAssistant,
+            speechVoiceUser,
+            speechVoiceSystem,
+            speechFilterUrls,
+            speechFilterPaths,
+            speechFilterCode,
+            speechAutoPlay,
+            speechManualButton,
+            speechLocalEngine,
+            speechLocalModel,
+            speechLocalModelPath,
+        ]
+    );
+    const prevStatusRef = useRef(status);
+
+    useEffect(() => {
+        const prevStatus = prevStatusRef.current;
+        prevStatusRef.current = status;
+        if (!speechSettings.enabled || !speechSettings.autoPlay || status !== "ready" || prevStatus !== "streaming") {
+            return;
+        }
+        let latestAssistantMessage: WaveUIMessage | null = null;
+        for (let idx = messages.length - 1; idx >= 0; idx--) {
+            if (messages[idx]?.role === "assistant") {
+                latestAssistantMessage = messages[idx];
+                break;
+            }
+        }
+        if (!latestAssistantMessage?.id) {
+            return;
+        }
+        const lastAutoPlayedMessageId = globalStore.get(model.lastAutoPlayedMessageId);
+        if (lastAutoPlayedMessageId === latestAssistantMessage.id) {
+            return;
+        }
+        const text = (latestAssistantMessage.parts ?? [])
+            .filter((part) => part.type === "text")
+            .map((part) => part.text ?? "")
+            .join("\n\n")
+            .trim();
+        if (!text) {
+            return;
+        }
+        globalStore.set(model.lastAutoPlayedMessageId, latestAssistantMessage.id);
+        void speechRuntime.play(text, speechSettings, "assistant", (errorMessage) => {
+            model.setError(errorMessage);
+        });
+    }, [messages, model, speechSettings, status]);
 
     const handleKeyDown = (waveEvent: WaveKeyboardEvent): boolean => {
         if (checkKeyPressed(waveEvent, "Cmd:k")) {

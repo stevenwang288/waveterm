@@ -53,6 +53,7 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Amp", command: "amp" },
     { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
+    { label: "ClawX", command: "clawx" },
 ];
 
 const BUILTIN_TERM_THEME_DISPLAY_NAME_TO_I18N_KEY: Record<string, string> = {
@@ -343,7 +344,7 @@ export class TermViewModel implements ViewModel {
         });
         this.termTransparencyAtom = useBlockAtom(blockId, "termtransparencyatom", () => {
             return jotai.atom<number>((get) => {
-                let value = get(getOverrideConfigAtom(this.blockId, "term:transparency")) ?? 0.5;
+                let value = get(getOverrideConfigAtom(this.blockId, "term:transparency")) ?? 0;
                 return boundNumber(value, 0, 1);
             });
         });

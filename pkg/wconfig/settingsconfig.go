@@ -60,6 +60,9 @@ type SettingsType struct {
 	AppShowOverlayBlockNums       *bool  `json:"app:showoverlayblocknums,omitempty"`
 	AppCtrlVPaste                 *bool  `json:"app:ctrlvpaste,omitempty"`
 	AppConfirmQuit                *bool  `json:"app:confirmquit,omitempty"`
+	AppHideAiButton               bool   `json:"app:hideaibutton,omitempty"`
+	AppDisableCtrlShiftArrows     bool   `json:"app:disablectrlshiftarrows,omitempty"`
+	AppDisableCtrlShiftDisplay    bool   `json:"app:disablectrlshiftdisplay,omitempty"`
 
 	FeatureWaveAppBuilder bool `json:"feature:waveappbuilder,omitempty"`
 
@@ -77,6 +80,24 @@ type SettingsType struct {
 	AiProxyUrl      string  `json:"ai:proxyurl,omitempty"`
 	AiFontSize      float64 `json:"ai:fontsize,omitempty"`
 	AiFixedFontSize float64 `json:"ai:fixedfontsize,omitempty"`
+
+	SpeechClear         bool   `json:"speech:*,omitempty"`
+	SpeechEnabled       *bool  `json:"speech:enabled,omitempty"`
+	SpeechProvider      string `json:"speech:provider,omitempty" jsonschema:"enum=local,enum=api"`
+	SpeechEndpoint      string `json:"speech:endpoint,omitempty"`
+	SpeechModel         string `json:"speech:model,omitempty"`
+	SpeechVoice         string `json:"speech:voice,omitempty"`
+	SpeechVoiceAssistant string `json:"speech:voiceassistant,omitempty"`
+	SpeechVoiceUser     string `json:"speech:voiceuser,omitempty"`
+	SpeechVoiceSystem   string `json:"speech:voicesystem,omitempty"`
+	SpeechFilterUrls    *bool  `json:"speech:filterurls,omitempty"`
+	SpeechFilterPaths   *bool  `json:"speech:filterpaths,omitempty"`
+	SpeechFilterCode    *bool  `json:"speech:filtercode,omitempty"`
+	SpeechAutoPlay      *bool  `json:"speech:autoplay,omitempty"`
+	SpeechManualButton  *bool  `json:"speech:manualbutton,omitempty"`
+	SpeechLocalEngine   string `json:"speech:localengine,omitempty" jsonschema:"enum=browser,enum=edge,enum=melo"`
+	SpeechLocalModel    string `json:"speech:localmodel,omitempty"`
+	SpeechLocalModelPath string `json:"speech:localmodelpath,omitempty"`
 
 	WaveAiShowCloudModes bool   `json:"waveai:showcloudmodes,omitempty"`
 	WaveAiDefaultMode    string `json:"waveai:defaultmode,omitempty"`

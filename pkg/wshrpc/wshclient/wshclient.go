@@ -404,6 +404,12 @@ func GetBuilderStatusCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpt
 	return resp, err
 }
 
+// command "getfocusedblockdata", wshserver.GetFocusedBlockDataCommand
+func GetFocusedBlockDataCommand(w *wshutil.WshRpc, opts *wshrpc.RpcOpts) (*wshrpc.FocusedBlockData, error) {
+	resp, err := sendRpcRequestCallHelper[*wshrpc.FocusedBlockData](w, "getfocusedblockdata", nil, opts)
+	return resp, err
+}
+
 // command "getfullconfig", wshserver.GetFullConfigCommand
 func GetFullConfigCommand(w *wshutil.WshRpc, opts *wshrpc.RpcOpts) (wconfig.FullConfigType, error) {
 	resp, err := sendRpcRequestCallHelper[wconfig.FullConfigType](w, "getfullconfig", nil, opts)
@@ -617,6 +623,12 @@ func NetworkOnlineCommand(w *wshutil.WshRpc, opts *wshrpc.RpcOpts) (bool, error)
 // command "notify", wshserver.NotifyCommand
 func NotifyCommand(w *wshutil.WshRpc, data wshrpc.WaveNotificationOptions, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "notify", data, opts)
+	return err
+}
+
+// command "notifysystemresume", wshserver.NotifySystemResumeCommand
+func NotifySystemResumeCommand(w *wshutil.WshRpc, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "notifysystemresume", nil, opts)
 	return err
 }
 

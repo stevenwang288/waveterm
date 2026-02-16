@@ -274,11 +274,35 @@ func DestroyBlockController(blockId string) {
 	deleteController(blockId)
 }
 
+func sendConnMonitorInputNotification(controller Controller) {
+	status := controller.GetRuntimeStatus()
+	if status == nil {
+		return
+	}
+	connName := status.ShellProcConnName
+	if connName == "" || conncontroller.IsLocalConnName(connName) || conncontroller.IsWslConnName(connName) {
+		return
+	}
+
+	connOpts, parseErr := remote.ParseOpts(connName)
+	if parseErr != nil {
+		return
+	}
+	sshConn := conncontroller.MaybeGetConn(connOpts)
+	if sshConn != nil {
+		monitor := sshConn.GetMonitor()
+		if monitor != nil {
+			monitor.NotifyInput()
+		}
+	}
+}
+
 func SendInput(blockId string, inputUnion *BlockInputUnion) error {
 	controller := getController(blockId)
 	if controller == nil {
 		return fmt.Errorf("no controller found for block %s", blockId)
 	}
+	sendConnMonitorInputNotification(controller)
 	return controller.SendInput(inputUnion)
 }
 
@@ -397,7 +421,10 @@ func CheckConnStatus(blockId string) error {
 	if err != nil {
 		return fmt.Errorf("error parsing connection name: %w", err)
 	}
-	conn := conncontroller.GetConn(opts)
+	conn := conncontroller.MaybeGetConn(opts)
+	if conn == nil {
+		return fmt.Errorf("no connection found")
+	}
 	connStatus := conn.DeriveConnStatus()
 	if connStatus.Status != conncontroller.Status_Connected {
 		return fmt.Errorf("not connected: %s", connStatus.Status)
@@ -412,6 +439,7 @@ func makeSwapToken(ctx context.Context, logCtx context.Context, blockId string, 
 		Exp:   time.Now().Add(5 * time.Minute),
 	}
 	token.Env["TERM_PROGRAM"] = "waveterm"
+	token.Env["COLORTERM"] = "truecolor"
 	token.Env["WAVETERM_BLOCKID"] = blockId
 	token.Env["WAVETERM_VERSION"] = wavebase.WaveVersion
 	token.Env["WAVETERM"] = "1"

@@ -7,7 +7,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { SidePanelView, WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { deleteLayoutModelForTab } from "@/layout/index";
-import { atoms, createTab, getApi, globalStore, setActiveTab } from "@/store/global";
+import { atoms, createTab, getApi, getSettingsKeyAtom, globalStore, setActiveTab } from "@/store/global";
 import { isMacOS, isWindows } from "@/util/platformutil";
 import { fireAndForget } from "@/util/util";
 import { useAtomValue } from "jotai";

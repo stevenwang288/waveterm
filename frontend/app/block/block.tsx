@@ -10,6 +10,7 @@ import {
     SubBlockProps,
 } from "@/app/block/blocktypes";
 import { AiFileDiffViewModel } from "@/app/view/aifilediff/aifilediff";
+import { ClawXViewModel } from "@/app/view/clawx/clawx";
 import { LauncherViewModel } from "@/app/view/launcher/launcher";
 import { PreviewModel } from "@/app/view/preview/preview-model";
 import { SysinfoViewModel } from "@/app/view/sysinfo/sysinfo";
@@ -48,6 +49,7 @@ const BlockRegistry: Map<string, ViewModelClass> = new Map();
 BlockRegistry.set("term", TermViewModel);
 BlockRegistry.set("preview", PreviewModel);
 BlockRegistry.set("web", WebViewModel);
+BlockRegistry.set("clawx", ClawXViewModel);
 BlockRegistry.set("waveai", WaveAiModel);
 BlockRegistry.set("cpuplot", SysinfoViewModel);
 BlockRegistry.set("sysinfo", SysinfoViewModel);

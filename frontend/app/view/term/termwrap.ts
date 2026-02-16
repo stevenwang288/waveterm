@@ -9,7 +9,6 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import {
     atoms,
     fetchWaveFile,
-    getApi,
     getOverrideConfigAtom,
     getSettingsKeyAtom,
     globalStore,
@@ -33,6 +32,12 @@ import debug from "debug";
 import * as jotai from "jotai";
 import { debounce } from "throttle-debounce";
 import { FitAddon } from "./fitaddon";
+import {
+    handleOsc16162Command,
+    handleOsc52Command,
+    handleOsc7Command,
+    type ShellIntegrationStatus,
+} from "./osc-handlers";
 import { createTempFileFromBlob, extractAllClipboardData } from "./termutil";
 
 const dlog = debug("wave:termwrap");
@@ -149,9 +154,6 @@ function handleOsc52Command(data: string, blockId: string, loaded: boolean, term
 // for xterm handlers, we return true always because we "own" OSC 7.
 // even if it is invalid we dont want to propagate to other handlers
 function handleOsc7Command(data: string, blockId: string, loaded: boolean): boolean {
-    if (!loaded) {
-        return true;
-    }
     if (data == null || data.length == 0) {
         console.log("Invalid OSC 7 command received (empty)");
         return true;
@@ -168,17 +170,31 @@ function handleOsc7Command(data: string, blockId: string, loaded: boolean): bool
             console.log("Invalid OSC 7 command received (non-file protocol)", data);
             return true;
         }
-        pathPart = decodeURIComponent(url.pathname);
+        const hostPart = decodeURIComponent(url.hostname ?? "");
+        pathPart = decodeURIComponent(url.pathname ?? "");
 
-        // Normalize double slashes at the beginning to single slash
-        if (pathPart.startsWith("//")) {
-            pathPart = pathPart.substring(1);
+        if (/^[a-zA-Z]:$/.test(hostPart)) {
+            // Some shells emit file://D:/path (drive in host field).
+            if (!pathPart.startsWith("/")) {
+                pathPart = `/${pathPart}`;
+            }
+            pathPart = `${hostPart}${pathPart}`;
+        } else if (!isBlank(hostPart) && hostPart.toLowerCase() !== "localhost") {
+            // Preserve UNC-like host paths for remote/WSL/network providers.
+            if (!pathPart.startsWith("/")) {
+                pathPart = `/${pathPart}`;
+            }
+            pathPart = `//${hostPart}${pathPart}`;
         }
 
         // Handle Windows paths (e.g., /C:/... or /D:\...)
         if (/^\/[a-zA-Z]:[\\/]/.test(pathPart)) {
             // Strip leading slash and normalize to forward slashes
             pathPart = pathPart.substring(1).replace(/\\/g, "/");
+        }
+
+        if (/^\/[a-zA-Z]:$/.test(pathPart)) {
+            pathPart = `${pathPart.substring(1)}\\`;
         }
 
         // Handle UNC paths (e.g., /\\server\share)
@@ -191,20 +207,40 @@ function handleOsc7Command(data: string, blockId: string, loaded: boolean): bool
         return true;
     }
 
+    const nextPath = pathPart.trim();
+    if (isBlank(nextPath)) {
+        console.log("Invalid OSC 7 command received (blank path)", data);
+        return true;
+    }
+
+    const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+    const blockData = globalStore.get(blockAtom);
+    const prevPath =
+        typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]).trim() : "";
+    const shouldUpdateMeta = prevPath !== nextPath;
+    if (!loaded) {
+        console.log("OSC 7 received before terminal loaded", { blockId, path: nextPath });
+    }
+
     setTimeout(() => {
         fireAndForget(async () => {
-            await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
-                "cmd:cwd": pathPart,
-            });
+            try {
+                if (shouldUpdateMeta) {
+                    console.log("OSC 7 cwd update", { blockId, from: prevPath || "-", to: nextPath });
+                    await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
+                        "cmd:cwd": nextPath,
+                    });
+                }
 
-            const rtInfo = { "shell:hascurcwd": true };
-            const rtInfoData: CommandSetRTInfoData = {
-                oref: WOS.makeORef("block", blockId),
-                data: rtInfo,
-            };
-            await RpcApi.SetRTInfoCommand(TabRpcClient, rtInfoData).catch((e) =>
-                console.log("error setting RT info", e)
-            );
+                const rtInfo = { "shell:hascurcwd": true };
+                const rtInfoData: CommandSetRTInfoData = {
+                    oref: WOS.makeORef("block", blockId),
+                    data: rtInfo,
+                };
+                await RpcApi.SetRTInfoCommand(TabRpcClient, rtInfoData).catch((e) => console.log("error setting RT info", e));
+            } catch (e) {
+                console.log("OSC 7 update failed", { blockId, path: nextPath, error: e });
+            }
         });
     }, 0);
     return true;
@@ -257,6 +293,192 @@ function checkCommandForTelemetry(decodedCmd: string) {
         recordTEvent("action:term", { "action:type": "cli-tailf" });
         return;
     }
+
+    const claudeRegex = /^claude\b/;
+    if (claudeRegex.test(decodedCmd)) {
+        recordTEvent("action:term", { "action:type": "claude" });
+        return;
+    }
+
+    const opencodeRegex = /^opencode\b/;
+    if (opencodeRegex.test(decodedCmd)) {
+        recordTEvent("action:term", { "action:type": "opencode" });
+        return;
+    }
+}
+
+const AITermCommandPrefixes = [
+    "codex",
+    "claude",
+    "gemini",
+    "amp",
+    "iflow",
+    "opencode",
+    "clawx",
+];
+
+function isAITermCommand(decodedCmd: string): boolean {
+    const trimmed = decodedCmd.trim().toLowerCase();
+    if (!trimmed) {
+        return false;
+    }
+    return AITermCommandPrefixes.some((prefix) => trimmed === prefix || trimmed.startsWith(`${prefix} `));
+}
+
+function normalizeCwdPath(pathValue: string): string {
+    const rawPath = String(pathValue ?? "").trim();
+    if (isBlank(rawPath)) {
+        return "";
+    }
+    let normalizedPath = rawPath.replace(/\\/g, "/");
+    const isUncPath = normalizedPath.startsWith("//");
+    if (isUncPath) {
+        normalizedPath = `//${normalizedPath.slice(2).replace(/\/{2,}/g, "/")}`;
+    } else {
+        normalizedPath = normalizedPath.replace(/\/{2,}/g, "/");
+    }
+    if (normalizedPath.length > 1) {
+        normalizedPath = normalizedPath.replace(/\/+$/, "");
+    }
+    if (/^[a-zA-Z]:$/.test(normalizedPath)) {
+        normalizedPath = `${normalizedPath}/`;
+    }
+    return normalizedPath;
+}
+
+function resolveRelativePath(basePath: string, relativePath: string): string {
+    const normalizedBase = normalizeCwdPath(basePath);
+    const normalizedRelative = normalizeCwdPath(relativePath);
+    if (isBlank(normalizedBase) || isBlank(normalizedRelative)) {
+        return "";
+    }
+
+    let prefix = "";
+    let baseTail = normalizedBase;
+
+    if (normalizedBase.startsWith("//")) {
+        const uncMatch = normalizedBase.match(/^\/\/[^/]+\/[^/]+/);
+        if (uncMatch) {
+            prefix = uncMatch[0];
+            baseTail = normalizedBase.slice(prefix.length) || "/";
+        } else {
+            prefix = "//";
+            baseTail = normalizedBase.slice(2);
+        }
+    } else if (/^[a-zA-Z]:\//.test(normalizedBase)) {
+        prefix = normalizedBase.slice(0, 2);
+        baseTail = normalizedBase.slice(2) || "/";
+    } else if (normalizedBase.startsWith("~")) {
+        prefix = "~";
+        baseTail = normalizedBase.slice(1) || "/";
+    } else if (normalizedBase.startsWith("/")) {
+        prefix = "/";
+        baseTail = normalizedBase.slice(1);
+    }
+
+    const baseSegments = baseTail
+        .split("/")
+        .filter((segment) => !isBlank(segment) && segment !== ".");
+    const nextSegments = normalizedRelative.split("/").filter((segment) => !isBlank(segment) && segment !== ".");
+    const mergedSegments = [...baseSegments];
+    for (const segment of nextSegments) {
+        if (segment === "..") {
+            if (mergedSegments.length > 0) {
+                mergedSegments.pop();
+            }
+            continue;
+        }
+        mergedSegments.push(segment);
+    }
+
+    if (prefix === "~") {
+        return `~/${mergedSegments.join("/")}`.replace(/\/+$/, "") || "~";
+    }
+    if (prefix === "/") {
+        return `/${mergedSegments.join("/")}`.replace(/\/+$/, "") || "/";
+    }
+    if (/^[a-zA-Z]:$/.test(prefix)) {
+        const suffix = mergedSegments.length > 0 ? `/${mergedSegments.join("/")}` : "/";
+        return `${prefix}${suffix}`;
+    }
+    if (prefix.startsWith("//")) {
+        const suffix = mergedSegments.length > 0 ? `/${mergedSegments.join("/")}` : "";
+        return `${prefix}${suffix}`;
+    }
+    return mergedSegments.join("/");
+}
+
+function extractLeadingPathArgument(rawArgument: string): string {
+    const trimmedArgument = String(rawArgument ?? "").trim();
+    if (isBlank(trimmedArgument)) {
+        return "";
+    }
+    const quotedDoubleMatch = trimmedArgument.match(/^"([^"]*)"/);
+    if (quotedDoubleMatch) {
+        return quotedDoubleMatch[1].trim();
+    }
+    const quotedSingleMatch = trimmedArgument.match(/^'([^']*)'/);
+    if (quotedSingleMatch) {
+        return quotedSingleMatch[1].trim();
+    }
+    const tokenMatch = trimmedArgument.match(/^([^\s]+)/);
+    return tokenMatch?.[1]?.trim() ?? "";
+}
+
+function extractCwdTargetFromCommand(commandText: string): string {
+    const trimmedCommand = String(commandText ?? "").trim();
+    if (isBlank(trimmedCommand)) {
+        return "";
+    }
+    const commandWithoutTail = trimmedCommand.replace(/\s*(?:&&|\|\||;).*/i, "").trim();
+    if (isBlank(commandWithoutTail)) {
+        return "";
+    }
+
+    const basicCommandMatch = commandWithoutTail.match(/^(cd|pushd)\s+(.+)$/i);
+    if (basicCommandMatch) {
+        let pathArg = basicCommandMatch[2].trim();
+        if (/^\/d\s+/i.test(pathArg)) {
+            pathArg = pathArg.replace(/^\/d\s+/i, "");
+        }
+        return extractLeadingPathArgument(pathArg);
+    }
+
+    const setLocationMatch = commandWithoutTail.match(/^(set-location|sl|chdir)\s+(.+)$/i);
+    if (!setLocationMatch) {
+        return "";
+    }
+    let setLocationArgs = setLocationMatch[2].trim();
+    setLocationArgs = setLocationArgs.replace(/^-+(?:path|literalpath)\s+/i, "");
+    setLocationArgs = setLocationArgs.replace(/^-+(?:path|literalpath):/i, "");
+    return extractLeadingPathArgument(setLocationArgs);
+}
+
+function inferNextCwdFromCommand(commandText: string, currentCwd: string): string {
+    let targetPath = extractCwdTargetFromCommand(commandText);
+    if (isBlank(targetPath) || targetPath === "-") {
+        return "";
+    }
+
+    const normalizedCurrent = normalizeCwdPath(currentCwd);
+    const normalizedTarget = normalizeCwdPath(targetPath);
+    if (isBlank(normalizedTarget)) {
+        return "";
+    }
+
+    if (
+        normalizedTarget.startsWith("/") ||
+        normalizedTarget.startsWith("//") ||
+        normalizedTarget.startsWith("~") ||
+        /^[a-zA-Z]:\//.test(normalizedTarget)
+    ) {
+        return normalizedTarget;
+    }
+
+    if (isBlank(normalizedCurrent)) {
+        return "";
+    }
+    return resolveRelativePath(normalizedCurrent, normalizedTarget);
 }
 
 // OSC 16162 - Shell Integration Commands
@@ -325,6 +547,29 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                         rtInfo["shell:lastcmd"] = decodedCmd;
                         globalStore.set(termWrap.lastCommandAtom, decodedCmd);
                         checkCommandForTelemetry(decodedCmd);
+                        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+                        const blockData = globalStore.get(blockAtom);
+                        const currentCwd =
+                            typeof blockData?.meta?.["cmd:cwd"] === "string"
+                                ? String(blockData.meta["cmd:cwd"]).trim()
+                                : "";
+                        const inferredCwd = inferNextCwdFromCommand(decodedCmd, currentCwd);
+                        if (!isBlank(inferredCwd) && inferredCwd !== currentCwd) {
+                            console.log("Inferred cwd update from command", {
+                                blockId,
+                                from: currentCwd || "-",
+                                to: inferredCwd,
+                            });
+                            fireAndForget(async () => {
+                                try {
+                                    await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
+                                        "cmd:cwd": inferredCwd,
+                                    });
+                                } catch (e) {
+                                    console.log("Inferred cwd update failed", { blockId, cmd: decodedCmd, error: e });
+                                }
+                            });
+                        }
                     } catch (e) {
                         console.error("Error decoding cmd64:", e);
                         rtInfo["shell:lastcmd"] = null;
@@ -367,7 +612,15 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
         case "R":
             globalStore.set(termWrap.shellIntegrationStatusAtom, null);
             if (terminal.buffer.active.type === "alternate") {
-                terminal.write("\x1b[?1049l");
+                const lastCommand = globalStore.get(termWrap.lastCommandAtom) ?? "";
+                if (!isAITermCommand(lastCommand)) {
+                    terminal.write("\x1b[?1049l");
+                } else {
+                    console.log("Skip OSC 16162 R alternate-exit for AI command", {
+                        blockId,
+                        lastCommand,
+                    });
+                }
             }
             setTimeout(() => {
                 globalStore.set(termWrap.altBufAtom, terminal.buffer.active.type === "alternate");
@@ -414,7 +667,7 @@ export class TermWrap {
     pasteActive: boolean = false;
     lastUpdated: number;
     promptMarkers: TermTypes.IMarker[] = [];
-    shellIntegrationStatusAtom: jotai.PrimitiveAtom<"ready" | "running-command" | null>;
+    shellIntegrationStatusAtom: jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     nodeModel: BlockNodeModel; // this can be null
     unreadAtom: jotai.PrimitiveAtom<boolean>;
@@ -732,7 +985,7 @@ export class TermWrap {
         if (!isBlank(cwd)) {
             targetParts.push(cwd);
         }
-        const targetLabel = targetParts.join(" бд ");
+        const targetLabel = targetParts.join(" · ");
 
         const bodyParts: string[] = [];
         if (!isBlank(tabName)) {
@@ -747,7 +1000,7 @@ export class TermWrap {
         pushNotification({
             icon: "bell",
             title: i18next.t("term.bellNotifyTitle"),
-            message: bodyParts.join(" бд ") || "",
+            message: bodyParts.join(" · ") || "",
             timestamp: new Date(now).toISOString(),
             expiration: now + 2 * 60 * 1000,
             type: "warning",
@@ -1052,6 +1305,9 @@ export class TermWrap {
         } finally {
             this.writeLoopRunning = false;
             this.maybeUpdateAltBufState(true);
+            if (this.pendingWriteBytes > 0) {
+                fireAndForget(() => this.flushTerminalWriteQueue());
+            }
         }
     }
 
@@ -1205,7 +1461,7 @@ export class TermWrap {
                     this.terminal.resize(fileTermSize.cols, fileTermSize.rows);
                     didResize = true;
                 }
-                this.doTerminalWrite(cacheData, ptyOffset);
+                await this.doTerminalWrite(cacheData, ptyOffset);
                 if (didResize) {
                     this.terminal.resize(curTermSize.cols, curTermSize.rows);
                 }
@@ -1237,9 +1493,20 @@ export class TermWrap {
     }
 
     handleResize() {
+        const bufferBeforeResize = this.terminal?.buffer?.active;
+        const wasAtBottomBeforeResize =
+            bufferBeforeResize != null &&
+            bufferBeforeResize.type !== "alternate" &&
+            bufferBeforeResize.baseY - bufferBeforeResize.viewportY <= 1;
         const oldRows = this.terminal.rows;
         const oldCols = this.terminal.cols;
         this.fitAddon.fit();
+        if (wasAtBottomBeforeResize) {
+            this.terminal.scrollToBottom();
+            window.requestAnimationFrame(() => {
+                this.terminal.scrollToBottom();
+            });
+        }
         if (oldRows !== this.terminal.rows || oldCols !== this.terminal.cols) {
             const termSize: TermSize = { rows: this.terminal.rows, cols: this.terminal.cols };
             RpcApi.ControllerInputCommand(TabRpcClient, { blockid: this.blockId, termsize: termSize });

@@ -1,16 +1,16 @@
 {
-    "name": "waveterm-zhcn",
+    "name": "wave",
     "author": {
         "name": "Command Line Inc",
         "email": "info@commandline.dev"
     },
-    "productName": "WaveCN",
+    "productName": "WAVE",
     "description": "Open-Source AI-Native Terminal Built for Seamless Workflows",
     "license": "Apache-2.0",
-    "version": "0.13.2-alpha.0",
+    "version": "0.14.0-1",
     "homepage": "https://waveterm.dev",
     "build": {
-        "appId": "dev.commandline.waveterm.zhcn"
+        "appId": "dev.commandline.wave"
     },
     "private": true,
     "main": "./dist/main/index.js",
@@ -68,7 +68,7 @@
         "tslib": "^2.8.1",
         "tsx": "^4.21.0",
         "typescript": "^5.9.3",
-        "typescript-eslint": "^8.53.1",
+        "typescript-eslint": "^8.54.0",
         "vite": "^6.4.1",
         "vite-plugin-image-optimizer": "^2.0.3",
         "vite-plugin-svgr": "^4.5.0",

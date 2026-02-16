@@ -44,6 +44,7 @@ export class WaveAIModel {
     private static instance: WaveAIModel | null = null;
     inputRef: React.RefObject<AIPanelInputRef> | null = null;
     scrollToBottomCallback: (() => void) | null = null;
+    scrollByLineCallback: ((direction: "up" | "down") => void) | null = null;
     useChatSendMessage: UseChatSendMessageType | null = null;
     useChatSetMessages: UseChatSetMessagesType | null = null;
     useChatStatus: ChatStatus = "ready";
@@ -65,6 +66,8 @@ export class WaveAIModel {
     containerWidth: jotai.PrimitiveAtom<number> = jotai.atom(0);
     codeBlockMaxWidth!: jotai.Atom<number>;
     inputAtom: jotai.PrimitiveAtom<string> = jotai.atom("");
+    latestAssistantMessageText: jotai.PrimitiveAtom<string> = jotai.atom("");
+    lastAutoPlayedMessageId: jotai.PrimitiveAtom<string | null> = jotai.atom(null);
     isLoadingChatAtom: jotai.PrimitiveAtom<boolean> = jotai.atom(false);
     isChatEmptyAtom: jotai.PrimitiveAtom<boolean> = jotai.atom(true);
     isWaveAIFocusedAtom!: jotai.Atom<boolean>;
@@ -272,6 +275,8 @@ export class WaveAIModel {
         this.clearFiles();
         this.clearError();
         globalStore.set(this.isChatEmptyAtom, true);
+        globalStore.set(this.latestAssistantMessageText, "");
+        globalStore.set(this.lastAutoPlayedMessageId, null);
         const newChatId = crypto.randomUUID();
         globalStore.set(this.chatId, newChatId);
 
@@ -299,6 +304,10 @@ export class WaveAIModel {
         this.scrollToBottomCallback = callback;
     }
 
+    registerScrollByLine(callback: (direction: "up" | "down") => void) {
+        this.scrollByLineCallback = callback;
+    }
+
     registerUseChatData(
         sendMessage: UseChatSendMessageType,
         setMessages: UseChatSetMessagesType,
@@ -313,6 +322,10 @@ export class WaveAIModel {
 
     scrollToBottom() {
         this.scrollToBottomCallback?.();
+    }
+
+    scrollByLine(direction: "up" | "down") {
+        this.scrollByLineCallback?.(direction);
     }
 
     focusInput() {

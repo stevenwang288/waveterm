@@ -12,7 +12,10 @@ import { fireAndForget, sleep } from "../frontend/util/util";
 import { AuthKey, configureAuthKeyRequestInjection } from "./authkey";
 import {
     getActivityState,
+    getAndClearTermCommandsDurable,
+    getAndClearTermCommandsRemote,
     getAndClearTermCommandsRun,
+    getAndClearTermCommandsWsl,
     getForceQuit,
     getGlobalIsRelaunching,
     getUserConfirmedQuit,
@@ -183,6 +186,9 @@ function logActiveState() {
         if (termCmdCount > 0) {
             activity.termcommandsrun = termCmdCount;
         }
+        const termCmdRemoteCount = getAndClearTermCommandsRemote();
+        const termCmdWslCount = getAndClearTermCommandsWsl();
+        const termCmdDurableCount = getAndClearTermCommandsDurable();
 
         const props: TEventProps = {
             "activity:activeminutes": activity.activeminutes,
@@ -191,6 +197,15 @@ function logActiveState() {
         };
         if (termCmdCount > 0) {
             props["activity:termcommandsrun"] = termCmdCount;
+        }
+        if (termCmdRemoteCount > 0) {
+            props["activity:termcommands:remote"] = termCmdRemoteCount;
+        }
+        if (termCmdWslCount > 0) {
+            props["activity:termcommands:wsl"] = termCmdWslCount;
+        }
+        if (termCmdDurableCount > 0) {
+            props["activity:termcommands:durable"] = termCmdDurableCount;
         }
         if (astate.wasActive && isWaveAIOpen) {
             props["activity:waveaiactiveminutes"] = 1;
@@ -348,6 +363,39 @@ process.on("uncaughtException", (error) => {
     setUserConfirmedQuit(true);
     electronApp.quit();
 });
+process.on("unhandledRejection", (reason, promise) => {
+    const rejectionError = reason as { message?: string; stack?: string; name?: string } | undefined;
+    console.log("Unhandled Rejection captured in main process", {
+        message: rejectionError?.message ?? String(reason),
+        name: rejectionError?.name ?? "",
+        stack: rejectionError?.stack ?? "",
+        promise: String(promise),
+    });
+});
+electronApp.on("render-process-gone", (_event, webContents, details) => {
+    let currentUrl = "";
+    try {
+        currentUrl = webContents.isDestroyed() ? "" : webContents.getURL();
+    } catch {
+        currentUrl = "";
+    }
+    console.log("app render-process-gone", {
+        webContentsId: webContents.id,
+        reason: details?.reason,
+        exitCode: details?.exitCode,
+        url: currentUrl,
+    });
+});
+electronApp.on("child-process-gone", (_event, details) => {
+    const childDetails = details as any;
+    console.log("app child-process-gone", {
+        type: childDetails?.type,
+        reason: childDetails?.reason,
+        exitCode: childDetails?.exitCode,
+        serviceName: childDetails?.serviceName,
+        name: childDetails?.name,
+    });
+});
 
 let lastWaveWindowCount = 0;
 let lastIsBuilderWindowActive = false;
@@ -420,6 +468,16 @@ async function appMain() {
         if (allWindows.length === 0) {
             fireAndForget(createNewWaveWindow);
         }
+    });
+    electron.powerMonitor.on("resume", () => {
+        console.log("system resumed from sleep, notifying server");
+        fireAndForget(async () => {
+            try {
+                await RpcApi.NotifySystemResumeCommand(ElectronWshClient, { noresponse: true });
+            } catch (e) {
+                console.log("error calling NotifySystemResumeCommand", e);
+            }
+        });
     });
     const rawGlobalHotKey = launchSettings?.["app:globalhotkey"];
     if (rawGlobalHotKey) {

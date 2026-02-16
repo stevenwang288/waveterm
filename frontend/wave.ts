@@ -56,6 +56,93 @@ let savedInitOpts: WaveInitOpts = null;
 (window as any).removeNotificationById = removeNotificationById;
 (window as any).modalsModel = modalsModel;
 
+const RendererDiagMaxFieldLen = 4000;
+const RendererDiagInstalledFlag = "__waveRendererDiagnosticsInstalled";
+
+function truncateDiagnosticValue(value: string): string {
+    if (value == null) {
+        return "";
+    }
+    if (value.length <= RendererDiagMaxFieldLen) {
+        return value;
+    }
+    return `${value.slice(0, RendererDiagMaxFieldLen)}...<truncated>`;
+}
+
+function safeSerializeDiagnosticValue(value: unknown): string {
+    if (value == null) {
+        return String(value);
+    }
+    if (value instanceof Error) {
+        return truncateDiagnosticValue(
+            JSON.stringify({
+                name: value.name,
+                message: value.message,
+                stack: value.stack,
+            })
+        );
+    }
+    if (value instanceof Promise) {
+        return "[Promise]";
+    }
+    if (typeof value === "string") {
+        return truncateDiagnosticValue(value);
+    }
+    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+        return String(value);
+    }
+    if (typeof value === "symbol") {
+        return value.toString();
+    }
+    if (typeof value === "function") {
+        return `[Function:${value.name || "anonymous"}]`;
+    }
+    if (value instanceof EventTarget) {
+        return `[EventTarget:${value.constructor?.name || "unknown"}]`;
+    }
+    try {
+        return truncateDiagnosticValue(JSON.stringify(value));
+    } catch {
+        try {
+            return truncateDiagnosticValue(String(value));
+        } catch {
+            return "[Unserializable]";
+        }
+    }
+}
+
+function logRendererDiagnostic(eventName: string, payload: Record<string, unknown>) {
+    try {
+        getApi().sendLog(`[${eventName}] ${JSON.stringify(payload)}`);
+    } catch (e) {
+        console.error("failed to send renderer diagnostic log", e);
+    }
+}
+
+function installRendererDiagnostics() {
+    if ((window as any)[RendererDiagInstalledFlag]) {
+        return;
+    }
+    (window as any)[RendererDiagInstalledFlag] = true;
+    window.addEventListener("error", (event) => {
+        logRendererDiagnostic("renderer-error", {
+            href: window.location.href,
+            message: event.message,
+            source: event.filename,
+            line: event.lineno,
+            column: event.colno,
+            error: safeSerializeDiagnosticValue(event.error),
+        });
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+        logRendererDiagnostic("renderer-unhandledrejection", {
+            href: window.location.href,
+            reason: safeSerializeDiagnosticValue(event.reason),
+            promise: safeSerializeDiagnosticValue(event.promise),
+        });
+    });
+}
+
 function updateZoomFactor(zoomFactor: number) {
     console.log("update zoomfactor", zoomFactor);
     document.documentElement.style.setProperty("--zoomfactor", String(zoomFactor));
@@ -64,6 +151,7 @@ function updateZoomFactor(zoomFactor: number) {
 
 async function initBare() {
     getApi().sendLog("Init Bare");
+    installRendererDiagnostics();
     document.body.style.visibility = "hidden";
     document.body.style.opacity = "0";
     document.body.classList.add("is-transparent");

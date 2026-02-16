@@ -140,13 +140,37 @@ interface AIMessageProps {
     isStreaming: boolean;
 }
 
-const isDisplayPart = (part: WaveUIMessagePart): boolean => {
+export const isDisplayPart = (part: WaveUIMessagePart): boolean => {
     return (
         part.type === "text" ||
         part.type === "data-tooluse" ||
         part.type === "data-toolprogress" ||
         (part.type.startsWith("tool-") && "state" in part && part.state === "input-available")
     );
+};
+
+export const hasAssistantRenderableContent = (message: WaveUIMessage): boolean => {
+    if (message.role !== "assistant") {
+        return false;
+    }
+    const parts = message.parts || [];
+    return parts.some((part) => {
+        if (part.type === "text") {
+            return (part.text ?? "").trim().length > 0;
+        }
+        return isDisplayPart(part);
+    });
+};
+
+export const isAssistantMessageLikelyIncomplete = (message: WaveUIMessage): boolean => {
+    if (message.role !== "assistant") {
+        return false;
+    }
+    const parts = message.parts || [];
+    if (parts.length === 0) {
+        return true;
+    }
+    return !hasAssistantRenderableContent(message);
 };
 
 type MessagePart =

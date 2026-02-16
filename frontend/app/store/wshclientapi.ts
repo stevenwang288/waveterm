@@ -332,6 +332,11 @@ class RpcApiType {
         return client.wshRpcCall("getbuilderstatus", data, opts);
     }
 
+    // command "getfocusedblockdata" [call]
+    GetFocusedBlockDataCommand(client: WshClient, opts?: RpcOpts): Promise<FocusedBlockData> {
+        return client.wshRpcCall("getfocusedblockdata", null, opts);
+    }
+
     // command "getfullconfig" [call]
     GetFullConfigCommand(client: WshClient, opts?: RpcOpts): Promise<FullConfigType> {
         return client.wshRpcCall("getfullconfig", null, opts);
@@ -510,6 +515,11 @@ class RpcApiType {
     // command "notify" [call]
     NotifyCommand(client: WshClient, data: WaveNotificationOptions, opts?: RpcOpts): Promise<void> {
         return client.wshRpcCall("notify", data, opts);
+    }
+
+    // command "notifysystemresume" [call]
+    NotifySystemResumeCommand(client: WshClient, opts?: RpcOpts): Promise<void> {
+        return client.wshRpcCall("notifysystemresume", null, opts);
     }
 
     // command "path" [call]

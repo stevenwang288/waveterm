@@ -8,7 +8,7 @@ import { ContextMenuModel } from "@/app/store/contextmenu";
 import { FocusManager } from "@/app/store/focusManager";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { atoms, createBlock, getBlockComponentModel, useBlockAtom, WOS, isDev } from "@/store/global";
+import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
 import {
@@ -48,7 +48,11 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Amp", command: "amp" },
     { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
+    { label: "ClawX", command: "clawx" },
 ];
+const CLAWX_LOCAL_URL = "http://127.0.0.1:5173";
+const CLAWX_LOCALHOST_URL = "http://localhost:5173";
+const CLAWX_ICON = "rocket";
 
 async function handleWidgetSelect(widget: WidgetConfigType) {
     const blockDef = widget.blockdef;
@@ -526,6 +530,120 @@ const Widgets = memo(() => {
         WorkspaceLayoutModel.getInstance().toggleSidePanelView("git");
     }, []);
 
+    const normalizePathForScope = useCallback((pathValue: string): string => {
+        const rawPath = typeof pathValue === "string" ? pathValue.trim() : "";
+        if (!rawPath) {
+            return "";
+        }
+        let normalizedPath = rawPath;
+        if (normalizedPath.length > 1) {
+            normalizedPath = normalizedPath.replace(/[\\/]+$/, "");
+        }
+        if (/^[A-Za-z]:$/.test(normalizedPath)) {
+            normalizedPath = `${normalizedPath}\\`;
+        }
+        normalizedPath = normalizedPath.replace(/\\/g, "/");
+        const isUncPath = normalizedPath.startsWith("//");
+        if (isUncPath) {
+            normalizedPath = `//${normalizedPath.slice(2).replace(/\/{2,}/g, "/")}`;
+        } else {
+            normalizedPath = normalizedPath.replace(/\/{2,}/g, "/");
+        }
+        if (/^[A-Za-z]:\//.test(normalizedPath)) {
+            normalizedPath = `${normalizedPath[0].toLowerCase()}${normalizedPath.slice(1)}`;
+        }
+        return normalizedPath;
+    }, []);
+
+    const getScopeFromTermBlock = useCallback(
+        (blockData: Block | null | undefined): string => {
+            if (blockData?.meta?.view !== "term") {
+                return "";
+            }
+            const normalizedPath = normalizePathForScope(String(blockData?.meta?.["cmd:cwd"] ?? ""));
+            if (!normalizedPath) {
+                return "";
+            }
+            const connectionName = String(blockData?.meta?.connection ?? "local").trim() || "local";
+            return `${connectionName}::${normalizedPath}`;
+        },
+        [normalizePathForScope]
+    );
+
+    const resolveClawXPathScope = useCallback((): string => {
+        const focusedScope = getScopeFromTermBlock(focusedBlockData);
+        if (focusedScope) {
+            return focusedScope;
+        }
+        const tabId = globalStore.get(atoms.staticTabId);
+        if (isBlank(tabId)) {
+            return "__tab__";
+        }
+        const tabAtom = WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", tabId));
+        const tabData = globalStore.get(tabAtom);
+        const blockIds: string[] = tabData?.blockids ?? [];
+        for (const blockId of blockIds) {
+            const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+            const blockData = globalStore.get(blockAtom);
+            const scopeValue = getScopeFromTermBlock(blockData);
+            if (scopeValue) {
+                return scopeValue;
+            }
+        }
+        return "__tab__";
+    }, [focusedBlockData, getScopeFromTermBlock]);
+
+    const appendClawXScopeQuery = useCallback((url: string, scopeValue: string): string => {
+        if (isBlank(url)) {
+            return url;
+        }
+        try {
+            const parsedUrl = new URL(url);
+            parsedUrl.searchParams.set("wave_scope", scopeValue);
+            parsedUrl.searchParams.set("wave_source", "waveterm");
+            return parsedUrl.toString();
+        } catch {
+            return url;
+        }
+    }, []);
+
+    const openClawXBlock = useCallback((url?: string) => {
+        const scopeValue = resolveClawXPathScope();
+        const meta: Record<string, any> = {
+            view: "clawx",
+            "clawx:pathscope": scopeValue,
+        };
+        if (!isBlank(url)) {
+            meta.url = appendClawXScopeQuery(url, scopeValue);
+        }
+        fireAndForget(async () => {
+            await createBlock({ meta });
+        });
+    }, [appendClawXScopeQuery, resolveClawXPathScope]);
+
+    const showClawXLauncherMenu = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const menu: ContextMenuItem[] = [
+                {
+                    label: t("workspace.openClawxDefault"),
+                    click: () => openClawXBlock(),
+                },
+                {
+                    label: t("workspace.openClawxLocal"),
+                    click: () => openClawXBlock(CLAWX_LOCAL_URL),
+                },
+                {
+                    label: t("workspace.openClawxLocalhost"),
+                    click: () => openClawXBlock(CLAWX_LOCALHOST_URL),
+                },
+            ];
+            ContextMenuModel.showContextMenu(menu, e);
+        },
+        [openClawXBlock, t]
+    );
+
     const openSettingsPanel = useCallback(() => {
         const blockDef: BlockDef = {
             meta: {
@@ -550,7 +668,8 @@ const Widgets = memo(() => {
             newMode = "compact";
 
             // Calculate total widget count for supercompact check
-            const totalWidgets = (widgets?.length || 0) + 1;
+            const utilityWidgets = (isDev() || featureWaveAppBuilder) ? 6 : 5;
+            const totalWidgets = (widgets?.length || 0) + utilityWidgets;
             const minHeightPerWidget = 32;
             const requiredHeight = totalWidgets * minHeightPerWidget;
 
@@ -562,7 +681,7 @@ const Widgets = memo(() => {
         if (newMode !== mode) {
             setMode(newMode);
         }
-    }, [mode, widgets]);
+    }, [featureWaveAppBuilder, mode, widgets]);
 
     useEffect(() => {
         const resizeObserver = new ResizeObserver(() => {
@@ -654,6 +773,20 @@ const Widgets = memo(() => {
                             </div>
                             <div
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                                onClick={() => {
+                                    openClawXBlock(CLAWX_LOCAL_URL);
+                                    setIsAppsOpen(false);
+                                }}
+                                onContextMenu={showClawXLauncherMenu}
+                            >
+                                <Tooltip content={t("workspace.clawxTooltip")} placement="right" disable={false}>
+                                    <div>
+                                        <i className={makeIconClass(CLAWX_ICON, true)}></i>
+                                    </div>
+                                </Tooltip>
+                            </div>
+                            <div
+                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={showAiLauncherMenu}
                             >
                                 <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
@@ -732,6 +865,27 @@ const Widgets = memo(() => {
                         </div>
                         <div
                             className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={() => {
+                                openClawXBlock(CLAWX_LOCAL_URL);
+                                setIsAppsOpen(false);
+                            }}
+                            onContextMenu={showClawXLauncherMenu}
+                        >
+                            <Tooltip content={t("workspace.clawxTooltip")} placement="right" disable={false}>
+                                <div className="flex flex-col items-center w-full">
+                                    <div>
+                                        <i className={makeIconClass(CLAWX_ICON, true)}></i>
+                                    </div>
+                                    {mode === "normal" && (
+                                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                                            {t("workspace.clawx")}
+                                        </div>
+                                    )}
+                                </div>
+                            </Tooltip>
+                        </div>
+                        <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                             onClick={showAiLauncherMenu}
                         >
                             <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
@@ -741,7 +895,7 @@ const Widgets = memo(() => {
                                     </div>
                                     {mode === "normal" && (
                                         <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                                            AI
+                                            {t("workspace.ai")}
                                         </div>
                                     )}
                                 </div>
@@ -798,7 +952,13 @@ const Widgets = memo(() => {
                     <div>
                         <i className={makeIconClass("robot", true)}></i>
                     </div>
-                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">AI</div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.ai")}</div>
+                </div>
+                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                    <div>
+                        <i className={makeIconClass(CLAWX_ICON, true)}></i>
+                    </div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.clawx")}</div>
                 </div>
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>

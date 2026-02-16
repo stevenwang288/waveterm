@@ -329,13 +329,19 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         if (!termWrap) {
             return;
         }
+        const bufferBeforeResize = termWrap.terminal?.buffer?.active;
+        const wasAtBottomBeforeResize =
+            bufferBeforeResize != null && bufferBeforeResize.baseY === bufferBeforeResize.viewportY;
         termWrap.handleResize_debounced();
         const timeouts = [100, 250, 500].map((delayMs) =>
             setTimeout(() => {
                 termWrap.handleResize_debounced();
                 if (delayMs === 500) {
                     fireAndForget(() => termWrap.resyncController("magnify resize"));
-                    if (isMagnified) {
+                    if (wasAtBottomBeforeResize) {
+                        termWrap.scrollToBottom();
+                    }
+                    if (isMagnified && wasAtBottomBeforeResize) {
                         fireAndForget(() => termWrap.reflowHistoryToCurrentWidth("magnify-auto"));
                     }
                 }

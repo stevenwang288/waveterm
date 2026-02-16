@@ -133,7 +133,7 @@ declare global {
         clearWebviewStorage: (webContentsId: number) => Promise<void>; // clear-webview-storage
         setWaveAIOpen: (isOpen: boolean) => void; // set-waveai-open
         closeBuilderWindow: () => void; // close-builder-window
-        incrementTermCommands: () => void; // increment-term-commands
+        incrementTermCommands: (opts?: { isRemote?: boolean; isWsl?: boolean; isDurable?: boolean }) => void; // increment-term-commands
         nativePaste: () => void; // native-paste
         codexTranslate: (text: string) => Promise<string>; // codex-translate
         codexAuthReady: () => Promise<boolean>; // codex-auth-ready

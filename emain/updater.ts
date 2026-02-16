@@ -60,6 +60,7 @@ export class Updater {
 
         // Only update the release channel if it's specified, otherwise use the one configured in the updater.
         autoUpdater.channel = getUpdateChannel(settings);
+        autoUpdater.allowDowngrade = false;
 
         autoUpdater.removeAllListeners();
 
@@ -203,6 +204,7 @@ export class Updater {
         if (this.status == "ready") {
             this.status = "installing";
             await delay(1000);
+            setUserConfirmedQuit(true);
             autoUpdater.quitAndInstall();
         }
     }

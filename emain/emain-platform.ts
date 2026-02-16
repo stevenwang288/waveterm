@@ -16,7 +16,7 @@ import i18next from "./i18n-main";
 // On Linux, it will store to ~/.config/waveterm/electron
 // On Windows, it will store to %LOCALAPPDATA%/waveterm/electron
 const isDev = !app.isPackaged;
-app.setName(isDev ? "waveterm-zhcn-dev/electron" : "waveterm-zhcn/electron");
+app.setName(isDev ? "wave-dev/electron" : "wave/electron");
 const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;
 console.log(`Running in ${isDev ? "development" : "production"} mode`);
 if (isDev) {
@@ -26,13 +26,13 @@ if (isDevVite) {
     process.env[WaveDevViteVarName] = "1";
 }
 
-const waveDirNamePrefix = "waveterm-zhcn";
+const waveDirNamePrefix = "wave";
 const waveDirNameSuffix = isDev ? "dev" : "";
 const waveDirName = `${waveDirNamePrefix}${waveDirNameSuffix ? `-${waveDirNameSuffix}` : ""}`;
 
 const paths = envPaths(waveDirNamePrefix, { suffix: waveDirNameSuffix });
 
-app.setName(isDev ? "WaveCN (Dev)" : "WaveCN");
+app.setName(isDev ? "WAVE (Dev)" : "WAVE");
 const unamePlatform = process.platform;
 const unameArch: string = process.arch;
 keyutil.setKeyUtilPlatform(unamePlatform);

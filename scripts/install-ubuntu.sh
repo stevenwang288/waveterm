@@ -7,7 +7,7 @@ PREFER="deb"
 
 print_usage() {
   cat <<'USAGE'
-WaveCN Ubuntu/Debian installer (from GitHub Releases).
+WAVE Ubuntu/Debian installer (from GitHub Releases).
 
 Usage:
   install-ubuntu.sh [--repo owner/repo] [--stable] [--prefer deb|appimage]
@@ -91,7 +91,7 @@ import sys
 stable_only = os.environ.get("STABLE_ONLY") == "1"
 prefer = os.environ.get("PREFER", "deb")
 arch = os.environ["EB_ARCH"]
-product = "WaveCN"
+product = "WAVE"
 
 try:
     releases = json.loads(sys.stdin.read() or "[]")
@@ -163,14 +163,14 @@ if [[ "$asset_name" == *.deb ]]; then
   echo "Installing .deb..."
   sudo apt-get update
   sudo apt-get install -y "$asset_path"
-  echo "Installed WaveCN. Launch it from your app menu (or run: WaveCN)."
+  echo "Installed WAVE. Launch it from your app menu (or run: WAVE)."
   exit 0
 fi
 
 if [[ "$asset_name" == *.AppImage ]]; then
   install_dir="${HOME}/.local/bin"
   mkdir -p "$install_dir"
-  target="${install_dir}/WaveCN.AppImage"
+  target="${install_dir}/WAVE.AppImage"
   mv "$asset_path" "$target"
   chmod +x "$target"
   echo "Installed AppImage to: $target"
@@ -180,4 +180,3 @@ fi
 
 echo "Downloaded unknown artifact type: $asset_name" >&2
 exit 1
-

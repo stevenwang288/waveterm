@@ -125,6 +125,25 @@ export function getWaveTabViewByWebContentsId(webContentsId: number): WaveTabVie
     return wcIdToWaveTabMap.get(webContentsId);
 }
 
+function logTabViewWebContentsEvent(tabView: WaveTabView, eventName: string, details?: Record<string, unknown>) {
+    let currentUrl = "";
+    try {
+        if (!tabView.webContents.isDestroyed()) {
+            currentUrl = tabView.webContents.getURL();
+        }
+    } catch {
+        currentUrl = "";
+    }
+    console.log("tabview-webcontents-event", {
+        eventName,
+        waveWindowId: tabView.waveWindowId ?? "",
+        tabId: tabView.waveTabId ?? "",
+        webContentsId: tabView.webContents.id,
+        url: currentUrl,
+        details: details ?? {},
+    });
+}
+
 export class WaveTabView extends WebContentsView {
     waveWindowId: string; // this will be set for any tabviews that are initialized. (unset for the hot spare)
     isActiveTab: boolean;
@@ -173,6 +192,45 @@ export class WaveTabView extends WebContentsView {
         } else {
             this.webContents.loadFile(path.join(getElectronAppBasePath(), "frontend", "index.html"));
         }
+        this.webContents.on("render-process-gone", (_event, details) => {
+            logTabViewWebContentsEvent(this, "render-process-gone", {
+                reason: details?.reason,
+                exitCode: details?.exitCode,
+            });
+        });
+        this.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+            logTabViewWebContentsEvent(this, "did-fail-load", {
+                errorCode,
+                errorDescription,
+                validatedURL,
+                isMainFrame,
+            });
+        });
+        this.webContents.on("unresponsive", () => {
+            logTabViewWebContentsEvent(this, "unresponsive");
+        });
+        this.webContents.on("responsive", () => {
+            logTabViewWebContentsEvent(this, "responsive");
+        });
+        this.webContents.on("preload-error", (_event, preloadPath, error) => {
+            logTabViewWebContentsEvent(this, "preload-error", {
+                preloadPath,
+                errorName: error?.name,
+                errorMessage: error?.message,
+                errorStack: error?.stack,
+            });
+        });
+        this.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+            if (level < 2) {
+                return;
+            }
+            logTabViewWebContentsEvent(this, "console-message", {
+                level,
+                message,
+                line,
+                sourceId,
+            });
+        });
         this.webContents.on("destroyed", () => {
             wcIdToWaveTabMap.delete(this.webContents.id);
             removeWaveTabView(this.waveTabId);

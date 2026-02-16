@@ -398,9 +398,15 @@
     "apps": "Apps",
     "noLocalAppsFound": "No local apps found",
     "localWaveAppsTooltip": "Local WaveApps",
+    "clawx": "ClawX",
+    "clawxTooltip": "Open ClawX",
+    "openClawxDefault": "Open ClawX (default)",
+    "openClawxLocal": "Open ClawX (127.0.0.1:5173)",
+    "openClawxLocalhost": "Open ClawX (localhost:5173)",
     "confirmCloseWindowUnsavedTabs": "Window has unsaved tabs, closing window will delete existing tabs.\\n\\nContinue?",
     "confirmDeleteWorkspace": "Deleting workspace will also delete its contents.\\n\\nContinue?",
     "git": "Git",
+    "ai": "AI",
     "explorer": "Explorer",
     "explorerDescription": "File explorer",
     "servers": "Servers"
@@ -578,6 +584,10 @@
     "waitingForToolApprovals": "Waiting for tool approvals...",
     "aiThinking": "AI is thinking...",
     "noTextContent": "(no text content)",
+    "streamIssueMissingAssistant": "This response ended without an assistant message. It may have been truncated.",
+    "streamIssueNoRenderableContent": "This response ended but no visible content was rendered.",
+    "refreshHistory": "Refresh history",
+    "unlockInput": "Unlock input",
     "startChatKey": "to start a new chat",
     "togglePanelKey": "to toggle panel",
     "focusKey": "to focus",
@@ -648,7 +658,13 @@
     "feedback": {
       "good": "Good Response",
       "bad": "Bad Response",
-      "copyMessage": "Copy Message"
+      "copyMessage": "Copy Message",
+      "readLocal": "Read Aloud (Local)",
+      "readApi": "Read Aloud (OpenAI-Compatible API)",
+      "stopSpeech": "Stop Speech",
+      "localSpeechUnavailable": "Local speech synthesis is not available in this environment.",
+      "apiSpeechUnavailable": "Current mode has no OpenAI-compatible speech endpoint. Configure ai:endpoint and ai:apitoken.",
+      "apiSpeechPlaybackFailed": "Failed to play speech audio from API."
     },
     "restoreBackup": {
       "successTitle": "Backup Successfully Restored",
@@ -677,6 +693,7 @@
       "terminal": "Terminal",
       "preview": "Preview",
       "web": "Web",
+      "clawx": "ClawX",
       "waveai": "WaveAI",
       "help": "Help",
       "tips": "Tips"

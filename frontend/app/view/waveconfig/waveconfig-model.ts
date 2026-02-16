@@ -8,6 +8,7 @@ import { globalStore } from "@/app/store/jotaiStore";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { SecretsContent } from "@/app/view/waveconfig/secretscontent";
+import { SpeechSettingsContent } from "@/app/view/waveconfig/speechsettingscontent";
 import { WaveConfigView } from "@/app/view/waveconfig/waveconfig";
 import { isWindows } from "@/util/platformutil";
 import { base64ToString, stringToBase64 } from "@/util/util";
@@ -28,6 +29,7 @@ export type ConfigFile = {
     docsUrl?: string;
     validator?: ConfigValidator;
     isSecrets?: boolean;
+    isVisualOnly?: boolean;
     hasJsonView?: boolean;
     visualComponent?: React.ComponentType<{ model: WaveConfigViewModel }>;
 };
@@ -116,6 +118,14 @@ const configFiles: ConfigFile[] = [
         isSecrets: true,
         hasJsonView: false,
         visualComponent: SecretsContent,
+    },
+    {
+        name: i18next.t("waveconfig.files.speech", { defaultValue: "Speech" }),
+        path: "speech",
+        isVisualOnly: true,
+        hasJsonView: false,
+        visualComponent: SpeechSettingsContent,
+        description: i18next.t("waveconfig.files.speechDesc", { defaultValue: "TTS models and playback modes" }),
     },
 ];
 
@@ -272,15 +282,17 @@ export class WaveConfigViewModel implements ViewModel {
         globalStore.set(this.errorMessageAtom, null);
         globalStore.set(this.hasEditedAtom, false);
 
-        if (file.isSecrets) {
+        if (file.isSecrets || file.isVisualOnly) {
             globalStore.set(this.selectedFileAtom, file);
             RpcApi.SetMetaCommand(TabRpcClient, {
                 oref: WOS.makeORef("block", this.blockId),
                 meta: { file: file.path },
             });
             globalStore.set(this.isLoadingAtom, false);
-            this.checkStorageBackend();
-            this.refreshSecrets();
+            if (file.isSecrets) {
+                this.checkStorageBackend();
+                this.refreshSecrets();
+            }
             return;
         }
 

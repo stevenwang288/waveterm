@@ -116,7 +116,7 @@ type MetaTSType struct {
 	TermScrollback          *int     `json:"term:scrollback,omitempty"`
 	TermVDomSubBlockId      string   `json:"term:vdomblockid,omitempty"`
 	TermVDomToolbarBlockId  string   `json:"term:vdomtoolbarblockid,omitempty"`
-	TermTransparency        *float64 `json:"term:transparency,omitempty"` // default 0.5
+	TermTransparency        *float64 `json:"term:transparency,omitempty"` // default 0
 	TermAllowBracketedPaste *bool    `json:"term:allowbracketedpaste,omitempty"`
 	TermShiftEnterNewline   *bool    `json:"term:shiftenternewline,omitempty"`
 	TermMacOptionIsMeta     *bool    `json:"term:macoptionismeta,omitempty"`

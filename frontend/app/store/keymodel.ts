@@ -77,12 +77,15 @@ function getSimpleControlShiftAtom() {
 
 function setControlShift() {
     globalStore.set(simpleControlShiftAtom, true);
-    setTimeout(() => {
-        const simpleState = globalStore.get(simpleControlShiftAtom);
-        if (simpleState) {
-            globalStore.set(atoms.controlShiftDelayAtom, true);
-        }
-    }, 400);
+    const disableDisplay = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftdisplay"));
+    if (!disableDisplay) {
+        setTimeout(() => {
+            const simpleState = globalStore.get(simpleControlShiftAtom);
+            if (simpleState) {
+                globalStore.set(atoms.controlShiftDelayAtom, true);
+            }
+        }, 400);
+    }
 }
 
 function unsetControlShift() {
@@ -115,6 +118,18 @@ function shouldDispatchToBlock(e: WaveKeyboardEvent): boolean {
         }
     }
     return true;
+}
+
+function shouldHandleTabPaneSwitch(waveEvent: WaveKeyboardEvent): boolean {
+    if (!shouldDispatchToBlock(waveEvent)) {
+        return false;
+    }
+    if (globalStore.get(atoms.waveWindowType) != "tab") {
+        return false;
+    }
+    const layoutModel = getLayoutModelForStaticTab();
+    const numLeafs = globalStore.get(layoutModel.numLeafs) ?? 0;
+    return numLeafs > 1;
 }
 
 function getStaticTabBlockCount(): number {
@@ -664,19 +679,49 @@ function registerGlobalKeys() {
         switchBlockByCycle(-1);
         return true;
     });
+    globalKeyMap.set("Tab", (waveEvent) => {
+        if (!shouldHandleTabPaneSwitch(waveEvent)) {
+            return false;
+        }
+        switchBlockByCycle(1);
+        return true;
+    });
+    globalKeyMap.set("Shift:Tab", (waveEvent) => {
+        if (!shouldHandleTabPaneSwitch(waveEvent)) {
+            return false;
+        }
+        switchBlockByCycle(-1);
+        return true;
+    });
     globalKeyMap.set("Ctrl:Shift:ArrowUp", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
         switchBlockInDirection(NavigateDirection.Up);
         return true;
     });
     globalKeyMap.set("Ctrl:Shift:ArrowDown", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
         switchBlockInDirection(NavigateDirection.Down);
         return true;
     });
     globalKeyMap.set("Ctrl:Shift:ArrowLeft", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
         switchBlockInDirection(NavigateDirection.Left);
         return true;
     });
     globalKeyMap.set("Ctrl:Shift:ArrowRight", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
         switchBlockInDirection(NavigateDirection.Right);
         return true;
     });

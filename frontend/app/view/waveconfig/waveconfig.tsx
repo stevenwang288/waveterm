@@ -179,20 +179,6 @@ const WaveConfigView = memo(({ blockId, model }: ViewComponentProps<WaveConfigVi
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [hasChanges, isSaving, model]);
 
-    useEffect(() => {
-        if (!editorContainerRef.current) {
-            return;
-        }
-        const debouncedLayout = debounce(100, () => {
-            if (model.editorRef.current) {
-                model.editorRef.current.layout();
-            }
-        });
-        const resizeObserver = new ResizeObserver(debouncedLayout);
-        resizeObserver.observe(editorContainerRef.current);
-        return () => resizeObserver.disconnect();
-    }, [model]);
-
     const saveTooltip = `Save (${model.saveShortcut})`;
 
     return (
@@ -203,7 +189,7 @@ const WaveConfigView = memo(({ blockId, model }: ViewComponentProps<WaveConfigVi
             <div className={`h-full ${isMenuOpen ? "" : "@max-w600:hidden"}`}>
                 <ConfigSidebar model={model} />
             </div>
-            <div ref={editorContainerRef} className="flex flex-col flex-1 min-w-0">
+            <div className="flex flex-col flex-1 min-w-0">
                 {selectedFile && (
                     <>
                         <div className="flex flex-row items-center justify-between px-4 py-2 border-b border-border">
@@ -334,7 +320,8 @@ const WaveConfigView = memo(({ blockId, model }: ViewComponentProps<WaveConfigVi
                                 <div className="flex items-center justify-center h-full text-muted-foreground">
                                     {t("common.loading")}
                                 </div>
-                            ) : selectedFile.visualComponent && (!selectedFile.hasJsonView || activeTab === "visual") ? (
+                            ) : selectedFile.visualComponent &&
+                              (!selectedFile.hasJsonView || activeTab === "visual") ? (
                                 (() => {
                                     const VisualComponent = selectedFile.visualComponent;
                                     return <VisualComponent model={model} />;

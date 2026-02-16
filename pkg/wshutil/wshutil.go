@@ -171,7 +171,7 @@ func SetupConnRpcClient(conn net.Conn, serverImpl ServerImpl, debugStr string) (
 		}()
 		// when input is closed, close the connection
 		defer conn.Close()
-		AdaptStreamToMsgCh(conn, inputCh)
+		AdaptStreamToMsgCh(conn, inputCh, nil)
 	}()
 	rtn := MakeWshRpcWithChannels(inputCh, outputCh, wshrpc.RpcContext{}, serverImpl, debugStr)
 	return rtn, writeErrCh, nil
@@ -255,7 +255,7 @@ func ValidateAndExtractRpcContextFromToken(tokenStr string) (*wshrpc.RpcContext,
 	return claimsToRpcCtx(claims), nil
 }
 
-func RunWshRpcOverListener(listener net.Listener) {
+func RunWshRpcOverListener(listener net.Listener, readCallback func()) {
 	defer log.Printf("domain socket listener shutting down\n")
 	for {
 		conn, err := listener.Accept()
@@ -267,7 +267,7 @@ func RunWshRpcOverListener(listener net.Listener) {
 			break
 		}
 		log.Print("got domain socket connection\n")
-		go handleDomainSocketClient(conn)
+		go handleDomainSocketClient(conn, readCallback)
 	}
 }
 
@@ -324,7 +324,7 @@ func HandleStdIOClient(logName string, input chan utilfn.LineOutput, output io.W
 	<-doneCh
 }
 
-func handleDomainSocketClient(conn net.Conn) {
+func handleDomainSocketClient(conn net.Conn, readCallback func()) {
 	var linkIdContainer atomic.Int32
 	proxy := MakeRpcProxy("domain")
 	go func() {
@@ -344,13 +344,13 @@ func handleDomainSocketClient(conn net.Conn) {
 		defer func() {
 			conn.Close()
 			close(proxy.FromRemoteCh)
-			close(proxy.ToRemoteCh)
 			linkId := linkIdContainer.Load()
 			if linkId != baseds.NoLinkId {
 				DefaultRouter.UnregisterLink(baseds.LinkId(linkId))
 			}
+			close(proxy.ToRemoteCh)
 		}()
-		AdaptStreamToMsgCh(conn, proxy.FromRemoteCh)
+		AdaptStreamToMsgCh(conn, proxy.FromRemoteCh, readCallback)
 	}()
 	linkId := DefaultRouter.RegisterUntrustedLink(proxy)
 	linkIdContainer.Store(int32(linkId))

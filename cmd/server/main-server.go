@@ -238,6 +238,8 @@ func updateTelemetryCounts(lastCounts telemetrydata.TEventProps) telemetrydata.T
 	props.CountWorkspaces, _, _ = wstore.DBGetWSCounts(ctx)
 	props.CountSSHConn = conncontroller.GetNumSSHHasConnected()
 	props.CountWSLConn = wslconn.GetNumWSLHasConnected()
+	props.CountJobs = jobcontroller.GetNumJobsRunning()
+	props.CountJobsConnected = jobcontroller.GetNumJobsConnected()
 	props.CountViews, _ = wstore.DBGetBlockViewCounts(ctx)
 
 	fullConfig := wconfig.GetWatcher().GetFullConfig()
@@ -599,7 +601,7 @@ func main() {
 		// use fmt instead of log here to make sure it goes directly to stderr
 		fmt.Fprintf(os.Stderr, "WAVESRV-ESTART ws:%s web:%s version:%s buildtime:%s\n", wsListener.Addr(), webListener.Addr(), WaveVersion, BuildTime)
 	}()
-	go wshutil.RunWshRpcOverListener(unixListener)
+	go wshutil.RunWshRpcOverListener(unixListener, nil)
 	web.RunWebServer(webListener) // blocking
 	runtime.KeepAlive(waveLock)
 }
