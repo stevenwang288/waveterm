@@ -3,6 +3,7 @@ param(
     [int]$DebugPort = 9223,
     [string]$Message = "你好",
     [int]$WaitSeconds = 10,
+    [string]$Scenario = "settings",
     [switch]$LeaveRunning = $false
 )
 
@@ -91,7 +92,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Push-Location $repoRoot
 $nodeExitCode = 0
 try {
-    node scripts/smoke-waveai-tts-cdp.mjs --port $DebugPort --message $Message
+    node scripts/smoke-waveai-tts-cdp.mjs --port $DebugPort --message $Message --scenario $Scenario
     $nodeExitCode = $LASTEXITCODE
     if ($nodeExitCode -ne 0) {
         Write-Host "WaveAI+TTS smoke failed (node exit code $nodeExitCode)"

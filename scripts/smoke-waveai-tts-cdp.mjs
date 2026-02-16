@@ -36,6 +36,7 @@ const message = String(args.get("message") || "你好");
 const timeoutMs = Number(args.get("timeout-ms") || "180000");
 const connectTimeoutMs = Number(args.get("connect-timeout-ms") || "15000");
 const requestTimeoutMs = Number(args.get("request-timeout-ms") || "20000");
+const scenario = String(args.get("scenario") || "waveai"); // waveai | settings
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -233,6 +234,149 @@ async function main() {
     textareaCount: document.querySelectorAll("textarea").length,
   };
 })()`;
+
+            if (scenario === "settings") {
+                const openDeadline = Date.now() + 60000;
+                let opened = false;
+                while (Date.now() < openDeadline) {
+                    const res = await cdp.evaluate(String.raw`(async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    // Ensure the WaveAIModel singleton exists by opening the AI side panel once.
+    try {
+      const icon = document.querySelector("i.fa-sparkles");
+      const btn = icon ? icon.parentElement : null;
+      if (btn && typeof btn.click === "function") {
+        btn.click();
+      }
+    } catch {}
+    try { window.api?.setWaveAIOpen?.(true); } catch {}
+
+    for (let i = 0; i < 40; i++) {
+      if (window.WaveAIModel?.openWaveAIConfig) {
+        await window.WaveAIModel.openWaveAIConfig();
+        return { opened: true };
+      }
+      await sleep(100);
+    }
+    return { opened: false, reason: "WaveAIModel.openWaveAIConfig missing" };
+  } catch (e) {
+    return { opened: false, error: String(e) };
+  }
+})()`);
+                    if (res?.opened) {
+                        opened = true;
+                        break;
+                    }
+                    await sleep(500);
+                }
+                if (!opened) {
+                    failures.push({
+                        title: candidate.title,
+                        url: candidate.url,
+                        error: "failed to open waveconfig",
+                    });
+                    continue;
+                }
+
+                // Switch to Speech file entry (label is default "Speech" even under zh-CN).
+                const selectDeadline = Date.now() + 60000;
+                let selected = false;
+                while (Date.now() < selectDeadline) {
+                    const res = await cdp.evaluate(String.raw`(() => {
+  const items = Array.from(document.querySelectorAll('div[class*="cursor-pointer"][class*="border-b"]'));
+  const item = items.find((el) => {
+    const name = el.querySelector('div[class*="whitespace-nowrap"]');
+    return name && (name.textContent || "").trim() === "Speech";
+  });
+  if (item && typeof item.click === "function") {
+    item.click();
+    return { clicked: true };
+  }
+  return { clicked: false };
+})()`);
+                    if (res?.clicked) {
+                        selected = true;
+                        break;
+                    }
+                    await sleep(250);
+                }
+                if (!selected) {
+                    failures.push({
+                        title: candidate.title,
+                        url: candidate.url,
+                        error: "failed to select Speech config view",
+                    });
+                    continue;
+                }
+
+                // Click the "播放测试" button.
+                const playDeadline = Date.now() + 60000;
+                let clickedPlay = false;
+                let playDebug = null;
+                while (Date.now() < playDeadline) {
+                    const res = await cdp.evaluate(String.raw`(() => {
+  const buttons = Array.from(document.querySelectorAll("button"));
+  const playBtn = buttons.find((btn) => (btn.getAttribute("title") || "").includes("播放测试") || (btn.textContent || "").includes("播放测试"));
+  if (playBtn && typeof playBtn.click === "function") {
+    playBtn.click();
+    return { clicked: true };
+  }
+  const sample = buttons.slice(0, 30).map((btn) => ({ title: btn.getAttribute("title") || "", text: (btn.textContent || "").trim().slice(0, 40) }));
+  return { clicked: false, sample };
+})()`);
+                    if (res?.clicked) {
+                        clickedPlay = true;
+                        break;
+                    }
+                    playDebug = res?.sample || playDebug;
+                    await sleep(250);
+                }
+                if (!clickedPlay) {
+                    failures.push({
+                        title: candidate.title,
+                        url: candidate.url,
+                        error: "failed to click play test button",
+                        details: { buttons: playDebug },
+                    });
+                    continue;
+                }
+
+                // Wait for TTS hook to fire.
+                const ttsDeadline = Date.now() + 15000;
+                let state = null;
+                while (Date.now() < ttsDeadline) {
+                    state = await cdp.evaluate(String.raw`(() => ({
+  speechSynthesisCalls: window.__waveTtsSmoke?.speechSynthesisCalls?.length || 0,
+  audioPlayCalls: window.__waveTtsSmoke?.audioPlayCalls?.length || 0,
+  lastSpeechSynthesisText: window.__waveTtsSmoke?.speechSynthesisCalls?.slice(-1)?.[0]?.text || null,
+  lastAudioSrc: window.__waveTtsSmoke?.audioPlayCalls?.slice(-1)?.[0]?.src || null,
+  hookErrors: window.__waveTtsSmoke?.errors || [],
+}))()`);
+                    const ok = (state?.speechSynthesisCalls || 0) > 0 || (state?.audioPlayCalls || 0) > 0;
+                    if (ok) {
+                        console.log(
+                            JSON.stringify(
+                                {
+                                    cdpTarget: {
+                                        title: candidate.title,
+                                        url: candidate.url,
+                                        ws: candidate.webSocketDebuggerUrl,
+                                    },
+                                },
+                                null,
+                                2
+                            )
+                        );
+                        console.log(JSON.stringify({ ok: true, scenario, tts: state }, null, 2));
+                        return;
+                    }
+                    await sleep(300);
+                }
+
+                failures.push({ title: candidate.title, url: candidate.url, result: { ok: false, scenario, tts: state } });
+                continue;
+            }
 
             let inputInfo = null;
             let clickedAi = false;
