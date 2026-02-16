@@ -71,6 +71,7 @@ export function stopLocalSpeechSynthesis(): void {
 
 export function speakLocally(
     text: string,
+    voiceName: string | undefined,
     handlers?: {
         onDone?: () => void;
         onError?: (message: string) => void;
@@ -97,7 +98,21 @@ export function speakLocally(
     };
 
     const utterance = new SpeechSynthesisUtterance(input);
-    utterance.lang = navigator.language || "en-US";
+    const availableVoices = window.speechSynthesis.getVoices();
+    const normalizedVoiceName = voiceName?.trim().toLowerCase();
+    let selectedVoice: SpeechSynthesisVoice | undefined;
+    if (normalizedVoiceName) {
+        selectedVoice = availableVoices.find((voice) => voice.name.toLowerCase() === normalizedVoiceName);
+        if (!selectedVoice) {
+            selectedVoice = availableVoices.find((voice) => voice.name.toLowerCase().includes(normalizedVoiceName));
+        }
+    }
+    if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang || navigator.language || "en-US";
+    } else {
+        utterance.lang = navigator.language || "en-US";
+    }
     utterance.onend = () => finalize();
     utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
         handlers?.onError?.(event.error || "Speech synthesis failed.");

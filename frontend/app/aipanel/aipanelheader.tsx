@@ -130,11 +130,9 @@ export const AIPanelHeader = memo(() => {
                             void handleSpeechClick();
                         }}
                         className={cn(
-                            "text-gray-400 hover:text-white cursor-pointer transition-colors p-1 rounded flex-shrink-0 mr-1 focus:outline-none",
-                            (!speechSettings.enabled || !hasReadableText) && "opacity-50 cursor-not-allowed"
+                            "text-gray-400 hover:text-white cursor-pointer transition-colors p-1 rounded flex-shrink-0 mr-1 focus:outline-none"
                         )}
                         title={speechTitle}
-                        disabled={!speechSettings.enabled || !hasReadableText}
                     >
                         <i
                             className={makeIconClass(

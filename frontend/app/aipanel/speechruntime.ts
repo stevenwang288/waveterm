@@ -58,6 +58,30 @@ class SpeechRuntime {
         this.setActive(false);
     }
 
+    private playWithBrowserSpeech(
+        text: string,
+        voiceName: string,
+        settings: ResolvedSpeechSettings,
+        onError: (message: string) => void
+    ): boolean {
+        if (!canUseLocalSpeechSynthesis()) {
+            onError("Speech synthesis is not available.");
+            return false;
+        }
+        return speakLocally(
+            text,
+            voiceName,
+            {
+                onDone: () => this.setActive(false),
+                onError: (errorMessage) => {
+                    onError(errorMessage);
+                    this.setActive(false);
+                },
+            },
+            settings.filterOptions
+        );
+    }
+
     async play(
         text: string,
         settings: ResolvedSpeechSettings,
@@ -77,23 +101,10 @@ class SpeechRuntime {
         this.stop();
         this.setActive(true);
 
+        const roleVoice = getSpeechVoiceForRole(settings, role);
+
         if (settings.transport === "browser") {
-            if (!canUseLocalSpeechSynthesis()) {
-                this.setActive(false);
-                onError("Speech synthesis is not available.");
-                return false;
-            }
-            const started = speakLocally(
-                messageText,
-                {
-                    onDone: () => this.setActive(false),
-                    onError: (errorMessage) => {
-                        onError(errorMessage);
-                        this.setActive(false);
-                    },
-                },
-                settings.filterOptions
-            );
+            const started = this.playWithBrowserSpeech(messageText, roleVoice, settings, onError);
             if (!started) {
                 this.setActive(false);
             }
@@ -101,6 +112,13 @@ class SpeechRuntime {
         }
 
         if (!settings.endpoint) {
+            if (settings.provider === "local") {
+                const started = this.playWithBrowserSpeech(messageText, roleVoice, settings, onError);
+                if (!started) {
+                    this.setActive(false);
+                }
+                return started;
+            }
             this.setActive(false);
             onError("Speech endpoint is not configured.");
             return false;
@@ -115,7 +133,7 @@ class SpeechRuntime {
                     endpoint: settings.endpoint,
                     model: settings.model,
                     token: settings.token,
-                    voice: getSpeechVoiceForRole(settings, role),
+                    voice: roleVoice,
                 },
                 abortController.signal,
                 settings.filterOptions
@@ -140,6 +158,13 @@ class SpeechRuntime {
             await audio.play();
             return true;
         } catch (error) {
+            if (!abortController.signal.aborted && settings.provider === "local") {
+                const fallbackStarted = this.playWithBrowserSpeech(messageText, roleVoice, settings, onError);
+                if (fallbackStarted) {
+                    this.cleanupApiAudioResources();
+                    return true;
+                }
+            }
             if (!abortController.signal.aborted) {
                 onError(error instanceof Error ? error.message : String(error));
             }

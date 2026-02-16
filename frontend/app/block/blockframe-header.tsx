@@ -287,7 +287,7 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndI
                 aiModel.setError(errorMessage);
             });
         },
-        disabled: !speechSettings.enabled || !latestAssistantText?.trim(),
+        disabled: false,
     };
     if (speechSettings.showManualButton) {
         endIconsElem.push(<IconButton key="speech" decl={speechDecl} className="block-frame-speech" />);
