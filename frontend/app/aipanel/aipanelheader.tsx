@@ -14,6 +14,7 @@ import { WaveAIModel } from "./waveai-model";
 export const AIPanelHeader = memo(() => {
     const model = WaveAIModel.getInstance();
     const widgetAccess = useAtomValue(model.widgetAccessAtom);
+    const isAIStreaming = useAtomValue(model.isAIStreaming);
     const currentMode = useAtomValue(model.currentAIMode);
     const aiModeConfigs = useAtomValue(model.aiModeConfigs);
     const currentModeConfig = aiModeConfigs?.[currentMode];
@@ -98,6 +99,14 @@ export const AIPanelHeader = memo(() => {
     const handleSpeechClick = async () => {
         if (speechActive) {
             speechRuntime.stop();
+            return;
+        }
+        if (isAIStreaming) {
+            model.setError(
+                t("aipanel.feedback.waitForFinal", {
+                    defaultValue: "Still generating. Wait for the reply to finish before speaking.",
+                })
+            );
             return;
         }
         await speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {

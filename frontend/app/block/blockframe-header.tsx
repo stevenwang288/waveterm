@@ -196,6 +196,7 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
     const aiModeConfigs = jotai.useAtomValue(aiModel.aiModeConfigs);
     const currentModeConfig = aiModeConfigs?.[currentMode];
     const latestAssistantText = jotai.useAtomValue(aiModel.latestAssistantMessageText);
+    const isAIStreaming = jotai.useAtomValue(aiModel.isAIStreaming);
     const speechEnabled = jotai.useAtomValue(getSettingsKeyAtom("speech:enabled"));
     const speechProvider = jotai.useAtomValue(getSettingsKeyAtom("speech:provider"));
     const speechEndpoint = jotai.useAtomValue(getSettingsKeyAtom("speech:endpoint"));
@@ -291,6 +292,14 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
                 return;
             }
             if (!isTerminalBlock) {
+                if (isAIStreaming) {
+                    aiModel.setError(
+                        t("aipanel.feedback.waitForFinal", {
+                            defaultValue: "Still generating. Wait for the reply to finish before speaking.",
+                        })
+                    );
+                    return;
+                }
                 void speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
                     aiModel.setError(errorMessage);
                 });
@@ -299,33 +308,24 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
 
             const route = `feblock:${blockId}`;
             void (async () => {
-                let lines: string[] = [];
+                let result: any = null;
                 try {
-                    const result = await RpcApi.TermGetScrollbackLinesCommand(
+                    result = await RpcApi.TermGetScrollbackLinesCommand(
                         TabRpcClient,
                         { linestart: 0, lineend: 0, lastcommand: true },
                         { route }
                     );
-                    lines = result?.lines ?? [];
                 } catch (error) {
-                    console.log("Speech terminal lastcommand failed; falling back to recent scrollback", {
-                        blockId,
-                        error,
-                    });
-                    try {
-                        const fallback = await RpcApi.TermGetScrollbackLinesCommand(
-                            TabRpcClient,
-                            { linestart: 0, lineend: 200, lastcommand: false },
-                            { route }
-                        );
-                        lines = fallback?.lines ?? [];
-                    } catch (fallbackError) {
-                        aiModel.setError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
-                        return;
-                    }
+                    aiModel.setError(error instanceof Error ? error.message : String(error));
+                    return;
                 }
 
+                const lines = result?.lines ?? [];
                 const text = lines.join("\n").trim();
+                if (!text) {
+                    aiModel.setError(t("aipanel.noTextContent"));
+                    return;
+                }
                 void speechRuntime.play(text, speechSettings, "assistant", (errorMessage) => {
                     aiModel.setError(errorMessage);
                 });

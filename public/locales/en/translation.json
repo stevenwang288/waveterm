@@ -662,6 +662,7 @@
       "readLocal": "Read Aloud (Local)",
       "readApi": "Read Aloud (OpenAI-Compatible API)",
       "stopSpeech": "Stop Speech",
+      "waitForFinal": "Still generating. Wait for the reply to finish before speaking.",
       "localSpeechUnavailable": "Local speech synthesis is not available in this environment.",
       "apiSpeechUnavailable": "Current mode has no OpenAI-compatible speech endpoint. Configure ai:endpoint and ai:apitoken.",
       "apiSpeechPlaybackFailed": "Failed to play speech audio from API."
