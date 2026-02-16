@@ -185,9 +185,10 @@ type HeaderEndIconsProps = {
     viewModel: ViewModel;
     nodeModel: NodeModel;
     blockId: string;
+    isTerminalBlock: boolean;
 };
 
-const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndIconsProps) => {
+const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBlock }: HeaderEndIconsProps) => {
     const { t } = useTranslation();
     const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
     const aiModel = React.useMemo(() => WaveAIModel.getInstance(), []);
@@ -273,19 +274,62 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndI
         icon: speechActive ? "stop" : speechSettings.transport === "api" ? "cloud" : "volume-high",
         title: !speechSettings.enabled
             ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
-            : !latestAssistantText?.trim()
-              ? t("aipanel.noTextContent")
-              : speechActive
-                ? t("aipanel.feedback.stopSpeech")
-                : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" }),
+            : speechActive
+              ? t("aipanel.feedback.stopSpeech")
+              : isTerminalBlock
+                ? t("aipanel.feedback.readLocal", { defaultValue: "Read output aloud" })
+                : !latestAssistantText?.trim()
+                  ? t("aipanel.noTextContent")
+                  : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" }),
         click: () => {
             if (speechActive) {
                 speechRuntime.stop();
                 return;
             }
-            void speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
-                aiModel.setError(errorMessage);
-            });
+            if (!speechSettings.enabled) {
+                aiModel.setError(t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" }));
+                return;
+            }
+            if (!isTerminalBlock) {
+                void speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
+                    aiModel.setError(errorMessage);
+                });
+                return;
+            }
+
+            const route = `feblock:${blockId}`;
+            void (async () => {
+                let lines: string[] = [];
+                try {
+                    const result = await RpcApi.TermGetScrollbackLinesCommand(
+                        TabRpcClient,
+                        { linestart: 0, lineend: 0, lastcommand: true },
+                        { route }
+                    );
+                    lines = result?.lines ?? [];
+                } catch (error) {
+                    console.log("Speech terminal lastcommand failed; falling back to recent scrollback", {
+                        blockId,
+                        error,
+                    });
+                    try {
+                        const fallback = await RpcApi.TermGetScrollbackLinesCommand(
+                            TabRpcClient,
+                            { linestart: 0, lineend: 200, lastcommand: false },
+                            { route }
+                        );
+                        lines = fallback?.lines ?? [];
+                    } catch (fallbackError) {
+                        aiModel.setError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+                        return;
+                    }
+                }
+
+                const text = lines.join("\n").trim();
+                void speechRuntime.play(text, speechSettings, "assistant", (errorMessage) => {
+                    aiModel.setError(errorMessage);
+                });
+            })();
         },
         disabled: false,
     };
@@ -561,7 +605,12 @@ const BlockFrame_Header = ({
                 error={error}
                 onDoubleClick={isTerminalBlock ? handleHeaderTextDoubleClick : undefined}
             />
-            <HeaderEndIcons viewModel={viewModel} nodeModel={nodeModel} blockId={nodeModel.blockId} />
+            <HeaderEndIcons
+                viewModel={viewModel}
+                nodeModel={nodeModel}
+                blockId={nodeModel.blockId}
+                isTerminalBlock={isTerminalBlock}
+            />
         </div>
     );
 };
