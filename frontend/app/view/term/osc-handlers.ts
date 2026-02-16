@@ -69,6 +69,25 @@ function checkCommandForTelemetry(decodedCmd: string) {
     }
 }
 
+const AITermCommandPrefixes = [
+    "codex",
+    "coder",
+    "claude",
+    "gemini",
+    "amp",
+    "iflow",
+    "opencode",
+    "clawx",
+];
+
+function isAITermCommand(decodedCmd: string): boolean {
+    const trimmed = decodedCmd.trim().toLowerCase();
+    if (!trimmed) {
+        return false;
+    }
+    return AITermCommandPrefixes.some((prefix) => trimmed === prefix || trimmed.startsWith(`${prefix} `));
+}
+
 function handleShellIntegrationCommandStart(
     termWrap: TermWrap,
     blockId: string,
@@ -318,7 +337,15 @@ export function handleOsc16162Command(data: string, blockId: string, loaded: boo
         case "R":
             globalStore.set(termWrap.shellIntegrationStatusAtom, null);
             if (terminal.buffer.active.type === "alternate") {
-                terminal.write("\x1b[?1049l");
+                const lastCommand = globalStore.get(termWrap.lastCommandAtom) ?? "";
+                if (!isAITermCommand(lastCommand)) {
+                    terminal.write("\x1b[?1049l");
+                } else {
+                    console.log("Skip OSC 16162 R alternate-exit for AI command", {
+                        blockId,
+                        lastCommand,
+                    });
+                }
             }
             break;
     }
