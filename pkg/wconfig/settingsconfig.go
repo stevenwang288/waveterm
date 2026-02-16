@@ -5,6 +5,7 @@ package wconfig
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -14,6 +15,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/wavetermdev/waveterm/pkg/util/utilfn"
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
@@ -473,6 +475,12 @@ func readConfigHelper(fileName string, barr []byte, readErr error) (waveobj.Meta
 	if len(barr) == 0 {
 		return nil, cerrs
 	}
+	normalized, normErr := normalizeJSONConfigBytes(barr)
+	if normErr != nil {
+		cerrs = append(cerrs, ConfigError{File: fileName, Err: normErr.Error()})
+		return nil, cerrs
+	}
+	barr = normalized
 	var rtn waveobj.MetaMapType
 	err := json.Unmarshal(barr, &rtn)
 	if err != nil {
@@ -498,6 +506,49 @@ func readConfigHelper(fileName string, barr []byte, readErr error) (waveobj.Meta
 	}
 
 	return rtn, cerrs
+}
+
+func normalizeJSONConfigBytes(barr []byte) ([]byte, error) {
+	if len(barr) == 0 {
+		return barr, nil
+	}
+	// Tolerate UTF-8 BOM (`EF BB BF`) at the beginning of JSON config files.
+	// This commonly happens on Windows when tools write UTF-8 with BOM.
+	if bytes.HasPrefix(barr, []byte{0xEF, 0xBB, 0xBF}) {
+		barr = barr[3:]
+	}
+	// Tolerate UTF-16 BOMs. We convert to UTF-8 so downstream parsing behaves normally.
+	if bytes.HasPrefix(barr, []byte{0xFF, 0xFE}) {
+		decoded, err := decodeUTF16ToUTF8(barr[2:], true)
+		if err != nil {
+			return nil, fmt.Errorf("json config is UTF-16LE but failed to decode: %w", err)
+		}
+		return decoded, nil
+	}
+	if bytes.HasPrefix(barr, []byte{0xFE, 0xFF}) {
+		decoded, err := decodeUTF16ToUTF8(barr[2:], false)
+		if err != nil {
+			return nil, fmt.Errorf("json config is UTF-16BE but failed to decode: %w", err)
+		}
+		return decoded, nil
+	}
+	return barr, nil
+}
+
+func decodeUTF16ToUTF8(barr []byte, littleEndian bool) ([]byte, error) {
+	if len(barr)%2 != 0 {
+		return nil, fmt.Errorf("odd byte length %d", len(barr))
+	}
+	u16 := make([]uint16, len(barr)/2)
+	for i := 0; i < len(u16); i++ {
+		off := i * 2
+		if littleEndian {
+			u16[i] = binary.LittleEndian.Uint16(barr[off : off+2])
+		} else {
+			u16[i] = binary.BigEndian.Uint16(barr[off : off+2])
+		}
+	}
+	return []byte(string(utf16.Decode(u16))), nil
 }
 
 func readConfigFileFS(fsys fs.FS, logPrefix string, fileName string) (waveobj.MetaMapType, []ConfigError) {

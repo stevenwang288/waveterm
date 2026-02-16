@@ -13,7 +13,7 @@ import { getWaveConfigDir } from "./emain-platform";
 export function getLaunchSettings(): SettingsType {
     const settingsPath = path.join(getWaveConfigDir(), "settings.json");
     try {
-        const settingsContents = fs.readFileSync(settingsPath, "utf8");
+        const settingsContents = fs.readFileSync(settingsPath, "utf8").replace(/^\uFEFF/, "");
         return JSON.parse(settingsContents);
     } catch (_) {
         // fail silently
