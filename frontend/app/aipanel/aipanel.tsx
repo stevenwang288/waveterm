@@ -384,7 +384,9 @@ const AIPanelComponentInner = memo(() => {
     useEffect(() => {
         const prevStatus = prevStatusRef.current;
         prevStatusRef.current = status;
-        if (!speechSettings.enabled || !speechSettings.autoPlay || status !== "ready" || prevStatus !== "streaming") {
+        // Some providers may skip "streaming" (ready -> submitted -> ready). We still want to autoplay
+        // when a new assistant message arrives and the final state is ready.
+        if (!speechSettings.enabled || !speechSettings.autoPlay || status !== "ready" || prevStatus === "ready") {
             return;
         }
         let latestAssistantMessage: WaveUIMessage | null = null;

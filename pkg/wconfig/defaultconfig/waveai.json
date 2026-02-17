@@ -39,5 +39,17 @@
         "ai:capabilities": ["tools", "images", "pdfs"],
         "waveai:premium": true,
         "ai:switchcompat": ["wavecloud"]
+    },
+    "custom@groq-llama3-70b": {
+        "display:name": "Groq (Llama3 70B)",
+        "display:order": 10,
+        "display:icon": "bolt",
+        "display:description": "OpenAI-compatible Chat via Groq. Requires secret GROQ_KEY.",
+        "ai:provider": "custom",
+        "ai:apitype": "openai-chat",
+        "ai:endpoint": "https://api.groq.com/openai/v1/chat/completions",
+        "ai:model": "llama3-70b-8192",
+        "ai:apitokensecretname": "GROQ_KEY",
+        "ai:capabilities": []
     }
 }
