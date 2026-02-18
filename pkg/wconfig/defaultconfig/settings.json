@@ -6,7 +6,7 @@
     "speech:enabled": true,
     "speech:provider": "local",
     "speech:endpoint": "",
-    "speech:model": "gpt-4o-mini-tts",
+    "speech:model": "edge-tts",
     "speech:voice": "alloy",
     "speech:voiceassistant": "zh-CN-XiaoxiaoNeural",
     "speech:voiceuser": "zh-CN-XiaoxiaoNeural",

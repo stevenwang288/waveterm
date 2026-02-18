@@ -67,6 +67,7 @@ export class WaveAIModel {
     codeBlockMaxWidth!: jotai.Atom<number>;
     inputAtom: jotai.PrimitiveAtom<string> = jotai.atom("");
     latestAssistantMessageText: jotai.PrimitiveAtom<string> = jotai.atom("");
+    previousAssistantMessageText: jotai.PrimitiveAtom<string> = jotai.atom("");
     lastAutoPlayedMessageId: jotai.PrimitiveAtom<string | null> = jotai.atom(null);
     isLoadingChatAtom: jotai.PrimitiveAtom<boolean> = jotai.atom(false);
     isChatEmptyAtom: jotai.PrimitiveAtom<boolean> = jotai.atom(true);
@@ -276,6 +277,7 @@ export class WaveAIModel {
         this.clearError();
         globalStore.set(this.isChatEmptyAtom, true);
         globalStore.set(this.latestAssistantMessageText, "");
+        globalStore.set(this.previousAssistantMessageText, "");
         globalStore.set(this.lastAutoPlayedMessageId, null);
         const newChatId = crypto.randomUUID();
         globalStore.set(this.chatId, newChatId);

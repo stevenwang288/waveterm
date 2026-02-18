@@ -222,7 +222,11 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
             type: "checkbox",
             checked: speechLocalEngine === "browser",
             click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, { "speech:localengine": "browser", "speech:provider": "local" });
+                RpcApi.SetConfigCommand(TabRpcClient, {
+                    "speech:localengine": "browser",
+                    "speech:model": "browser-speechsynthesis",
+                    "speech:provider": "local",
+                });
             },
         },
         {
@@ -230,7 +234,11 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
             type: "checkbox",
             checked: speechLocalEngine === "edge",
             click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, { "speech:localengine": "edge", "speech:provider": "local" });
+                RpcApi.SetConfigCommand(TabRpcClient, {
+                    "speech:localengine": "edge",
+                    "speech:model": "edge-tts",
+                    "speech:provider": "local",
+                });
             },
         },
         {
@@ -238,7 +246,11 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
             type: "checkbox",
             checked: speechLocalEngine === "melo",
             click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, { "speech:localengine": "melo", "speech:provider": "local" });
+                RpcApi.SetConfigCommand(TabRpcClient, {
+                    "speech:localengine": "melo",
+                    "speech:model": speechLocalModel || "MeloTTS-Chinese",
+                    "speech:provider": "local",
+                });
             },
         },
         {

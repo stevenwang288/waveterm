@@ -450,6 +450,8 @@
       "waveAiModesDesc": "本地模型与自带 API Key",
       "tabBackgrounds": "标签页背景",
       "secrets": "密钥",
+      "speech": "语音播报",
+      "speechDesc": "朗读（自动/手动）与声音设置",
       "presets": "预设",
       "aiPresets": "AI 预设"
     },

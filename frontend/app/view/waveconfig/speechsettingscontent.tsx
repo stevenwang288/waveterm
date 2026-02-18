@@ -66,7 +66,15 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
     const speechLocalModel = useAtomValue(getSettingsKeyAtom("speech:localmodel")) ?? "MeloTTS-Chinese";
     const speechLocalModelPath = useAtomValue(getSettingsKeyAtom("speech:localmodelpath")) ?? "E:\\models\\huggingface";
     const speechEndpoint = useAtomValue(getSettingsKeyAtom("speech:endpoint")) ?? "";
-    const speechModel = useAtomValue(getSettingsKeyAtom("speech:model")) ?? "gpt-4o-mini-tts";
+    const speechModel =
+        useAtomValue(getSettingsKeyAtom("speech:model"))
+        ?? (speechProvider === "local"
+            ? speechLocalEngine === "edge"
+                ? "edge-tts"
+                : speechLocalEngine === "melo"
+                  ? speechLocalModel
+                  : "browser-speechsynthesis"
+            : "gpt-4o-mini-tts");
     const speechVoice = useAtomValue(getSettingsKeyAtom("speech:voice")) ?? "";
     const speechVoiceAssistant = useAtomValue(getSettingsKeyAtom("speech:voiceassistant")) ?? "zh-CN-XiaoxiaoNeural";
     const speechVoiceUser = useAtomValue(getSettingsKeyAtom("speech:voiceuser")) ?? speechVoiceAssistant;
@@ -343,12 +351,12 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
                     <Toggle
                         checked={speechAutoPlay}
                         onChange={(val) => void setConfig({ "speech:autoplay": val })}
-                        label="自动播报新回复"
+                        label="AI 回复结束后自动朗读"
                     />
                     <Toggle
                         checked={speechManualButton}
                         onChange={(val) => void setConfig({ "speech:manualbutton": val })}
-                        label="显示手动播报按钮（齿轮左侧）"
+                        label="显示右上角朗读按钮（齿轮左侧）"
                     />
                 </div>
             </div>
@@ -376,7 +384,7 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
 
                 {showLocalEngineSection && (
                     <>
-                        <FieldLabel title="本地引擎" desc="浏览器：系统自带；Edge/Melo：需要你本机先启动对应的本地服务。" />
+                        <FieldLabel title="本地引擎" desc="浏览器：系统自带；Edge/Melo：需要你本机先启动对应的本地服务（没启动会自动用系统语音，所以声音可能不一样）。" />
                         <select
                             className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 mb-3"
                             value={speechLocalEngine}

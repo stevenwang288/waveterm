@@ -318,6 +318,7 @@ const AIPanelComponentInner = memo(() => {
 
     useEffect(() => {
         let latestAssistantText = "";
+        let previousAssistantText = "";
         for (let idx = messages.length - 1; idx >= 0; idx--) {
             const message = messages[idx];
             if (message.role !== "assistant") {
@@ -329,11 +330,16 @@ const AIPanelComponentInner = memo(() => {
                 .join("\n\n")
                 .trim();
             if (text) {
-                latestAssistantText = text;
+                if (!latestAssistantText) {
+                    latestAssistantText = text;
+                    continue;
+                }
+                previousAssistantText = text;
                 break;
             }
         }
         globalStore.set(model.latestAssistantMessageText, latestAssistantText);
+        globalStore.set(model.previousAssistantMessageText, previousAssistantText);
     }, [messages, model]);
 
     const speechSettings = useMemo(

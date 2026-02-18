@@ -18,6 +18,7 @@ import {
     getConnStatusAtom,
     getOverrideConfigAtom,
     getSettingsKeyAtom,
+    pushFlashError,
     recordTEvent,
     useBlockAtom,
     WOS,
@@ -260,6 +261,16 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
     React.useEffect(() => {
         return speechRuntime.subscribe(setSpeechActive);
     }, []);
+
+    const reportSpeechError = React.useCallback((message: string) => {
+        pushFlashError({
+            id: "",
+            icon: "triangle-exclamation",
+            title: "朗读失败",
+            message,
+            expiration: Date.now() + 7000,
+        } as any);
+    }, []);
     const magnified = jotai.useAtomValue(nodeModel.isMagnified);
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
     const numLeafs = jotai.useAtomValue(nodeModel.numLeafs);
@@ -270,18 +281,36 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
     if (endIconButtons && endIconButtons.length > 0) {
         endIconsElem.push(...endIconButtons.map((button, idx) => <IconButton key={idx} decl={button} />));
     }
+    const speechEngineLabel =
+        speechSettings.transport === "browser"
+            ? "系统语音"
+            : speechSettings.provider === "local"
+              ? speechSettings.localEngine === "edge"
+                  ? "Edge"
+                  : speechSettings.localEngine === "melo"
+                    ? "Melo"
+                    : "API"
+              : "API";
+    const speechHintParts = [
+        speechEngineLabel,
+        speechSettings.transport === "api" ? speechSettings.model : "",
+        speechSettings.voiceAssistant || speechSettings.voice,
+    ].filter(Boolean);
+    const speechHint = speechHintParts.length > 0 ? `（${speechHintParts.join(" / ")}）` : "";
     const speechDecl: IconButtonDecl = {
         elemtype: "iconbutton",
-        icon: speechActive ? "stop" : speechSettings.transport === "api" ? "cloud" : "volume-high",
-        title: !speechSettings.enabled
-            ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
-            : speechActive
-              ? t("aipanel.feedback.stopSpeech")
-              : isTerminalBlock
-                ? t("aipanel.feedback.readLocal", { defaultValue: "Read output aloud" })
-                : !latestAssistantText?.trim()
-                  ? t("aipanel.noTextContent")
-                  : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" }),
+        icon: speechActive ? "stop" : "volume-high",
+        title: (
+            !speechSettings.enabled
+                ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
+                : speechActive
+                  ? t("aipanel.feedback.stopSpeech")
+                  : isTerminalBlock
+                    ? t("aipanel.feedback.readLocal", { defaultValue: "Read output aloud" })
+                    : !latestAssistantText?.trim()
+                      ? t("aipanel.noTextContent")
+                      : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" })
+        ).trim() + (speechHint ? ` ${speechHint}` : ""),
         click: () => {
             if (speechActive) {
                 speechRuntime.stop();
@@ -289,6 +318,7 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
             }
             if (!speechSettings.enabled) {
                 aiModel.setError(t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" }));
+                reportSpeechError("语音播报已关闭。去 设置 -> 语音播报 打开“总开关”。");
                 return;
             }
             if (!isTerminalBlock) {
@@ -298,10 +328,12 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
                             defaultValue: "Still generating. Wait for the reply to finish before speaking.",
                         })
                     );
+                    reportSpeechError("还在生成回复，等它结束再点朗读。");
                     return;
                 }
                 void speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
                     aiModel.setError(errorMessage);
+                    reportSpeechError(errorMessage);
                 });
                 return;
             }
@@ -316,7 +348,15 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
                         { route }
                     );
                 } catch (error) {
-                    aiModel.setError(error instanceof Error ? error.message : String(error));
+                    const errMsg = error instanceof Error ? error.message : String(error);
+                    aiModel.setError(errMsg);
+                    if (errMsg.toLowerCase().includes("shell integration")) {
+                        reportSpeechError(
+                            "这个终端还没启用 Shell Extensions，所以读不到上一条命令输出。先按提示安装 Shell Extensions，然后再点朗读。"
+                        );
+                    } else {
+                        reportSpeechError(errMsg);
+                    }
                     return;
                 }
 
@@ -324,10 +364,12 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, isTerminalBl
                 const text = lines.join("\n").trim();
                 if (!text) {
                     aiModel.setError(t("aipanel.noTextContent"));
+                    reportSpeechError("没有检测到可朗读的终端输出。先让上一条命令有输出后再点。");
                     return;
                 }
                 void speechRuntime.play(text, speechSettings, "assistant", (errorMessage) => {
                     aiModel.setError(errorMessage);
+                    reportSpeechError(errorMessage);
                 });
             })();
         },

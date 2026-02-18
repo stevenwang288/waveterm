@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { handleWaveAIContextMenu } from "@/app/aipanel/aipanel-contextmenu";
-import { getSettingsKeyAtom } from "@/app/store/global";
+import { getSettingsKeyAtom, pushFlashError } from "@/app/store/global";
 import { cn, makeIconClass } from "@/util/util";
 import { useAtomValue } from "jotai";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -38,6 +38,19 @@ export const AIPanelHeader = memo(() => {
     const inBuilder = model.inBuilder;
     const { t } = useTranslation();
     const [speechActive, setSpeechActive] = useState(false);
+
+    const reportSpeechError = useMemo(
+        () => (message: string) => {
+            pushFlashError({
+                id: "",
+                icon: "triangle-exclamation",
+                title: "朗读失败",
+                message,
+                expiration: Date.now() + 7000,
+            } as any);
+        },
+        []
+    );
 
     const speechSettings = useMemo(
         () =>
@@ -107,20 +120,40 @@ export const AIPanelHeader = memo(() => {
                     defaultValue: "Still generating. Wait for the reply to finish before speaking.",
                 })
             );
+            reportSpeechError("还在生成回复，等它结束再点朗读。");
             return;
         }
         await speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
             model.setError(errorMessage);
+            reportSpeechError(errorMessage);
         });
     };
 
-    const speechTitle = !speechSettings.enabled
-        ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
-        : !hasReadableText
-          ? t("aipanel.noTextContent")
-          : speechActive
-            ? t("aipanel.feedback.stopSpeech")
-            : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" });
+    const speechEngineLabel =
+        speechSettings.transport === "browser"
+            ? "系统语音"
+            : speechSettings.provider === "local"
+              ? speechSettings.localEngine === "edge"
+                  ? "Edge"
+                  : speechSettings.localEngine === "melo"
+                    ? "Melo"
+                    : "API"
+              : "API";
+    const speechHintParts = [
+        speechEngineLabel,
+        speechSettings.transport === "api" ? speechSettings.model : "",
+        speechSettings.voiceAssistant || speechSettings.voice,
+    ].filter(Boolean);
+    const speechHint = speechHintParts.length > 0 ? `（${speechHintParts.join(" / ")}）` : "";
+
+    const speechTitle =
+        (!speechSettings.enabled
+            ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
+            : !hasReadableText
+              ? t("aipanel.noTextContent")
+              : speechActive
+                ? t("aipanel.feedback.stopSpeech")
+                : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" })) + (speechHint ? ` ${speechHint}` : "");
 
     return (
         <div
@@ -141,11 +174,11 @@ export const AIPanelHeader = memo(() => {
                         className={cn(
                             "text-gray-400 hover:text-white cursor-pointer transition-colors p-1 rounded flex-shrink-0 mr-1 focus:outline-none"
                         )}
-                        title={speechTitle}
-                    >
+                    title={speechTitle}
+                >
                         <i
                             className={makeIconClass(
-                                speechActive ? "solid@stop" : speechSettings.transport === "api" ? "solid@cloud" : "solid@volume-high",
+                                speechActive ? "solid@stop" : "solid@volume-high",
                                 false
                             )}
                         />

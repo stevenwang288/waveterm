@@ -83,8 +83,10 @@ export function resolveSpeechSettings(
         configuredEndpoint || (transport === "api" ? localEndpointFallback || fallbackEndpoint : fallbackEndpoint),
         token
     );
-    const model = normalizeString(globalSettings?.["speech:model"], normalizeString(currentModeConfig?.["ai:model"]))
+    const configuredModel =
+        normalizeString(globalSettings?.["speech:model"], normalizeString(currentModeConfig?.["ai:model"]))
         || DefaultOpenAICompatibleSpeechModel;
+    const model = provider === "local" && localEngine === "edge" ? "edge-tts" : configuredModel;
     const voice = normalizeString(globalSettings?.["speech:voice"], DefaultOpenAICompatibleSpeechVoice)
         || DefaultOpenAICompatibleSpeechVoice;
     const voiceAssistant =
