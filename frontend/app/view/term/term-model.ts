@@ -114,6 +114,7 @@ const CLI_LAYOUT_PRESETS: CliLayoutPreset[] = [
     { key: "8-2col", label: "八分屏（2列）", rows: 4, cols: 2 },
     { key: "9", label: "九分屏", rows: 3, cols: 3 },
 ];
+const INPUT_RESTART_COOLDOWN_MS = 1200;
 
 function getCliLayoutPresetLabel(preset: CliLayoutPreset): string {
     const key = `clilayout.presets.${preset.key}`;
@@ -183,6 +184,9 @@ export class TermViewModel implements ViewModel {
     isRestarting: jotai.PrimitiveAtom<boolean>;
     termDurableStatus: jotai.Atom<BlockJobStatusData | null>;
     searchAtoms?: SearchAtoms;
+    pendingInputQueue: string[] = [];
+    isFlushingPendingInput: boolean = false;
+    lastInputRestartTs: number = 0;
 
     constructor(blockId: string, nodeModel: BlockNodeModel, tabModel: TabModel) {
         this.viewType = "term";
@@ -554,8 +558,69 @@ export class TermViewModel implements ViewModel {
     }
 
     sendDataToController(data: string) {
-        const b64data = stringToBase64(data);
-        RpcApi.ControllerInputCommand(TabRpcClient, { blockid: this.blockId, inputdata64: b64data });
+        if (isBlank(data)) {
+            return;
+        }
+        const shellProcStatus = globalStore.get(this.shellProcStatus);
+        if (shellProcStatus !== "running") {
+            this.pendingInputQueue.push(data);
+            this.requestControllerRestartForInput();
+            return;
+        }
+        fireAndForget(async () => {
+            try {
+                const b64data = stringToBase64(data);
+                await RpcApi.ControllerInputCommand(TabRpcClient, { blockid: this.blockId, inputdata64: b64data });
+            } catch (e) {
+                console.log("controller input failed, queueing for retry", this.blockId, e);
+                this.pendingInputQueue.push(data);
+                this.requestControllerRestartForInput();
+            }
+        });
+    }
+
+    private requestControllerRestartForInput() {
+        if (globalStore.get(this.isRestarting)) {
+            return;
+        }
+        const now = Date.now();
+        if (now - this.lastInputRestartTs < INPUT_RESTART_COOLDOWN_MS) {
+            return;
+        }
+        this.lastInputRestartTs = now;
+        this.forceRestartController();
+    }
+
+    private async flushPendingInputQueue() {
+        if (this.isFlushingPendingInput || this.pendingInputQueue.length === 0) {
+            return;
+        }
+        if (globalStore.get(this.shellProcStatus) !== "running") {
+            return;
+        }
+        this.isFlushingPendingInput = true;
+        try {
+            while (this.pendingInputQueue.length > 0) {
+                if (globalStore.get(this.shellProcStatus) !== "running") {
+                    return;
+                }
+                const payload = this.pendingInputQueue.join("");
+                this.pendingInputQueue = [];
+                try {
+                    await RpcApi.ControllerInputCommand(TabRpcClient, {
+                        blockid: this.blockId,
+                        inputdata64: stringToBase64(payload),
+                    });
+                } catch (e) {
+                    console.log("flush pending input failed, will retry", this.blockId, e);
+                    this.pendingInputQueue.unshift(payload);
+                    this.requestControllerRestartForInput();
+                    return;
+                }
+            }
+        } finally {
+            this.isFlushingPendingInput = false;
+        }
     }
 
     setTermMode(mode: "term" | "vdom") {
@@ -593,6 +658,9 @@ export class TermViewModel implements ViewModel {
         const curStatus = globalStore.get(this.shellProcFullStatus);
         if (curStatus == null || curStatus.version < fullStatus.version) {
             globalStore.set(this.shellProcFullStatus, fullStatus);
+            if (fullStatus.shellprocstatus === "running" && this.pendingInputQueue.length > 0) {
+                fireAndForget(() => this.flushPendingInputQueue());
+            }
         }
     }
 
@@ -829,7 +897,9 @@ export class TermViewModel implements ViewModel {
         }
         const shellProcStatus = globalStore.get(this.shellProcStatus);
         if ((shellProcStatus == "done" || shellProcStatus == "init") && keyutil.checkKeyPressed(waveEvent, "Enter")) {
-            this.forceRestartController();
+            this.sendDataToController("\n");
+            event.preventDefault();
+            event.stopPropagation();
             return false;
         }
         const appHandled = appHandleKeyDown(waveEvent);
@@ -1051,10 +1121,7 @@ export class TermViewModel implements ViewModel {
                     oref: WOS.makeORef("block", blockId),
                     meta,
                 });
-                await RpcApi.ControllerInputCommand(TabRpcClient, {
-                    blockid: blockId,
-                    inputdata64: stringToBase64(inputScript),
-                });
+                this.sendDataToController(inputScript);
                 if (!isBlank(command)) {
                     favoritesModel.updateFavoriteAutoCmd(fav.id, command);
                     window.dispatchEvent(new Event("favorites-updated"));

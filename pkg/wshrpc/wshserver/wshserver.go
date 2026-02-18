@@ -293,8 +293,10 @@ func (ws *WshServer) ControllerResyncCommand(ctx context.Context, data wshrpc.Co
 
 func (ws *WshServer) ControllerInputCommand(ctx context.Context, data wshrpc.CommandBlockInputData) error {
 	inputUnion := &blockcontroller.BlockInputUnion{
-		SigName:  data.SigName,
-		TermSize: data.TermSize,
+		SigName: data.SigName,
+	}
+	if data.TermSize != nil {
+		inputUnion.TermSize = data.TermSize
 	}
 	if len(data.InputData64) > 0 {
 		inputBuf := make([]byte, base64.StdEncoding.DecodedLen(len(data.InputData64)))
@@ -303,6 +305,28 @@ func (ws *WshServer) ControllerInputCommand(ctx context.Context, data wshrpc.Com
 			return fmt.Errorf("error decoding input data: %w", err)
 		}
 		inputUnion.InputData = inputBuf[:nw]
+	}
+	sendErr := blockcontroller.SendInput(data.BlockId, inputUnion)
+	if sendErr == nil {
+		return nil
+	}
+	if !errors.Is(sendErr, blockcontroller.ErrNoController) {
+		return sendErr
+	}
+
+	// Input can arrive during controller startup/rebind windows. Recover by resyncing once and retrying.
+	tabId, tabErr := wstore.DBFindTabForBlockId(ctx, data.BlockId)
+	if tabErr != nil {
+		return sendErr
+	}
+	var rtOpts *waveobj.RuntimeOpts
+	if data.TermSize != nil && data.TermSize.Rows > 0 && data.TermSize.Cols > 0 {
+		rtOpts = &waveobj.RuntimeOpts{
+			TermSize: *data.TermSize,
+		}
+	}
+	if resyncErr := blockcontroller.ResyncController(ctx, tabId, data.BlockId, rtOpts, false); resyncErr != nil {
+		return sendErr
 	}
 	return blockcontroller.SendInput(data.BlockId, inputUnion)
 }

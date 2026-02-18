@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -319,6 +320,62 @@ type ConnUnion struct {
 	HomeDir    string
 }
 
+func resolveCmdCwd(cmdCwd string, connUnion ConnUnion) (string, error) {
+	cmdCwd = strings.TrimSpace(cmdCwd)
+	if cmdCwd == "" {
+		return "", nil
+	}
+
+	if connUnion.ConnType == ConnType_Local {
+		cwdPath, err := wavebase.ExpandHomeDir(cmdCwd)
+		if err != nil {
+			return "", err
+		}
+		return cwdPath, nil
+	}
+
+	// Non-local shell processes run "remotely" (SSH/WSL). Their cwd is interpreted by a remote shell,
+	// and must not be normalized using Windows filepath rules (which would turn "/root" into "\\root").
+	//
+	// If the remote shell is PowerShell (or the cwd looks like a Windows path), preserve it as-is.
+	if connUnion.ShellType == shellutil.ShellType_pwsh || looksLikeWindowsPath(cmdCwd) {
+		return cmdCwd, nil
+	}
+
+	// Treat the remote cwd as POSIX.
+	cmdCwd = strings.ReplaceAll(cmdCwd, "\\", "/")
+	switch {
+	case cmdCwd == "~":
+		if connUnion.HomeDir == "" {
+			// Unknown remote home; skip setting cwd rather than sending a broken `cd '~'`.
+			return "", nil
+		}
+		return path.Clean(connUnion.HomeDir), nil
+	case strings.HasPrefix(cmdCwd, "~/"):
+		if connUnion.HomeDir == "" {
+			return "", nil
+		}
+		return path.Clean(path.Join(connUnion.HomeDir, strings.TrimPrefix(cmdCwd, "~/"))), nil
+	default:
+		return path.Clean(cmdCwd), nil
+	}
+}
+
+func looksLikeWindowsPath(p string) bool {
+	if len(p) < 2 {
+		return false
+	}
+	// UNC path: \\server\share (accept /-variant too).
+	if strings.HasPrefix(p, `\\`) || strings.HasPrefix(p, `//`) {
+		return true
+	}
+	// Drive letter path: C:\..., C:/...
+	if len(p) >= 3 && ((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) && p[1] == ':' && (p[2] == '\\' || p[2] == '/') {
+		return true
+	}
+	return false
+}
+
 func (bc *ShellController) getConnUnion(logCtx context.Context, remoteName string, blockMeta waveobj.MetaMapType) (ConnUnion, error) {
 	rtn := ConnUnion{ConnName: remoteName}
 	wshEnabled := !blockMeta.GetBool(waveobj.MetaKey_CmdNoWsh, false)
@@ -390,17 +447,14 @@ func (bc *ShellController) setupAndStartShellProcess(logCtx context.Context, rc 
 	if bc.ControllerType == BlockController_Shell {
 		cmdOpts.Interactive = true
 		cmdOpts.Login = true
-		cmdOpts.Cwd = blockMeta.GetString(waveobj.MetaKey_CmdCwd, "")
-		if cmdOpts.Cwd != "" {
-			cwdPath, err := wavebase.ExpandHomeDir(cmdOpts.Cwd)
-			if err != nil {
-				return nil, err
-			}
-			cmdOpts.Cwd = cwdPath
+		cwdPath, err := resolveCmdCwd(blockMeta.GetString(waveobj.MetaKey_CmdCwd, ""), connUnion)
+		if err != nil {
+			return nil, err
 		}
+		cmdOpts.Cwd = cwdPath
 	} else if bc.ControllerType == BlockController_Cmd {
 		var cmdOptsPtr *shellexec.CommandOptsType
-		cmdStr, cmdOptsPtr, err = createCmdStrAndOpts(bc.BlockId, blockMeta, remoteName)
+		cmdStr, cmdOptsPtr, err = createCmdStrAndOpts(bc.BlockId, blockMeta, connUnion)
 		if err != nil {
 			return nil, err
 		}
@@ -688,21 +742,18 @@ func getLocalShellOpts(blockMeta waveobj.MetaMapType) []string {
 }
 
 // for "cmd" type blocks
-func createCmdStrAndOpts(blockId string, blockMeta waveobj.MetaMapType, connName string) (string, *shellexec.CommandOptsType, error) {
+func createCmdStrAndOpts(blockId string, blockMeta waveobj.MetaMapType, connUnion ConnUnion) (string, *shellexec.CommandOptsType, error) {
 	var cmdStr string
 	var cmdOpts shellexec.CommandOptsType
 	cmdStr = blockMeta.GetString(waveobj.MetaKey_Cmd, "")
 	if cmdStr == "" {
 		return "", nil, fmt.Errorf("missing cmd in block meta")
 	}
-	cmdOpts.Cwd = blockMeta.GetString(waveobj.MetaKey_CmdCwd, "")
-	if cmdOpts.Cwd != "" {
-		cwdPath, err := wavebase.ExpandHomeDir(cmdOpts.Cwd)
-		if err != nil {
-			return "", nil, err
-		}
-		cmdOpts.Cwd = cwdPath
+	cwdPath, err := resolveCmdCwd(blockMeta.GetString(waveobj.MetaKey_CmdCwd, ""), connUnion)
+	if err != nil {
+		return "", nil, err
 	}
+	cmdOpts.Cwd = cwdPath
 	useShell := blockMeta.GetBool(waveobj.MetaKey_CmdShell, true)
 	if !useShell {
 		if strings.Contains(cmdStr, " ") {

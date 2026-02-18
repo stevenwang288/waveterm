@@ -6,6 +6,7 @@ package blockcontroller
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -38,6 +39,8 @@ const (
 	Status_Done    = "done"
 	Status_Init    = "init"
 )
+
+var ErrNoController = errors.New("no controller found")
 
 const (
 	DefaultTermMaxFileSize = 256 * 1024
@@ -300,7 +303,7 @@ func sendConnMonitorInputNotification(controller Controller) {
 func SendInput(blockId string, inputUnion *BlockInputUnion) error {
 	controller := getController(blockId)
 	if controller == nil {
-		return fmt.Errorf("no controller found for block %s", blockId)
+		return fmt.Errorf("%w for block %s", ErrNoController, blockId)
 	}
 	sendConnMonitorInputNotification(controller)
 	return controller.SendInput(inputUnion)
