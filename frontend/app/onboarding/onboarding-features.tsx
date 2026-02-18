@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Logo from "@/app/asset/logo.svg";
+import { Button } from "@/app/element/button";
 import { EmojiButton } from "@/app/element/emojibutton";
 import { MagnifyIcon } from "@/app/element/magnify";
 import { ClientModel } from "@/app/store/client-model";
@@ -14,7 +15,6 @@ import { FakeChat } from "./fakechat";
 import { EditBashrcCommand, ViewLogoCommand, ViewShortcutsCommand } from "./onboarding-command";
 import { CurrentOnboardingVersion } from "./onboarding-common";
 import { DurableSessionPage } from "./onboarding-durable";
-import { OnboardingFooter } from "./onboarding-features-footer";
 import { FakeLayout } from "./onboarding-layout";
 import { useTranslation, Trans } from "react-i18next";
 
