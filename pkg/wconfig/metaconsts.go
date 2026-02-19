@@ -100,6 +100,7 @@ const (
 	ConfigKey_PreviewShowHiddenFiles         = "preview:showhiddenfiles"
 
 	ConfigKey_TabPreset                      = "tab:preset"
+	ConfigKey_TabConfirmClose                = "tab:confirmclose"
 	ConfigKey_TabSidePanelButtonOrder        = "tab:sidepanelbuttonorder"
 
 	ConfigKey_WidgetClear                    = "widget:*"
@@ -144,4 +145,3 @@ const (
 	ConfigKey_TsunamiSdkVersion              = "tsunami:sdkversion"
 	ConfigKey_TsunamiGoPath                  = "tsunami:gopath"
 )
-

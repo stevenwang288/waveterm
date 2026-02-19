@@ -1328,6 +1328,7 @@ declare global {
         "preview:showhiddenfiles"?: boolean;
         "tab:preset"?: string;
         "tab:sidepanelbuttonorder"?: string[];
+        "tab:confirmclose"?: boolean;
         "widget:*"?: boolean;
         "widget:showhelp"?: boolean;
         "window:*"?: boolean;

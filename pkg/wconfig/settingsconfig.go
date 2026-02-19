@@ -148,7 +148,8 @@ type SettingsType struct {
 
 	PreviewShowHiddenFiles *bool `json:"preview:showhiddenfiles,omitempty"`
 
-	TabPreset string `json:"tab:preset,omitempty"`
+	TabPreset             string   `json:"tab:preset,omitempty"`
+	TabConfirmClose       bool     `json:"tab:confirmclose,omitempty"`
 	TabSidePanelButtonOrder []string `json:"tab:sidepanelbuttonorder,omitempty"`
 
 	WidgetClear    bool  `json:"widget:*,omitempty"`
