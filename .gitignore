@@ -39,3 +39,4 @@ test-results.xml
 
 docsite/
 .tmp-fork-audit/
+.tmp/
