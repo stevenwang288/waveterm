@@ -37,7 +37,6 @@ let atoms: GlobalAtomsType;
 let globalEnvironment: "electron" | "renderer";
 let globalPrimaryTabStartup: boolean = false;
 const blockComponentModelMap = new Map<string, BlockComponentModel>();
-const Counters = new Map<string, number>();
 const ConnStatusMapAtom = atom(new Map<string, PrimitiveAtom<ConnStatus>>());
 const TabIndicatorMap = new Map<string, PrimitiveAtom<TabIndicator>>();
 const orefAtomCache = new Map<string, Map<string, Atom<any>>>();
@@ -761,24 +760,6 @@ function refocusNode(blockId: string) {
     }
 }
 
-function countersClear() {
-    Counters.clear();
-}
-
-function counterInc(name: string, incAmt: number = 1) {
-    let count = Counters.get(name) ?? 0;
-    count += incAmt;
-    Counters.set(name, count);
-}
-
-function countersPrint() {
-    let outStr = "";
-    for (const [name, count] of Counters.entries()) {
-        outStr += `${name}: ${count}\n`;
-    }
-    console.log(outStr);
-}
-
 async function loadConnStatus() {
     const connStatusArr = await ClientService.GetAllConnStatus();
     if (connStatusArr == null) {
@@ -988,9 +969,6 @@ export {
     atoms,
     clearAllTabIndicators,
     clearTabIndicatorFromFocus,
-    counterInc,
-    countersClear,
-    countersPrint,
     createBlock,
     createBlockSplitHorizontally,
     createBlockSplitVertically,
