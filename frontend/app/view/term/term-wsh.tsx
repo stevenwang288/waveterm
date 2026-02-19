@@ -7,6 +7,7 @@ import { RpcResponseHelper, WshClient } from "@/app/store/wshclient";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { makeFeBlockRouteId } from "@/app/store/wshrouter";
 import { TermViewModel } from "@/app/view/term/term-model";
+import { bufferLinesToText } from "@/app/view/term/termutil";
 import { isBlank } from "@/util/util";
 import debug from "debug";
 
@@ -120,7 +121,6 @@ export class TermWshClient extends WshClient {
 
         const buffer = termWrap.terminal.buffer.active;
         const totalLines = buffer.length;
-        const lines: string[] = [];
 
         if (data.lastcommand) {
             if (globalStore.get(termWrap.shellIntegrationStatusAtom) == null) {
@@ -144,32 +144,28 @@ export class TermWshClient extends WshClient {
                     startBufferIndex = Math.max(0, Math.min(totalLines, Math.floor(startMarkerLine)));
                 }
 
-                // In ready state, include exactly one trailing prompt marker as a completion boundary.
+                // In ready state, use the next prompt marker as an end boundary for the previous command output.
                 if (shellState === "ready" && markerIdx + 1 < termWrap.promptMarkers.length) {
                     const endMarker = termWrap.promptMarkers[markerIdx + 1];
                     const endMarkerLine = endMarker?.line;
                     if (typeof endMarkerLine === "number" && Number.isFinite(endMarkerLine)) {
-                        endBufferIndex = Math.max(
-                            startBufferIndex,
-                            Math.min(totalLines, Math.floor(endMarkerLine) + 1)
-                        );
+                        endBufferIndex = Math.max(startBufferIndex, Math.min(totalLines, Math.floor(endMarkerLine)));
                     }
                 }
             }
 
-            for (let bufferIndex = startBufferIndex; bufferIndex < endBufferIndex; bufferIndex++) {
-                const line = buffer.getLine(bufferIndex);
-                if (line) {
-                    lines.push(line.translateToString(true));
-                }
-            }
+            const lines = bufferLinesToText(buffer, startBufferIndex, endBufferIndex);
 
+            // Convert buffer indices to "from bottom" line numbers.
+            // "from bottom" 0 = most recent line; higher numbers = older lines.
+            // The buffer range [startBufferIndex, endBufferIndex) maps to
+            // "from bottom" range [totalLines - endBufferIndex, totalLines - startBufferIndex).
+            // The first returned line is at "from bottom" position: totalLines - endBufferIndex.
             let returnLines = lines;
-            let returnStartLine = startBufferIndex;
+            let returnStartLine = totalLines - endBufferIndex;
             if (lines.length > 1000) {
-                const trimmedCount = lines.length - 1000;
-                returnLines = lines.slice(trimmedCount);
-                returnStartLine = startBufferIndex + trimmedCount;
+                returnLines = lines.slice(lines.length - 1000);
+                returnStartLine = (totalLines - endBufferIndex) + (lines.length - 1000);
             }
 
             return {
@@ -181,17 +177,11 @@ export class TermWshClient extends WshClient {
         }
 
         const startLine = Math.max(0, data.linestart);
-        const endLine = Math.min(totalLines, data.lineend);
+        const endLine = data.lineend === 0 ? totalLines : Math.min(totalLines, data.lineend);
 
-        for (let i = startLine; i < endLine; i++) {
-            const bufferIndex = totalLines - 1 - i;
-            const line = buffer.getLine(bufferIndex);
-            if (line) {
-                lines.push(line.translateToString(true));
-            }
-        }
-
-        lines.reverse();
+        const startBufferIndex = totalLines - endLine;
+        const endBufferIndex = totalLines - startLine;
+        const lines = bufferLinesToText(buffer, startBufferIndex, endBufferIndex);
 
         return {
             totallines: totalLines,

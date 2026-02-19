@@ -1458,6 +1458,36 @@ export class TermViewModel implements ViewModel {
             fullMenu.push({ type: "separator" });
         }
 
+        fullMenu.push({
+            label: "Save Session As...",
+            click: () => {
+                if (this.termRef.current) {
+                    const content = this.termRef.current.getScrollbackContent();
+                    if (content) {
+                        fireAndForget(async () => {
+                            try {
+                                const success = await getApi().saveTextFile("session.log", content);
+                                if (!success) {
+                                    console.log("Save scrollback cancelled by user");
+                                }
+                            } catch (error) {
+                                console.error("Failed to save scrollback:", error);
+                                const errorMessage = error?.message || "An unknown error occurred";
+                                modalsModel.pushModal("MessageModal", {
+                                    children: `Failed to save session scrollback: ${errorMessage}`,
+                                });
+                            }
+                        });
+                    } else {
+                        modalsModel.pushModal("MessageModal", {
+                            children: "No scrollback content to save.",
+                        });
+                    }
+                }
+            },
+        });
+        fullMenu.push({ type: "separator" });
+
         const submenu: ContextMenuItem[] = termThemeKeys.map((themeName) => {
             const theme = termThemes[themeName];
             return {
