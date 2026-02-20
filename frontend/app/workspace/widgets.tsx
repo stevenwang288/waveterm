@@ -8,6 +8,7 @@ import { ContextMenuModel } from "@/app/store/contextmenu";
 import { FocusManager } from "@/app/store/focusManager";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { shouldIncludeWidgetForWorkspace } from "@/app/workspace/widgetfilter";
 import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
@@ -441,7 +442,9 @@ const Widgets = memo(() => {
     const { t } = useTranslation();
     const fallbackFullConfigAtom = useMemo(() => atom<FullConfigType>(null), []);
     const fallbackHasCustomAIPresetsAtom = useMemo(() => atom(false), []);
+    const fallbackWorkspaceAtom = useMemo(() => atom<Workspace | null>(null), []);
     const fullConfig = useAtomValue(atoms?.fullConfigAtom ?? fallbackFullConfigAtom);
+    const workspace = useAtomValue(atoms?.workspace ?? fallbackWorkspaceAtom);
     const hasCustomAIPresets = useAtomValue(atoms?.hasCustomAIPresetsAtom ?? fallbackHasCustomAIPresetsAtom);
     const [mode, setMode] = useState<"normal" | "compact" | "supercompact">("normal");
     const containerRef = useRef<HTMLDivElement>(null);
@@ -458,10 +461,10 @@ const Widgets = memo(() => {
                 if (isExplorerWidget(widget)) {
                     return false;
                 }
-                return true;
+                return shouldIncludeWidgetForWorkspace(widget, workspace?.oid);
             })
         );
-    }, [hasCustomAIPresets, widgetsMap]);
+    }, [hasCustomAIPresets, widgetsMap, workspace?.oid]);
     const widgets = sortByDisplayOrder(filteredWidgets);
 
     const [isAppsOpen, setIsAppsOpen] = useState(false);

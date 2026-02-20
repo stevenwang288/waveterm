@@ -1475,6 +1475,8 @@ declare global {
         "conn:conntype"?: string;
         "conn:wsherrorcode"?: string;
         "conn:errorcode"?: string;
+        "conn:suberrorcode"?: string;
+        "conn:contexterror"?: boolean;
         "onboarding:feature"?: "waveai" | "durable" | "magnify" | "wsh";
         "onboarding:version"?: string;
         "onboarding:githubstar"?: "already" | "star" | "later";
@@ -2098,6 +2100,7 @@ declare global {
         color?: string;
         label?: string;
         description?: string;
+        workspaces?: string[];
         magnified?: boolean;
         blockdef: BlockDef;
     };
