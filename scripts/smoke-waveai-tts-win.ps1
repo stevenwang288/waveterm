@@ -51,7 +51,18 @@ if (Test-Path -LiteralPath $settingsPath) {
     try {
         $json = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
         $json | Add-Member -NotePropertyName "speech:enabled" -NotePropertyValue $true -Force
-        $json | Add-Member -NotePropertyName "speech:autoplay" -NotePropertyValue $true -Force
+        $auto = $true
+        if ($Scenario -eq "terminal") {
+            # Terminal autoplay is controlled by a per-block toggle; keep global autoplay off.
+            $auto = $false
+        }
+        $json | Add-Member -NotePropertyName "speech:autoplay" -NotePropertyValue $auto -Force
+        if ($Scenario -eq "terminal") {
+            # Terminal autoplay is validated via the Edge TTS request payload (not browser SpeechSynthesis).
+            $json | Add-Member -NotePropertyName "speech:provider" -NotePropertyValue "local" -Force
+            $json | Add-Member -NotePropertyName "speech:localengine" -NotePropertyValue "edge" -Force
+            $json | Add-Member -NotePropertyName "speech:model" -NotePropertyValue "edge-tts" -Force
+        }
         # Windows PowerShell's `-Encoding UTF8` writes a BOM, which breaks our JSON parser.
         $jsonText = $json | ConvertTo-Json -Depth 50
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)

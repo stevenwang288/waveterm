@@ -303,6 +303,56 @@
                         align-items: center;
                     }
 
+                    .block-frame-speech-mode {
+                        width: auto;
+                        min-width: 60px;
+                        padding: 2px 4px;
+                        border-radius: 999px;
+                        opacity: 1;
+
+                        .speech-mode-chip {
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            gap: 4px;
+                            font-size: 11px;
+                            line-height: 1.1;
+                            font-weight: 800;
+                            letter-spacing: 0.2px;
+                            padding: 2px 8px;
+                            border-radius: 999px;
+                            border: 1px solid transparent;
+                        }
+
+                        .speech-mode-dot {
+                            width: 6px;
+                            height: 6px;
+                            border-radius: 999px;
+                            flex: 0 0 auto;
+                        }
+
+                        &.is-auto-on .speech-mode-chip {
+                            color: rgb(from var(--term-green) r g b / 95%);
+                            background-color: rgb(from var(--term-green) r g b / 18%);
+                            border-color: rgb(from var(--term-green) r g b / 45%);
+                        }
+
+                        &.is-auto-on .speech-mode-dot {
+                            background-color: rgb(from var(--term-green) r g b / 95%);
+                            box-shadow: 0 0 0 2px rgb(from var(--term-green) r g b / 22%);
+                        }
+
+                        &.is-auto-off .speech-mode-chip {
+                            color: rgb(from var(--secondary-text-color) r g b / 92%);
+                            background-color: rgb(from var(--secondary-text-color) r g b / 18%);
+                            border-color: rgb(from var(--secondary-text-color) r g b / 38%);
+                        }
+
+                        &.is-auto-off .speech-mode-dot {
+                            background-color: rgb(from var(--secondary-text-color) r g b / 85%);
+                        }
+                    }
+
                     .block-frame-magnify {
                         justify-content: center;
                         align-items: center;

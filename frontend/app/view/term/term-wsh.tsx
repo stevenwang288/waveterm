@@ -127,29 +127,49 @@ export class TermWshClient extends WshClient {
                 throw new Error("Cannot get last command data without shell integration");
             }
 
-            let startLine = 0;
+            const shellState = globalStore.get(termWrap.shellIntegrationStatusAtom);
+            let startBufferIndex = 0;
+            let endBufferIndex = totalLines;
             if (termWrap.promptMarkers.length > 0) {
-                const lastMarker = termWrap.promptMarkers[termWrap.promptMarkers.length - 1];
-                const markerLine = lastMarker.line;
-                startLine = totalLines - markerLine;
+                let markerIdx = termWrap.promptMarkers.length - 1;
+                // When shell is ready, latest marker belongs to the current prompt.
+                // Use previous marker to capture the just-finished command output.
+                if (shellState === "ready" && markerIdx > 0) {
+                    markerIdx -= 1;
+                }
+
+                const startMarker = termWrap.promptMarkers[markerIdx];
+                const startMarkerLine = startMarker?.line;
+                if (typeof startMarkerLine === "number" && Number.isFinite(startMarkerLine)) {
+                    startBufferIndex = Math.max(0, Math.min(totalLines, Math.floor(startMarkerLine)));
+                }
+
+                // In ready state, include exactly one trailing prompt marker as a completion boundary.
+                if (shellState === "ready" && markerIdx + 1 < termWrap.promptMarkers.length) {
+                    const endMarker = termWrap.promptMarkers[markerIdx + 1];
+                    const endMarkerLine = endMarker?.line;
+                    if (typeof endMarkerLine === "number" && Number.isFinite(endMarkerLine)) {
+                        endBufferIndex = Math.max(
+                            startBufferIndex,
+                            Math.min(totalLines, Math.floor(endMarkerLine) + 1)
+                        );
+                    }
+                }
             }
 
-            const endLine = totalLines;
-            for (let i = startLine; i < endLine; i++) {
-                const bufferIndex = totalLines - 1 - i;
+            for (let bufferIndex = startBufferIndex; bufferIndex < endBufferIndex; bufferIndex++) {
                 const line = buffer.getLine(bufferIndex);
                 if (line) {
                     lines.push(line.translateToString(true));
                 }
             }
 
-            lines.reverse();
-
             let returnLines = lines;
-            let returnStartLine = startLine;
+            let returnStartLine = startBufferIndex;
             if (lines.length > 1000) {
-                returnLines = lines.slice(lines.length - 1000);
-                returnStartLine = startLine + (lines.length - 1000);
+                const trimmedCount = lines.length - 1000;
+                returnLines = lines.slice(trimmedCount);
+                returnStartLine = startBufferIndex + trimmedCount;
             }
 
             return {

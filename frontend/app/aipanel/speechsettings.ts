@@ -20,6 +20,7 @@ export type ResolvedSpeechSettings = {
     transport: SpeechTransport;
     autoPlay: boolean;
     showManualButton: boolean;
+    rate: number;
     endpoint: string | null;
     model: string;
     token: string;
@@ -40,10 +41,13 @@ function normalizeProvider(rawValue: unknown): SpeechProvider {
 }
 
 function normalizeLocalEngine(rawValue: unknown): SpeechLocalEngine {
-    if (rawValue === "edge" || rawValue === "melo") {
-        return rawValue;
+    // We only support Edge TTS for local speech in production.
+    // Treat legacy/experimental engines (browser, melo) as Edge to avoid silently using
+    // the browser SpeechSynthesis voice.
+    if (rawValue === "edge") {
+        return "edge";
     }
-    return "browser";
+    return "edge";
 }
 
 function normalizeBool(rawValue: unknown, defaultValue: boolean): boolean {
@@ -58,6 +62,13 @@ function normalizeString(rawValue: unknown, defaultValue = ""): string {
         return defaultValue;
     }
     return rawValue.trim();
+}
+
+function normalizeSpeechRate(rawValue: unknown, defaultValue = 1): number {
+    if (typeof rawValue !== "number" || Number.isNaN(rawValue) || !Number.isFinite(rawValue)) {
+        return defaultValue;
+    }
+    return Math.max(0.5, Math.min(2, rawValue));
 }
 
 export function resolveSpeechSettings(
@@ -80,15 +91,16 @@ export function resolveSpeechSettings(
             : "";
     const fallbackEndpoint = normalizeString(currentModeConfig?.["ai:endpoint"]);
     const endpoint = resolveOpenAICompatibleSpeechEndpoint(
-        configuredEndpoint || (transport === "api" ? localEndpointFallback || fallbackEndpoint : fallbackEndpoint),
+        provider === "local" ? localEndpointFallback : configuredEndpoint || fallbackEndpoint,
         token
     );
     const configuredModel =
-        normalizeString(globalSettings?.["speech:model"], normalizeString(currentModeConfig?.["ai:model"]))
-        || DefaultOpenAICompatibleSpeechModel;
+        normalizeString(globalSettings?.["speech:model"], normalizeString(currentModeConfig?.["ai:model"])) ||
+        DefaultOpenAICompatibleSpeechModel;
     const model = provider === "local" && localEngine === "edge" ? "edge-tts" : configuredModel;
-    const voice = normalizeString(globalSettings?.["speech:voice"], DefaultOpenAICompatibleSpeechVoice)
-        || DefaultOpenAICompatibleSpeechVoice;
+    const voice =
+        normalizeString(globalSettings?.["speech:voice"], DefaultOpenAICompatibleSpeechVoice) ||
+        DefaultOpenAICompatibleSpeechVoice;
     const voiceAssistant =
         normalizeString(globalSettings?.["speech:voiceassistant"], voice) || DefaultOpenAICompatibleSpeechVoice;
     const voiceUser = normalizeString(globalSettings?.["speech:voiceuser"], voiceAssistant) || voiceAssistant;
@@ -100,6 +112,7 @@ export function resolveSpeechSettings(
         transport,
         autoPlay: normalizeBool(globalSettings?.["speech:autoplay"], false),
         showManualButton: normalizeBool(globalSettings?.["speech:manualbutton"], true),
+        rate: normalizeSpeechRate(globalSettings?.["speech:rate"], 1),
         endpoint,
         model,
         token,

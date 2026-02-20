@@ -48,6 +48,7 @@ const (
 	ConfigKey_SpeechFilterCode               = "speech:filtercode"
 	ConfigKey_SpeechAutoPlay                 = "speech:autoplay"
 	ConfigKey_SpeechManualButton             = "speech:manualbutton"
+	ConfigKey_SpeechRate                     = "speech:rate"
 	ConfigKey_SpeechLocalEngine              = "speech:localengine"
 	ConfigKey_SpeechLocalModel               = "speech:localmodel"
 	ConfigKey_SpeechLocalModelPath           = "speech:localmodelpath"

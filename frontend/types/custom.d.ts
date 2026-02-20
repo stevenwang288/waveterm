@@ -137,6 +137,17 @@ declare global {
         nativePaste: () => void; // native-paste
         codexTranslate: (text: string) => Promise<string>; // codex-translate
         codexAuthReady: () => Promise<boolean>; // codex-auth-ready
+        speechRequest: (req: {
+            url: string;
+            method?: string;
+            headers?: Record<string, string>;
+            body?: string;
+        }) => Promise<{
+            status: number;
+            statusText: string;
+            headers: Record<string, string>;
+            bodyBase64: string;
+        }>; // speech-request
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh

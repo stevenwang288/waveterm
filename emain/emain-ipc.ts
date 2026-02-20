@@ -113,6 +113,20 @@ type UrlInSessionResult = {
     fileName: string;
 };
 
+type SpeechRequestData = {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+};
+
+type SpeechRequestResult = {
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    bodyBase64: string;
+};
+
 function getSingleHeaderVal(headers: Record<string, string | string[]>, key: string): string {
     const val = headers[key];
     if (val == null) {
@@ -191,6 +205,65 @@ function getUrlInSession(session: Electron.Session, url: string): Promise<UrlInS
             reject(err);
         });
         request.end();
+    });
+}
+
+function runSpeechRequestInMain(req: SpeechRequestData): Promise<SpeechRequestResult> {
+    return new Promise((resolve, reject) => {
+        if (!req?.url) {
+            reject(new Error("Missing speech request url."));
+            return;
+        }
+        let requestUrl: URL;
+        try {
+            requestUrl = new URL(req.url);
+        } catch {
+            reject(new Error("Invalid speech request url."));
+            return;
+        }
+        const netRequest = electron.net.request({
+            url: requestUrl.toString(),
+            method: req.method?.toUpperCase() || "POST",
+            session: electron.session.defaultSession,
+        });
+        const requestHeaders = req.headers ?? {};
+        for (const [key, value] of Object.entries(requestHeaders)) {
+            if (!key || value == null) {
+                continue;
+            }
+            netRequest.setHeader(key, value);
+        }
+        netRequest.on("response", (response) => {
+            const chunks: Buffer[] = [];
+            response.on("data", (chunk) => {
+                chunks.push(Buffer.from(chunk));
+            });
+            response.on("end", () => {
+                const headers: Record<string, string> = {};
+                for (const [key, value] of Object.entries(response.headers ?? {})) {
+                    if (!key) {
+                        continue;
+                    }
+                    if (Array.isArray(value)) {
+                        headers[key.toLowerCase()] = value[0] ?? "";
+                    } else if (value != null) {
+                        headers[key.toLowerCase()] = String(value);
+                    }
+                }
+                resolve({
+                    status: response.statusCode ?? 0,
+                    statusText: response.statusMessage ?? "",
+                    headers,
+                    bodyBase64: Buffer.concat(chunks).toString("base64"),
+                });
+            });
+            response.on("error", (error) => reject(error));
+        });
+        netRequest.on("error", (error) => reject(error));
+        if (typeof req.body === "string" && req.body.length > 0) {
+            netRequest.write(req.body);
+        }
+        netRequest.end();
     });
 }
 
@@ -617,6 +690,10 @@ export function initIpcHandlers() {
         }
         const auth = await readCodexAuthJson(getUserCodexHome());
         return codexAuthReadyFromAuthJson(auth);
+    });
+
+    electron.ipcMain.handle("speech-request", async (_event, req: SpeechRequestData) => {
+        return await runSpeechRequestInMain(req);
     });
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {

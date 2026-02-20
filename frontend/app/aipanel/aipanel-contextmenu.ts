@@ -140,7 +140,8 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
     const speechFilterCode = globalStore.get(getSettingsKeyAtom("speech:filtercode")) ?? true;
     const speechAutoPlay = globalStore.get(getSettingsKeyAtom("speech:autoplay")) ?? false;
     const speechManualButton = globalStore.get(getSettingsKeyAtom("speech:manualbutton")) ?? true;
-    const speechLocalEngine = globalStore.get(getSettingsKeyAtom("speech:localengine")) ?? "browser";
+    const speechLocalEngineRaw = globalStore.get(getSettingsKeyAtom("speech:localengine")) ?? "edge";
+    const speechLocalEngine = speechLocalEngineRaw === "edge" ? "edge" : "edge";
     const speechLocalModel = globalStore.get(getSettingsKeyAtom("speech:localmodel")) ?? "";
     const speechLocalModelPath = globalStore.get(getSettingsKeyAtom("speech:localmodelpath")) ?? "";
     const currentMode = globalStore.get(model.currentAIMode);
@@ -218,18 +219,6 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
             type: "separator",
         },
         {
-            label: i18next.t("aipanel.speech.localBrowser", { defaultValue: "Local engine: Browser" }),
-            type: "checkbox",
-            checked: speechLocalEngine === "browser",
-            click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, {
-                    "speech:localengine": "browser",
-                    "speech:model": "browser-speechsynthesis",
-                    "speech:provider": "local",
-                });
-            },
-        },
-        {
             label: i18next.t("aipanel.speech.localEdge", { defaultValue: "Local engine: Edge TTS" }),
             type: "checkbox",
             checked: speechLocalEngine === "edge",
@@ -237,18 +226,6 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
                 RpcApi.SetConfigCommand(TabRpcClient, {
                     "speech:localengine": "edge",
                     "speech:model": "edge-tts",
-                    "speech:provider": "local",
-                });
-            },
-        },
-        {
-            label: i18next.t("aipanel.speech.localMelo", { defaultValue: "Local engine: MeloTTS" }),
-            type: "checkbox",
-            checked: speechLocalEngine === "melo",
-            click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, {
-                    "speech:localengine": "melo",
-                    "speech:model": speechLocalModel || "MeloTTS-Chinese",
                     "speech:provider": "local",
                 });
             },

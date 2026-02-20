@@ -70,6 +70,12 @@ contextBridge.exposeInMainWorld("api", {
     nativePaste: () => ipcRenderer.send("native-paste"),
     codexTranslate: (text: string) => ipcRenderer.invoke("codex-translate", text),
     codexAuthReady: () => ipcRenderer.invoke("codex-auth-ready"),
+    speechRequest: (req: {
+        url: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: string;
+    }) => ipcRenderer.invoke("speech-request", req),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),

@@ -126,6 +126,9 @@
         "speech:manualbutton": {
           "type": "boolean"
         },
+        "speech:rate": {
+          "type": "number"
+        },
         "speech:localengine": {
           "type": "string",
           "enum": [

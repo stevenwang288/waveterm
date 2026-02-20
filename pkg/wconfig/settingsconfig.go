@@ -97,6 +97,7 @@ type SettingsType struct {
 	SpeechFilterCode    *bool  `json:"speech:filtercode,omitempty"`
 	SpeechAutoPlay      *bool  `json:"speech:autoplay,omitempty"`
 	SpeechManualButton  *bool  `json:"speech:manualbutton,omitempty"`
+	SpeechRate           *float64 `json:"speech:rate,omitempty"`
 	SpeechLocalEngine   string `json:"speech:localengine,omitempty" jsonschema:"enum=browser,enum=edge,enum=melo"`
 	SpeechLocalModel    string `json:"speech:localmodel,omitempty"`
 	SpeechLocalModelPath string `json:"speech:localmodelpath,omitempty"`

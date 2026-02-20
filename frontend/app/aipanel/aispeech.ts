@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 const MaxSpeechInputLength = 4096;
+const MinSpeechRate = 0.5;
+const MaxSpeechRate = 2;
 
 export const DefaultOpenAICompatibleSpeechEndpoint = "https://api.openai.com/v1/audio/speech";
 export const DefaultOpenAICompatibleSpeechModel = "gpt-4o-mini-tts";
@@ -18,7 +20,15 @@ export type OpenAICompatibleSpeechConfig = {
     model?: string;
     token?: string;
     voice?: string;
+    speed?: number;
 };
+
+export function normalizeSpeechRate(rate: unknown, fallback = 1): number {
+    if (typeof rate !== "number" || Number.isNaN(rate) || !Number.isFinite(rate)) {
+        return fallback;
+    }
+    return Math.min(MaxSpeechRate, Math.max(MinSpeechRate, rate));
+}
 
 function stripSpeechNoise(text: string, filterOptions?: SpeechFilterOptions): string {
     const filterUrls = filterOptions?.filterUrls ?? true;
@@ -72,6 +82,7 @@ export function stopLocalSpeechSynthesis(): void {
 export function speakLocally(
     text: string,
     voiceName: string | undefined,
+    rate: number | undefined,
     handlers?: {
         onDone?: () => void;
         onError?: (message: string) => void;
@@ -113,6 +124,7 @@ export function speakLocally(
     } else {
         utterance.lang = navigator.language || "en-US";
     }
+    utterance.rate = normalizeSpeechRate(rate, 1);
     utterance.onend = () => finalize();
     utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
         handlers?.onError?.(event.error || "Speech synthesis failed.");
@@ -170,6 +182,51 @@ async function safeReadText(response: Response): Promise<string> {
     }
 }
 
+type MainProcessSpeechResponse = {
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    bodyBase64: string;
+};
+
+function hasMainProcessSpeechRequestApi(): boolean {
+    if (typeof window === "undefined") {
+        return false;
+    }
+    const api = (window as any).api;
+    return typeof api?.speechRequest === "function";
+}
+
+function decodeBase64ToBytes(base64: string): Uint8Array {
+    const binary = atob(base64 || "");
+    const bytes = new Uint8Array(binary.length);
+    for (let idx = 0; idx < binary.length; idx++) {
+        bytes[idx] = binary.charCodeAt(idx);
+    }
+    return bytes;
+}
+
+function decodeBytesToText(bytes: Uint8Array): string {
+    try {
+        return new TextDecoder().decode(bytes).trim();
+    } catch {
+        return "";
+    }
+}
+
+function getHeaderCaseInsensitive(headers: Record<string, string> | null | undefined, key: string): string {
+    if (!headers) {
+        return "";
+    }
+    const loweredKey = key.toLowerCase();
+    for (const [headerKey, headerValue] of Object.entries(headers)) {
+        if (headerKey.toLowerCase() === loweredKey) {
+            return headerValue ?? "";
+        }
+    }
+    return "";
+}
+
 export async function requestOpenAICompatibleSpeechAudio(
     text: string,
     config: OpenAICompatibleSpeechConfig,
@@ -196,9 +253,54 @@ export async function requestOpenAICompatibleSpeechAudio(
         model: config.model?.trim() || DefaultOpenAICompatibleSpeechModel,
         input,
         voice: config.voice?.trim() || DefaultOpenAICompatibleSpeechVoice,
+        speed: normalizeSpeechRate(config.speed, 1),
         response_format: "mp3",
         format: "mp3",
     };
+
+    if (signal?.aborted) {
+        throw new Error("Speech API request aborted.");
+    }
+
+    if (hasMainProcessSpeechRequestApi()) {
+        const response = (await (window as any).api.speechRequest({
+            url: config.endpoint,
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload),
+        })) as MainProcessSpeechResponse;
+        if (signal?.aborted) {
+            throw new Error("Speech API request aborted.");
+        }
+
+        const responseBytes = decodeBase64ToBytes(response?.bodyBase64 || "");
+        const details = decodeBytesToText(responseBytes);
+        const status = Number(response?.status ?? 0);
+        const statusText = response?.statusText ?? "";
+        if (!(status >= 200 && status < 300)) {
+            throw new Error(`Speech API request failed (${status}): ${details || statusText}`);
+        }
+        const contentType = getHeaderCaseInsensitive(response?.headers, "content-type");
+        const normalizedContentType = contentType.toLowerCase();
+        if (normalizedContentType.includes("application/json")) {
+            throw new Error(details || "Speech API returned JSON instead of audio.");
+        }
+        if (
+            normalizedContentType &&
+            !normalizedContentType.includes("audio/") &&
+            !normalizedContentType.includes("application/octet-stream")
+        ) {
+            throw new Error(
+                details ||
+                    `Speech API returned non-audio content type: ${contentType}. Check endpoint/model/token configuration.`
+            );
+        }
+        if (responseBytes.byteLength === 0) {
+            throw new Error("Speech API returned empty audio.");
+        }
+        const mimeType = contentType && !normalizedContentType.includes("json") ? contentType : "audio/mpeg";
+        return new Blob([responseBytes], { type: mimeType });
+    }
 
     const response = await fetch(config.endpoint, {
         method: "POST",
@@ -212,9 +314,21 @@ export async function requestOpenAICompatibleSpeechAudio(
     }
 
     const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
+    const normalizedContentType = contentType.toLowerCase();
+    if (normalizedContentType.includes("application/json")) {
         const details = await safeReadText(response);
         throw new Error(details || "Speech API returned JSON instead of audio.");
+    }
+    if (
+        normalizedContentType &&
+        !normalizedContentType.includes("audio/") &&
+        !normalizedContentType.includes("application/octet-stream")
+    ) {
+        const details = await safeReadText(response);
+        throw new Error(
+            details ||
+                `Speech API returned non-audio content type: ${contentType}. Check endpoint/model/token configuration.`
+        );
     }
 
     const bytes = await response.arrayBuffer();
@@ -222,6 +336,6 @@ export async function requestOpenAICompatibleSpeechAudio(
         throw new Error("Speech API returned empty audio.");
     }
 
-    const mimeType = contentType && !contentType.includes("json") ? contentType : "audio/mpeg";
+    const mimeType = contentType && !normalizedContentType.includes("json") ? contentType : "audio/mpeg";
     return new Blob([bytes], { type: mimeType });
 }

@@ -5,6 +5,17 @@ export default mergeConfig(
     electronViteConfig.renderer as UserConfig,
     defineConfig({
         test: {
+            include: ["frontend/**/tests/**/*.test.{ts,tsx,js,jsx}"],
+            exclude: [
+                "**/node_modules/**",
+                "**/dist/**",
+                "**/build/**",
+                "**/docs/**",
+                "**/third_party/**",
+                "**/.task/**",
+                "**/.tmp/**",
+                "**/make/**",
+            ],
             reporters: ["verbose", "junit"],
             outputFile: {
                 junit: "test-results.xml",

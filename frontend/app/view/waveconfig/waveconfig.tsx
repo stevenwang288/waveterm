@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Tooltip } from "@/app/element/tooltip";
-import { getApi } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { tryReinjectKey } from "@/app/store/keymodel";
 import { CodeEditor } from "@/app/view/codeeditor/codeeditor";
@@ -11,7 +10,7 @@ import { adaptFromReactOrNativeKeyEvent, checkKeyPressed, keydownWrapper } from 
 import { cn } from "@/util/util";
 import { useAtom, useAtomValue } from "jotai";
 import type * as MonacoTypes from "monaco-editor";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { debounce } from "throttle-debounce";
 import { useTranslation } from "react-i18next";
 
@@ -103,34 +102,6 @@ const WaveConfigView = memo(({ blockId, model }: ViewComponentProps<WaveConfigVi
     const editorContainerRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation();
 
-    const selectedFileFullPath = useMemo(() => {
-        if (!selectedFile?.path) {
-            return "";
-        }
-        return `${model.configDir}/${selectedFile.path}`;
-    }, [model.configDir, selectedFile?.path]);
-
-    const handleCopySelectedFilePath = useCallback(() => {
-        if (!selectedFileFullPath) {
-            return;
-        }
-        navigator.clipboard.writeText(selectedFileFullPath);
-    }, [selectedFileFullPath]);
-
-    const handleOpenConfigDir = useCallback(() => {
-        if (!model.configDir) {
-            return;
-        }
-        getApi().openNativePath(model.configDir);
-    }, [model.configDir]);
-
-    const handleOpenSelectedConfigFile = useCallback(() => {
-        if (!selectedFileFullPath) {
-            return;
-        }
-        getApi().openNativePath(selectedFileFullPath);
-    }, [selectedFileFullPath]);
-
     const handleContentChange = useCallback(
         (newContent: string) => {
             setFileContent(newContent);
@@ -215,32 +186,6 @@ const WaveConfigView = memo(({ blockId, model }: ViewComponentProps<WaveConfigVi
                                         </a>
                                     </Tooltip>
                                 )}
-                                <div className="flex items-baseline gap-1 min-w-0 ml-1 @max-w450:hidden">
-                                    <div
-                                        className="text-xs text-muted-foreground font-mono pb-0.5 truncate cursor-default"
-                                        style={{ direction: "rtl", textAlign: "left", unicodeBidi: "isolate" }}
-                                        title={selectedFileFullPath || selectedFile.path}
-                                        onDoubleClick={handleOpenSelectedConfigFile}
-                                    >
-                                        {selectedFileFullPath || selectedFile.path}
-                                    </div>
-                                    <Tooltip content={t("common.copy")}>
-                                        <button
-                                            onClick={handleCopySelectedFilePath}
-                                            className="hover:bg-secondary/50 rounded p-1 cursor-pointer transition-colors shrink-0"
-                                        >
-                                            <i className="fa fa-copy text-xs" />
-                                        </button>
-                                    </Tooltip>
-                                    <Tooltip content={t("common.open")}>
-                                        <button
-                                            onClick={handleOpenConfigDir}
-                                            className="hover:bg-secondary/50 rounded p-1 cursor-pointer transition-colors shrink-0"
-                                        >
-                                            <i className="fa fa-folder-open text-xs" />
-                                        </button>
-                                    </Tooltip>
-                                </div>
                             </div>
                             <div className="flex gap-2 items-baseline shrink-0">
                                 {selectedFile.hasJsonView && (

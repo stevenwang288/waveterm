@@ -418,9 +418,15 @@ const AIPanelComponentInner = memo(() => {
             return;
         }
         globalStore.set(model.lastAutoPlayedMessageId, latestAssistantMessage.id);
-        void speechRuntime.play(text, speechSettings, "assistant", (errorMessage) => {
-            model.setError(errorMessage);
-        });
+        void speechRuntime.play(
+            text,
+            speechSettings,
+            "assistant",
+            (errorMessage) => {
+                model.setError(errorMessage);
+            },
+            { ownerId: "aipanel" }
+        );
     }, [messages, model, speechSettings, status]);
 
     const handleKeyDown = (waveEvent: WaveKeyboardEvent): boolean => {

@@ -98,7 +98,7 @@ export const AIPanelHeader = memo(() => {
     const hasReadableText = !!latestAssistantText?.trim();
 
     useEffect(() => {
-        return speechRuntime.subscribe(setSpeechActive);
+        return speechRuntime.subscribe(setSpeechActive, "aipanel");
     }, []);
 
     const handleKebabClick = (e: React.MouseEvent) => {
@@ -111,7 +111,7 @@ export const AIPanelHeader = memo(() => {
 
     const handleSpeechClick = async () => {
         if (speechActive) {
-            speechRuntime.stop();
+            speechRuntime.stop("aipanel");
             return;
         }
         if (isAIStreaming) {
@@ -123,10 +123,16 @@ export const AIPanelHeader = memo(() => {
             reportSpeechError("还在生成回复，等它结束再点朗读。");
             return;
         }
-        await speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
-            model.setError(errorMessage);
-            reportSpeechError(errorMessage);
-        });
+        await speechRuntime.play(
+            latestAssistantText ?? "",
+            speechSettings,
+            "assistant",
+            (errorMessage) => {
+                model.setError(errorMessage);
+                reportSpeechError(errorMessage);
+            },
+            { ownerId: "aipanel" }
+        );
     };
 
     const speechEngineLabel =

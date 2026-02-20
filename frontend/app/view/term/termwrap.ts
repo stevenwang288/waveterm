@@ -44,6 +44,7 @@ const ReflowReloadMaxBytes = 5 * 1024 * 1024;
 const TerminalWriteBatchMaxBytes = 256 * 1024;
 const TerminalStateSaveMinQuietMs = 1500;
 const TerminalStateSaveMinIntervalMs = 30_000;
+const ReflowWriteDrainTimeoutMs = 800;
 const Osc52MaxDecodedSize = 75 * 1024; // max clipboard size for OSC 52 (matches common terminal implementations)
 const Osc52MaxRawLength = 128 * 1024; // includes selector + base64 + whitespace (rough check)
 export const SupportsImageInput = true;
@@ -510,21 +511,17 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
     }
 
     const cmd: Osc16162Command = { command: commandStr, data: parsedData } as Osc16162Command;
+    const prevShellState = globalStore.get(termWrap.shellIntegrationStatusAtom);
     const rtInfo: ObjRTInfo = {};
     switch (cmd.command) {
         case "A":
             rtInfo["shell:state"] = "ready";
             globalStore.set(termWrap.shellIntegrationStatusAtom, "ready");
-            const marker = terminal.registerMarker(0);
-            if (marker) {
-                termWrap.promptMarkers.push(marker);
-                // addTestMarkerDecoration(terminal, marker, termWrap);
-                marker.onDispose(() => {
-                    const idx = termWrap.promptMarkers.indexOf(marker);
-                    if (idx !== -1) {
-                        termWrap.promptMarkers.splice(idx, 1);
-                    }
-                });
+            termWrap.registerPromptMarker();
+            if (prevShellState === "running-command") {
+                const completedTs = Date.now();
+                globalStore.set(termWrap.lastCommandDoneTsAtom, completedTs);
+                globalStore.set(termWrap.lastOutputTsAtom, completedTs);
             }
             break;
         case "C":
@@ -667,6 +664,7 @@ export class TermWrap {
     nodeModel: BlockNodeModel; // this can be null
     unreadAtom: jotai.PrimitiveAtom<boolean>;
     lastOutputTsAtom: jotai.PrimitiveAtom<number>;
+    lastCommandDoneTsAtom: jotai.PrimitiveAtom<number>;
     altBufAtom: jotai.PrimitiveAtom<boolean>;
     private isReflowReloading: boolean = false;
     private lastReflowReloadTermSize: TermSize | null = null;
@@ -679,7 +677,6 @@ export class TermWrap {
     private writeSequence: number = 0;
     private lastAltBufAtomUpdateTs: number = 0;
     private lastTerminalStateSaveTs: number = 0;
-
     // IME composition state tracking
     // Prevents duplicate input when switching input methods during composition (e.g., using Capslock)
     // xterm.js sends data during compositionupdate AND after compositionend, causing duplicates
@@ -710,6 +707,9 @@ export class TermWrap {
             return jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
         }) as jotai.PrimitiveAtom<boolean>;
         this.lastOutputTsAtom = useBlockAtom(this.blockId, "term:lastoutputts", () => {
+            return jotai.atom(0) as jotai.PrimitiveAtom<number>;
+        }) as jotai.PrimitiveAtom<number>;
+        this.lastCommandDoneTsAtom = useBlockAtom(this.blockId, "term:lastcommanddonets", () => {
             return jotai.atom(0) as jotai.PrimitiveAtom<number>;
         }) as jotai.PrimitiveAtom<number>;
         this.altBufAtom = useBlockAtom(this.blockId, "term:altbuf", () => {
@@ -817,40 +817,6 @@ export class TermWrap {
         this.handleResize();
         this.updateAltBufState();
 
-        const wheelLineScrollAtom = getOverrideConfigAtom(this.blockId, "term:wheellinescroll");
-        const wheelLineScrollEnabled = globalStore.get(wheelLineScrollAtom) ?? true;
-        if (wheelLineScrollEnabled) {
-            const wheelHandler = (e: WheelEvent) => {
-                const buffer = this.terminal?.buffer?.active;
-                if (!buffer || buffer.type === "alternate") {
-                    return;
-                }
-
-                // Avoid interfering with browser-style zoom or alternate scroll behaviors.
-                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
-                    return;
-                }
-
-                // Preserve smooth touchpad scrolling by only overriding "notch-like" wheel deltas.
-                const absDeltaY = Math.abs(e.deltaY);
-                const isPixelMode = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
-                const isLikelyTouchpad = isPixelMode && absDeltaY > 0 && absDeltaY < 50;
-                if (isLikelyTouchpad) {
-                    return;
-                }
-
-                this.terminal.scrollLines(e.deltaY > 0 ? 1 : -1);
-                e.preventDefault();
-                e.stopPropagation();
-            };
-
-            this.connectElem.addEventListener("wheel", wheelHandler, { passive: false, capture: true });
-            this.toDispose.push({
-                dispose: () => {
-                    this.connectElem.removeEventListener("wheel", wheelHandler, { capture: true });
-                },
-            });
-        }
         if (this.nodeModel) {
             const unsubFn = globalStore.sub(this.nodeModel.isFocused, () => {
                 const isFocused = globalStore.get(this.nodeModel.isFocused);
@@ -866,6 +832,20 @@ export class TermWrap {
             dispose: () => {
                 this.connectElem.removeEventListener("paste", pasteHandler, true);
             },
+        });
+    }
+
+    registerPromptMarker() {
+        const marker = this.terminal?.registerMarker(0);
+        if (!marker) {
+            return;
+        }
+        this.promptMarkers.push(marker);
+        marker.onDispose(() => {
+            const idx = this.promptMarkers.indexOf(marker);
+            if (idx !== -1) {
+                this.promptMarkers.splice(idx, 1);
+            }
         });
     }
 
@@ -1177,6 +1157,13 @@ export class TermWrap {
 
     handleNewFileSubjectData(msg: WSFileEventData) {
         if (this.isReflowReloading && msg.fileop === "append") {
+            if (this.loaded) {
+                const isBlockFocused = this.nodeModel ? globalStore.get(this.nodeModel.isFocused) : false;
+                if (!document.hasFocus() || !isBlockFocused) {
+                    globalStore.set(this.unreadAtom, true);
+                }
+                globalStore.set(this.lastOutputTsAtom, Date.now());
+            }
             return;
         }
         if (msg.fileop == "truncate") {
@@ -1306,6 +1293,16 @@ export class TermWrap {
         }
     }
 
+    private async waitForWriteLoopIdle(maxWaitMs: number) {
+        const startTs = Date.now();
+        while (this.writeLoopRunning) {
+            if (Date.now() - startTs >= maxWaitMs) {
+                break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 12));
+        }
+    }
+
     // Preserve the current scroll position so we can restore it after a reflow reload.
     saveScrollPosition(): void {
         if (!this.terminal) {
@@ -1377,6 +1374,13 @@ export class TermWrap {
 
         this.isReflowReloading = true;
         try {
+            // Cancel pending append queue writes; we'll restore from authoritative file content.
+            this.writeSequence++;
+            this.pendingWriteChunks = [];
+            this.pendingWriteHead = 0;
+            this.pendingWriteBytes = 0;
+            await this.waitForWriteLoopIdle(ReflowWriteDrainTimeoutMs);
+
             // Ensure we have the final fitted size before replaying.
             this.handleResize();
 
@@ -1408,6 +1412,11 @@ export class TermWrap {
             const { data: deltaData, fileInfo: deltaFileInfo } = await fetchWaveFile(zoneId, TermFileName, fileInfo.size);
             if (deltaFileInfo != null && deltaData != null && deltaData.byteLength > 0) {
                 await this.doTerminalWrite(deltaData, null);
+            }
+            // We intentionally skip append events during reflow. Pull a final tail to avoid output loss.
+            const { data: tailData, fileInfo: tailFileInfo } = await fetchWaveFile(zoneId, TermFileName, this.ptyOffset);
+            if (tailFileInfo != null && tailData != null && tailData.byteLength > 0) {
+                await this.doTerminalWrite(tailData, null);
             }
             this.lastReflowReloadTermSize = { rows: this.terminal.rows, cols: this.terminal.cols };
             // Restore scroll position after reflow reload.

@@ -1281,6 +1281,7 @@ declare global {
         "speech:filtercode"?: boolean;
         "speech:autoplay"?: boolean;
         "speech:manualbutton"?: boolean;
+        "speech:rate"?: number;
         "speech:localengine"?: string;
         "speech:localmodel"?: string;
         "speech:localmodelpath"?: string;
