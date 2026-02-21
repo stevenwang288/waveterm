@@ -89,6 +89,9 @@ func DetectLocalShellPath() string {
 		if pwshPath, lpErr := exec.LookPath("pwsh"); lpErr == nil {
 			return pwshPath
 		}
+		if pwshPath := findInstalledPwshWindows(); pwshPath != "" {
+			return pwshPath
+		}
 		if powershellPath, lpErr := exec.LookPath("powershell"); lpErr == nil {
 			return powershellPath
 		}
@@ -102,6 +105,52 @@ func DetectLocalShellPath() string {
 		return DefaultShellPath
 	}
 	return shellPath
+}
+
+func findInstalledPwshWindows() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+
+	programDirs := []string{}
+	if v := os.Getenv("ProgramW6432"); v != "" {
+		programDirs = append(programDirs, v)
+	}
+	if v := os.Getenv("ProgramFiles"); v != "" {
+		already := false
+		for _, dir := range programDirs {
+			if dir == v {
+				already = true
+				break
+			}
+		}
+		if !already {
+			programDirs = append(programDirs, v)
+		}
+	}
+	if v := os.Getenv("ProgramFiles(x86)"); v != "" {
+		programDirs = append(programDirs, v)
+	}
+
+	candidates := []string{}
+	// Common install locations for PowerShell 7+.
+	for _, dir := range programDirs {
+		for _, verDir := range []string{"7", "7-preview", "6"} {
+			candidates = append(candidates, filepath.Join(dir, "PowerShell", verDir, "pwsh.exe"))
+		}
+	}
+
+	// App Execution Alias (may exist even when PATH is stale in GUI-launched processes).
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		candidates = append(candidates, filepath.Join(localAppData, "Microsoft", "WindowsApps", "pwsh.exe"))
+	}
+
+	for _, candidate := range candidates {
+		if fi, err := os.Stat(candidate); err == nil && !fi.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func GetMacUserShell() string {

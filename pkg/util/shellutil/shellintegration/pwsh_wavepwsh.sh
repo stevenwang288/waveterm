@@ -12,11 +12,10 @@ Remove-Item Env:WAVETERM_SWAPTOKEN
 # Load Wave completions
 wsh completion powershell | Out-String | Invoke-Expression
 
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    return  # skip OSC setup entirely
-}
-
 $Global:_WAVETERM_SI_FIRSTPROMPT = $true
+# Windows PowerShell 5.1 can still emit OSC sequences inside Wave's terminal.
+# Keep cwd tracking enabled even on legacy versions.
+$Global:_WAVETERM_SI_SHELL = if ($PSVersionTable.PSVersion.Major -lt 7) { "powershell" } else { "pwsh" }
 
 # shell integration
 function Global:_waveterm_si_blocked {
@@ -38,9 +37,10 @@ function Global:_waveterm_si_prompt {
     if (_waveterm_si_blocked) { return }
     
     if ($Global:_WAVETERM_SI_FIRSTPROMPT) {
-		# not sending uname
-		       $shellversion = $PSVersionTable.PSVersion.ToString()
-		       Write-Host -NoNewline "`e]16162;M;{`"shell`":`"pwsh`",`"shellversion`":`"$shellversion`",`"integration`":false}`a"
+        # not sending uname
+        $shell = $Global:_WAVETERM_SI_SHELL
+        $shellversion = $PSVersionTable.PSVersion.ToString()
+        Write-Host -NoNewline "`e]16162;M;{`"shell`":`"$shell`",`"shellversion`":`"$shellversion`",`"integration`":false}`a"
         $Global:_WAVETERM_SI_FIRSTPROMPT = $false
     }
     
