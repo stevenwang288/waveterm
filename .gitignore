@@ -41,3 +41,9 @@ docsite/
 .tmp-fork-audit/
 .tmp/
 .kilo-format-temp-*
+
+# Local agent artifacts
+.code/
+docs/codex-*
+docs/terminal-speech-requirements.md
+test-results/
