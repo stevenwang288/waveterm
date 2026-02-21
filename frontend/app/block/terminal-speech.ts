@@ -19,6 +19,10 @@ const TerminalSeparatorPattern = /^\s*[─━]{10,}\s*$/;
 const CodexBrandLinePattern = /^\s*>_\s*OpenAI\s+Codex\b/i;
 const CodexModelLinePattern = /^\s*(?:模型|model)\s*[:：]\s*.+$/i;
 const CodexDirectoryLinePattern = /^\s*(?:目录|directory|cwd)\s*[:：]\s*.+$/i;
+const CtrlCKeywordPattern = /\bctrl\s*\+\s*c\b/i;
+const CtrlCCountOrOrdinalPattern =
+    /(第一次|第二次|第三次|第四次|第[一二三四五六七八九十0-9]+次|\b(first|second|third|fourth|fifth)\b|\b\d+\s*(?:\/|of)\s*\d+\b)/i;
+const CtrlCRepeatHintPattern = /\bagain\b|再次|再按|再按一次|再按下/i;
 
 function isCodexUserPromptLine(line: string): boolean {
     return /^\s*[›❯](?:\s+.*)?$/.test(line) || /^\s*>\s+.+$/.test(line);
@@ -47,6 +51,7 @@ function isLikelyShellPromptLine(line: string): boolean {
 
 function isTerminalStatusNoiseLine(line: string): boolean {
     const lowered = line.toLowerCase();
+    const stripped = line.replace(/^\s*[•●]\s+/, "").trim();
     if (TerminalBoxLinePattern.test(line) || TerminalSeparatorPattern.test(line)) {
         return true;
     }
@@ -58,6 +63,10 @@ function isTerminalStatusNoiseLine(line: string): boolean {
         return true;
     }
     if (CodexBrandLinePattern.test(line) || CodexModelLinePattern.test(line) || CodexDirectoryLinePattern.test(line)) {
+        return true;
+    }
+    // Ctrl+C repeat / multi-press status lines should never be spoken (they are not assistant replies).
+    if (CtrlCKeywordPattern.test(stripped) && (CtrlCRepeatHintPattern.test(stripped) || CtrlCCountOrOrdinalPattern.test(stripped))) {
         return true;
     }
     if (lowered.includes("for shortcuts") || lowered.includes("context left")) {

@@ -150,4 +150,16 @@ describe("extractLatestTerminalFormalReply", () => {
         const lines = ["› 你好", "• Working (0s • esc to interrupt)", "› "];
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
     });
+
+    it("ignores ctrl+c multi-press status lines", () => {
+        const lines = ["› 你好", "• Ctrl+C 第一次（1/4）：再按一次退出", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
+    });
+
+    it("does not treat a normal assistant mention of Ctrl+C as noise", () => {
+        const lines = ["› 怎么停掉服务？", "• 你可以按 Ctrl+C 停止服务。", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe(
+            "你可以按 Ctrl+C 停止服务。"
+        );
+    });
 });
