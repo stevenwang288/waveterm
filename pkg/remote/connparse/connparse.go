@@ -95,7 +95,9 @@ func ParseURI(uri string) (*Connection, error) {
 	split := strings.SplitN(uri, "://", 2)
 	var scheme string
 	var rest string
-	if len(split) > 1 {
+	if strings.HasPrefix(uri, "//") {
+		rest = strings.TrimPrefix(uri, "//")
+	} else if len(split) > 1 {
 		scheme = split[0]
 		rest = strings.TrimPrefix(split[1], "//")
 	} else {
