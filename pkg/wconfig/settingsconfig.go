@@ -63,6 +63,7 @@ type SettingsType struct {
 	AppHideAiButton               bool   `json:"app:hideaibutton,omitempty"`
 	AppDisableCtrlShiftArrows     bool   `json:"app:disablectrlshiftarrows,omitempty"`
 	AppDisableCtrlShiftDisplay    bool   `json:"app:disablectrlshiftdisplay,omitempty"`
+	AppFocusFollowsCursor         string `json:"app:focusfollowscursor,omitempty" jsonschema:"enum=off,enum=on,enum=term"`
 
 	FeatureWaveAppBuilder bool `json:"feature:waveappbuilder,omitempty"`
 
@@ -124,7 +125,8 @@ type SettingsType struct {
 
 	PreviewShowHiddenFiles *bool `json:"preview:showhiddenfiles,omitempty"`
 
-	TabPreset string `json:"tab:preset,omitempty"`
+	TabPreset       string `json:"tab:preset,omitempty"`
+	TabConfirmClose bool   `json:"tab:confirmclose,omitempty"`
 
 	WidgetClear    bool  `json:"widget:*,omitempty"`
 	WidgetShowHelp *bool `json:"widget:showhelp,omitempty"`
@@ -274,7 +276,7 @@ type AIModeConfigType struct {
 	DisplayOrder       float64  `json:"display:order,omitempty"`
 	DisplayIcon        string   `json:"display:icon,omitempty"`
 	DisplayDescription string   `json:"display:description,omitempty"`
-	Provider           string   `json:"ai:provider,omitempty" jsonschema:"enum=wave,enum=google,enum=openrouter,enum=openai,enum=azure,enum=azure-legacy,enum=custom"`
+	Provider           string   `json:"ai:provider,omitempty" jsonschema:"enum=wave,enum=google,enum=openrouter,enum=nanogpt,enum=openai,enum=azure,enum=azure-legacy,enum=custom"`
 	APIType            string   `json:"ai:apitype,omitempty" jsonschema:"enum=google-gemini,enum=openai-responses,enum=openai-chat"`
 	Model              string   `json:"ai:model,omitempty"`
 	ThinkingLevel      string   `json:"ai:thinkinglevel,omitempty" jsonschema:"enum=low,enum=medium,enum=high"`
@@ -828,6 +830,7 @@ type WidgetConfigType struct {
 	Color         string           `json:"color,omitempty"`
 	Label         string           `json:"label,omitempty"`
 	Description   string           `json:"description,omitempty"`
+	Workspaces    []string         `json:"workspaces,omitempty"`
 	Magnified     bool             `json:"magnified,omitempty"`
 	BlockDef      waveobj.BlockDef `json:"blockdef"`
 }

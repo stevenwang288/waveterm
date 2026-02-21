@@ -130,8 +130,17 @@ function getStaticTabBlockCount(): number {
 function simpleCloseStaticTab() {
     const ws = globalStore.get(atoms.workspace);
     const tabId = globalStore.get(atoms.staticTabId);
-    getApi().closeTab(ws.oid, tabId);
-    deleteLayoutModelForTab(tabId);
+    const confirmClose = globalStore.get(getSettingsKeyAtom("tab:confirmclose")) ?? false;
+    getApi()
+        .closeTab(ws.oid, tabId, confirmClose)
+        .then((didClose) => {
+            if (didClose) {
+                deleteLayoutModelForTab(tabId);
+            }
+        })
+        .catch((e) => {
+            console.log("error closing tab", e);
+        });
 }
 
 function uxCloseBlock(blockId: string) {
@@ -150,6 +159,13 @@ function uxCloseBlock(blockId: string) {
     const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
     const blockData = globalStore.get(blockAtom);
     const isAIFileDiff = blockData?.meta?.view === "aifilediff";
+
+    // If this is the last block, closing it will close the tab — route through simpleCloseStaticTab
+    // so the tab:confirmclose setting is respected.
+    if (getStaticTabBlockCount() === 1) {
+        simpleCloseStaticTab();
+        return;
+    }
 
     const layoutModel = getLayoutModelForStaticTab();
     const node = layoutModel.getNodeByBlockId(blockId);
@@ -186,6 +202,13 @@ function genericClose() {
     }
     const blockCount = getStaticTabBlockCount();
     if (blockCount === 0) {
+        simpleCloseStaticTab();
+        return;
+    }
+
+    // If this is the last block, closing it will close the tab — route through simpleCloseStaticTab
+    // so the tab:confirmclose setting is respected.
+    if (blockCount === 1) {
         simpleCloseStaticTab();
         return;
     }
@@ -562,7 +585,40 @@ function registerGlobalKeys() {
         switchBlockInDirection(NavigateDirection.Right);
         return true;
     });
+    // Vim-style aliases for block focus navigation.
+    globalKeyMap.set("Ctrl:Shift:h", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
+        switchBlockInDirection(NavigateDirection.Left);
+        return true;
+    });
+    globalKeyMap.set("Ctrl:Shift:j", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
+        switchBlockInDirection(NavigateDirection.Down);
+        return true;
+    });
     globalKeyMap.set("Ctrl:Shift:k", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
+        switchBlockInDirection(NavigateDirection.Up);
+        return true;
+    });
+    globalKeyMap.set("Ctrl:Shift:l", () => {
+        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
+        if (disableCtrlShiftArrows) {
+            return false;
+        }
+        switchBlockInDirection(NavigateDirection.Right);
+        return true;
+    });
+    globalKeyMap.set("Ctrl:Shift:x", () => {
         const blockId = getFocusedBlockId();
         if (blockId == null) {
             return true;

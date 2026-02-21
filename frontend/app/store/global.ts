@@ -31,13 +31,12 @@ import { globalStore } from "./jotaiStore";
 import { modalsModel } from "./modalmodel";
 import { ClientService, ObjectService } from "./services";
 import * as WOS from "./wos";
-import { getFileSubject, waveEventSubscribe } from "./wps";
+import { getFileSubject, waveEventSubscribeSingle } from "./wps";
 
 let atoms: GlobalAtomsType;
 let globalEnvironment: "electron" | "renderer";
 let globalPrimaryTabStartup: boolean = false;
 const blockComponentModelMap = new Map<string, BlockComponentModel>();
-const Counters = new Map<string, number>();
 const ConnStatusMapAtom = atom(new Map<string, PrimitiveAtom<ConnStatus>>());
 const TabIndicatorMap = new Map<string, PrimitiveAtom<TabIndicator>>();
 const orefAtomCache = new Map<string, Map<string, Atom<any>>>();
@@ -199,65 +198,56 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
 }
 
 function initGlobalWaveEventSubs(initOpts: WaveInitOpts) {
-    waveEventSubscribe(
-        {
-            eventType: "waveobj:update",
-            handler: (event) => {
-                // console.log("waveobj:update wave event handler", event);
-                const update: WaveObjUpdate = event.data;
-                WOS.updateWaveObject(update);
-            },
+    waveEventSubscribeSingle({
+        eventType: "waveobj:update",
+        handler: (event) => {
+            // console.log("waveobj:update wave event handler", event);
+            WOS.updateWaveObject(event.data);
         },
-        {
-            eventType: "config",
-            handler: (event) => {
-                // console.log("config wave event handler", event);
-                const fullConfig = (event.data as WatcherUpdate).fullconfig;
-                globalStore.set(atoms.fullConfigAtom, fullConfig);
-            },
+    });
+    waveEventSubscribeSingle({
+        eventType: "config",
+        handler: (event) => {
+            // console.log("config wave event handler", event);
+            globalStore.set(atoms.fullConfigAtom, event.data.fullconfig);
         },
-        {
-            eventType: "waveai:modeconfig",
-            handler: (event) => {
-                const modeConfigs = (event.data as AIModeConfigUpdate).configs;
-                globalStore.set(atoms.waveaiModeConfigAtom, modeConfigs);
-            },
+    });
+    waveEventSubscribeSingle({
+        eventType: "waveai:modeconfig",
+        handler: (event) => {
+            globalStore.set(atoms.waveaiModeConfigAtom, event.data.configs);
         },
-        {
-            eventType: "userinput",
-            handler: (event) => {
-                // console.log("userinput event handler", event);
-                const data: UserInputRequest = event.data;
-                modalsModel.pushModal("UserInputModal", { ...data });
-            },
-            scope: initOpts.windowId,
+    });
+    waveEventSubscribeSingle({
+        eventType: "userinput",
+        handler: (event) => {
+            // console.log("userinput event handler", event);
+            modalsModel.pushModal("UserInputModal", { ...event.data });
         },
-        {
-            eventType: "blockfile",
-            handler: (event) => {
-                // console.log("blockfile event update", event);
-                const fileData: WSFileEventData = event.data;
-                const fileSubject = getFileSubject(fileData.zoneid, fileData.filename);
-                if (fileSubject != null) {
-                    fileSubject.next(fileData);
-                }
-            },
+        scope: initOpts.windowId,
+    });
+    waveEventSubscribeSingle({
+        eventType: "blockfile",
+        handler: (event) => {
+            // console.log("blockfile event update", event);
+            const fileSubject = getFileSubject(event.data.zoneid, event.data.filename);
+            if (fileSubject != null) {
+                fileSubject.next(event.data);
+            }
         },
-        {
-            eventType: "waveai:ratelimit",
-            handler: (event) => {
-                const rateLimitInfo: RateLimitInfo = event.data;
-                globalStore.set(atoms.waveAIRateLimitInfoAtom, rateLimitInfo);
-            },
+    });
+    waveEventSubscribeSingle({
+        eventType: "waveai:ratelimit",
+        handler: (event) => {
+            globalStore.set(atoms.waveAIRateLimitInfoAtom, event.data);
         },
-        {
-            eventType: "tab:indicator",
-            handler: (event) => {
-                const data: TabIndicatorEventData = event.data;
-                setTabIndicatorInternal(data.tabid, data.indicator);
-            },
-        }
-    );
+    });
+    waveEventSubscribeSingle({
+        eventType: "tab:indicator",
+        handler: (event) => {
+            setTabIndicatorInternal(event.data.tabid, event.data.indicator);
+        },
+    });
 }
 
 const blockCache = new Map<string, Map<string, any>>();
@@ -740,24 +730,6 @@ function refocusNode(blockId: string) {
     }
 }
 
-function countersClear() {
-    Counters.clear();
-}
-
-function counterInc(name: string, incAmt: number = 1) {
-    let count = Counters.get(name) ?? 0;
-    count += incAmt;
-    Counters.set(name, count);
-}
-
-function countersPrint() {
-    let outStr = "";
-    for (const [name, count] of Counters.entries()) {
-        outStr += `${name}: ${count}\n`;
-    }
-    console.log(outStr);
-}
-
 async function loadConnStatus() {
     const connStatusArr = await ClientService.GetAllConnStatus();
     if (connStatusArr == null) {
@@ -781,11 +753,11 @@ async function loadTabIndicators() {
 }
 
 function subscribeToConnEvents() {
-    waveEventSubscribe({
+    waveEventSubscribeSingle({
         eventType: "connchange",
-        handler: (event: WaveEvent) => {
+        handler: (event) => {
             try {
-                const connStatus = event.data as ConnStatus;
+                const connStatus = event.data;
                 if (connStatus == null || isBlank(connStatus.connection)) {
                     return;
                 }
@@ -871,7 +843,7 @@ function setTabIndicator(tabId: string, indicator: TabIndicator) {
         data: {
             tabid: tabId,
             indicator: indicator,
-        } as TabIndicatorEventData,
+        },
     };
     fireAndForget(() => RpcApi.EventPublishCommand(TabRpcClient, eventData));
 }
@@ -967,9 +939,6 @@ export {
     atoms,
     clearAllTabIndicators,
     clearTabIndicatorFromFocus,
-    counterInc,
-    countersClear,
-    countersPrint,
     createBlock,
     createBlockSplitHorizontally,
     createBlockSplitVertically,

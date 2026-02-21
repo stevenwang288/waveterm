@@ -1,4 +1,4 @@
-// Copyright 2025, Command Line Inc.
+// Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Generated Code. DO NOT EDIT.
@@ -16,6 +16,7 @@ const (
 	ConfigKey_AppHideAiButton                = "app:hideaibutton"
 	ConfigKey_AppDisableCtrlShiftArrows      = "app:disablectrlshiftarrows"
 	ConfigKey_AppDisableCtrlShiftDisplay     = "app:disablectrlshiftdisplay"
+	ConfigKey_AppFocusFollowsCursor          = "app:focusfollowscursor"
 
 	ConfigKey_FeatureWaveAppBuilder          = "feature:waveappbuilder"
 
@@ -78,6 +79,7 @@ const (
 	ConfigKey_PreviewShowHiddenFiles         = "preview:showhiddenfiles"
 
 	ConfigKey_TabPreset                      = "tab:preset"
+	ConfigKey_TabConfirmClose                = "tab:confirmclose"
 
 	ConfigKey_WidgetClear                    = "widget:*"
 	ConfigKey_WidgetShowHelp                 = "widget:showhelp"

@@ -75,17 +75,6 @@ The full API is defined in custom.d.ts as type ElectronApi.
 - **TypeScript Types**: TypeScript types are automatically generated from Go types. After modifying Go types in `pkg/wshrpc/wshrpctypes.go`, run `task generate` to update the TypeScript type definitions in `frontend/types/gotypes.d.ts`.
 - **Manual Edits**: Do not manually edit generated files like `frontend/types/gotypes.d.ts` or `frontend/app/store/wshclientapi.ts`. Instead, modify the source Go types and run `task generate`.
 
-### Development Documentation
-
-The `/aiprompts` directory contains comprehensive guides for common development tasks:
-
-- **config-system.md** - Complete guide for adding new configuration settings, including the hierarchical config system with global, connection, and block-level overrides
-- **contextmenu.md** - Instructions for adding context menu items and actions
-- **getsetconfigvar.md** - Reference for reading and writing configuration values programmatically
-- **view-prompt.md** - Architecture guide for implementing new view models and components
-
-These files provide step-by-step instructions, code examples, and best practices for extending Wave Terminal's functionality.
-
 ### Frontend Architecture
 
 - The application uses Jotai for state management.
@@ -103,7 +92,7 @@ These files provide step-by-step instructions, code examples, and best practices
 - **Match response length to question complexity** - For simple, direct questions in Ask mode (especially those that can be answered in 1-2 sentences), provide equally brief answers. Save detailed explanations for complex topics or when explicitly requested.
 - **CRITICAL** - useAtomValue and useAtom are React HOOKS. They cannot be used inline in JSX code, they must appear at the top of a component in the hooks area of the react code.
 - for simple functions, we prefer `if (!cond) { return }; functionality;` pattern overn `if (cond) { functionality }` because it produces less indentation and is easier to follow.
-- It is now 2026, so if you write new files use 2026 for the copyright year
+- It is now 2026, so if you write new files, or update files use 2026 for the copyright year
 
 ### Strict Comment Rules
 
