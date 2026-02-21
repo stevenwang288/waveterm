@@ -545,7 +545,7 @@ const ChatWindow = memo(
                     if (prevMessagesLenRef.current !== messagesLen || !isUserScrolling.current) {
                         viewport.scrollTo({
                             behavior: "auto",
-                            top: chatWindowRef.current?.scrollHeight || 0,
+                            top: viewport.scrollHeight,
                         });
                     }
 
@@ -564,7 +564,8 @@ const ChatWindow = memo(
         const determineUnsetScroll = useCallback(
             debounce(300, () => {
                 const { viewport } = osRef.current.osInstance().elements();
-                if (viewport.scrollTop > chatWindowRef.current?.clientHeight - viewport.clientHeight - 100) {
+                const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+                if (distanceFromBottom <= 300) {
                     isUserScrolling.current = false;
                 }
             }),
@@ -601,7 +602,7 @@ const ChatWindow = memo(
             viewport.removeAttribute("tabindex");
             viewport.scrollTo({
                 behavior: "auto",
-                top: chatWindowRef.current?.scrollHeight || 0,
+                top: viewport.scrollHeight,
             });
         };
 
