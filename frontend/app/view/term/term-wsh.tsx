@@ -149,23 +149,22 @@ export class TermWshClient extends WshClient {
                     const endMarker = termWrap.promptMarkers[markerIdx + 1];
                     const endMarkerLine = endMarker?.line;
                     if (typeof endMarkerLine === "number" && Number.isFinite(endMarkerLine)) {
-                        endBufferIndex = Math.max(startBufferIndex, Math.min(totalLines, Math.floor(endMarkerLine)));
+                        endBufferIndex = Math.max(
+                            startBufferIndex,
+                            Math.min(totalLines, Math.floor(endMarkerLine) + 1)
+                        );
                     }
                 }
             }
 
             const lines = bufferLinesToText(buffer, startBufferIndex, endBufferIndex);
 
-            // Convert buffer indices to "from bottom" line numbers.
-            // "from bottom" 0 = most recent line; higher numbers = older lines.
-            // The buffer range [startBufferIndex, endBufferIndex) maps to
-            // "from bottom" range [totalLines - endBufferIndex, totalLines - startBufferIndex).
-            // The first returned line is at "from bottom" position: totalLines - endBufferIndex.
             let returnLines = lines;
-            let returnStartLine = totalLines - endBufferIndex;
+            let returnStartLine = startBufferIndex;
             if (lines.length > 1000) {
-                returnLines = lines.slice(lines.length - 1000);
-                returnStartLine = (totalLines - endBufferIndex) + (lines.length - 1000);
+                const trimmedCount = lines.length - 1000;
+                returnLines = lines.slice(trimmedCount);
+                returnStartLine = startBufferIndex + trimmedCount;
             }
 
             return {
