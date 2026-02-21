@@ -21,7 +21,7 @@ import { IconButton } from "../element/iconbutton";
 import { atoms, getApi } from "../store/global";
 import { WorkspaceService } from "../store/services";
 import { getObjectValue, makeORef } from "../store/wos";
-import { waveEventSubscribe } from "../store/wps";
+import { waveEventSubscribeSingle } from "../store/wps";
 import { WorkspaceEditor } from "./workspaceeditor";
 import "./workspaceswitcher.scss";
 import { useTranslation } from "react-i18next";
@@ -61,7 +61,7 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
 
     useEffect(
         () =>
-            waveEventSubscribe({
+            waveEventSubscribeSingle({
                 eventType: "workspace:update",
                 handler: () => fireAndForget(updateWorkspaceList),
             }),
