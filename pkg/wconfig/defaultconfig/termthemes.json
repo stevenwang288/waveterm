@@ -174,5 +174,31 @@
         "foreground": "#e0def4",
         "background": "#191724",
         "cursor": "#524f67"
+    },
+    "wt-ubuntu": {
+        "display:name": "Ubuntu",
+        "display:order": 8,
+        "black": "#171421",
+        "red": "#C21A23",
+        "green": "#26A269",
+        "yellow": "#A2734C",
+        "blue": "#0037DA",
+        "magenta": "#881798",
+        "cyan": "#3A96DD",
+        "white": "#CCCCCC",
+        "brightBlack": "#767676",
+        "brightRed": "#C01C28",
+        "brightGreen": "#26A269",
+        "brightYellow": "#A2734C",
+        "brightBlue": "#08458F",
+        "brightMagenta": "#A347BA",
+        "brightCyan": "#2C9FB3",
+        "brightWhite": "#F2F2F2",
+        "gray": "#767676",
+        "cmdtext": "#FFFFFF",
+        "foreground": "#FFFFFF",
+        "selectionBackground": "#FFFFFF",
+        "background": "#300A24",
+        "cursor": "#FFFFFF"
     }
 }
