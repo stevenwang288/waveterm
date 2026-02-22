@@ -161,6 +161,25 @@ describe("extractLatestTerminalFormalReply", () => {
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
     });
 
+    it("ignores codex inference/streams footer telemetry lines", () => {
+        const lines = [
+            "› 你好",
+            "• 这是最终正式回复",
+            "─ Inference: 1 call (4.5s) • Streams: 191 events (8.2s) ─",
+            "› ",
+        ];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe(
+            "这是最终正式回复"
+        );
+    });
+
+    it("ignores codex bottom status row lines", () => {
+        const lines = ["› 你好", "• 这是最终正式回复", "gpt-5.2 high • 95% left • ~", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe(
+            "这是最终正式回复"
+        );
+    });
+
     it("ignores ctrl+c multi-press status lines", () => {
         const lines = ["› 你好", "• Ctrl+C 第一次（1/4）：再按一次退出", "› "];
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");

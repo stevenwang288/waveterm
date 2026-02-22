@@ -11,6 +11,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import type { TermViewModel } from "@/app/view/term/term-model";
 import { atoms, getOverrideConfigAtom, getSettingsPrefixAtom, globalStore, WOS } from "@/store/global";
+import { PLATFORM, PlatformWindows } from "@/util/platformutil";
 import { fireAndForget, useAtomValueSafe } from "@/util/util";
 import { computeBgStyleFromMeta } from "@/util/waveutil";
 import { ISearchOptions } from "@xterm/addon-search";
@@ -277,6 +278,9 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         const termAllowBPM = globalStore.get(model.termBPMAtom) ?? true;
         const termMacOptionIsMeta = globalStore.get(termMacOptionIsMetaAtom) ?? false;
         const wasFocused = model.termRef.current != null && globalStore.get(model.nodeModel.isFocused);
+        const disableWebGlSetting = termSettings?.["term:disablewebgl"];
+        const useWebGl =
+            disableWebGlSetting === false || (disableWebGlSetting == null && PLATFORM !== PlatformWindows);
         const termWrap = new TermWrap(
             tabModel.tabId,
             blockId,
@@ -297,7 +301,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
              },
             {
                 keydownHandler: model.handleTerminalKeydown.bind(model),
-                useWebGl: !termSettings?.["term:disablewebgl"],
+                useWebGl,
                 sendDataHandler: model.sendDataToController.bind(model),
                 nodeModel: model.nodeModel,
             }

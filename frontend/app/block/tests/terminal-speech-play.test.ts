@@ -204,6 +204,59 @@ describe("speakLatestTerminalFormalReply", () => {
         );
     });
 
+    it("does not include codex inference/streams footer telemetry in spoken text", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: [
+                "› q1",
+                "• 这是最终正式回复",
+                "─ Inference: 1 call (4.5s) • Streams: 191 events (8.2s) ─",
+                "› ",
+            ],
+            lastupdated: 212,
+        } as CommandTermGetScrollbackLinesRtnData);
+        speechPlay.mockResolvedValueOnce(true);
+
+        const settings = makeSettings();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-inference-footer",
+            speechSettings: settings,
+        });
+
+        expect(ok).toBe(true);
+        expect(speechPlay).toHaveBeenCalledTimes(1);
+        expect(speechPlay).toHaveBeenCalledWith(
+            "这是最终正式回复",
+            settings,
+            "assistant",
+            expect.any(Function),
+            expect.objectContaining({ ownerId: undefined })
+        );
+    });
+
+    it("does not include codex bottom status row in spoken text", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["› q1", "• 这是最终正式回复", "gpt-5.2 high • 95% left • ~", "› "],
+            lastupdated: 213,
+        } as CommandTermGetScrollbackLinesRtnData);
+        speechPlay.mockResolvedValueOnce(true);
+
+        const settings = makeSettings();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-status-row",
+            speechSettings: settings,
+        });
+
+        expect(ok).toBe(true);
+        expect(speechPlay).toHaveBeenCalledTimes(1);
+        expect(speechPlay).toHaveBeenCalledWith(
+            "这是最终正式回复",
+            settings,
+            "assistant",
+            expect.any(Function),
+            expect.objectContaining({ ownerId: undefined })
+        );
+    });
+
     it("does not speak codex in-progress bullet without trailing prompt boundary when required", async () => {
         termGetScrollback.mockResolvedValueOnce({
             lines: ["› 你好", "• 还在生成中的回复片段"],

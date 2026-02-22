@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/app/aipanel/aispeech", () => {
     return {
         canUseLocalSpeechSynthesis: vi.fn(() => false),
+        chunkSpeechInput: vi.fn((text: string) => [text]),
         requestOpenAICompatibleSpeechAudio: vi.fn(async () => new Blob(["mock-audio"], { type: "audio/mpeg" })),
         speakLocally: vi.fn(() => false),
         stopLocalSpeechSynthesis: vi.fn(),

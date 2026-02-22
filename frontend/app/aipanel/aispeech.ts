@@ -64,6 +64,80 @@ function normalizeSpeechInput(text: string, filterOptions?: SpeechFilterOptions)
     return stripSpeechNoise(text, filterOptions).replace(/\s+/g, " ").trim().slice(0, MaxSpeechInputLength);
 }
 
+function normalizeSpeechInputForChunking(text: string, filterOptions?: SpeechFilterOptions): string {
+    return stripSpeechNoise(text, filterOptions)
+        .replace(/\r\n?/g, "\n")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
+
+function findSpeechChunkSplitIndex(text: string, maxLen: number): number {
+    const hardEnd = Math.min(maxLen, text.length);
+    if (hardEnd <= 0) {
+        return 0;
+    }
+    if (hardEnd >= text.length) {
+        return text.length;
+    }
+
+    const windowSize = 240;
+    const windowStart = Math.max(0, hardEnd - windowSize);
+    const windowText = text.slice(windowStart, hardEnd);
+
+    const paraIdx = windowText.lastIndexOf("\n\n");
+    if (paraIdx >= 0 && windowStart+paraIdx > 0) {
+        return windowStart + paraIdx + 2;
+    }
+
+    const lineIdx = windowText.lastIndexOf("\n");
+    if (lineIdx >= 0 && windowStart+lineIdx > 0) {
+        return windowStart + lineIdx + 1;
+    }
+
+    const punctuationChars = "。！？.!?；;:：";
+    for (let idx = windowText.length - 1; idx >= 0; idx--) {
+        if (punctuationChars.includes(windowText[idx])) {
+            return windowStart + idx + 1;
+        }
+    }
+
+    const spaceIdx = windowText.lastIndexOf(" ");
+    if (spaceIdx >= 0 && windowStart+spaceIdx > 0) {
+        return windowStart + spaceIdx + 1;
+    }
+
+    return hardEnd;
+}
+
+export function chunkSpeechInput(text: string, filterOptions?: SpeechFilterOptions): string[] {
+    const normalized = normalizeSpeechInputForChunking(text, filterOptions);
+    if (!normalized) {
+        return [];
+    }
+    if (normalized.length <= MaxSpeechInputLength) {
+        return [normalized];
+    }
+
+    const chunks: string[] = [];
+    let remaining = normalized;
+    let safety = 0;
+    while (remaining.length > MaxSpeechInputLength && safety < 10_000) {
+        const splitIdx = findSpeechChunkSplitIndex(remaining, MaxSpeechInputLength);
+        const safeSplitIdx = splitIdx > 0 ? splitIdx : Math.min(MaxSpeechInputLength, remaining.length);
+        const chunk = remaining.slice(0, safeSplitIdx).trim();
+        if (chunk) {
+            chunks.push(chunk);
+        }
+        remaining = remaining.slice(safeSplitIdx).trim();
+        safety += 1;
+    }
+    if (remaining) {
+        chunks.push(remaining);
+    }
+    return chunks;
+}
+
 export function canUseLocalSpeechSynthesis(): boolean {
     return (
         typeof window !== "undefined" &&
@@ -93,8 +167,8 @@ export function speakLocally(
         handlers?.onError?.("Speech synthesis is not available.");
         return false;
     }
-    const input = normalizeSpeechInput(text, filterOptions);
-    if (input === "") {
+    const chunks = chunkSpeechInput(text, filterOptions);
+    if (chunks.length === 0) {
         handlers?.onError?.("No text content to read.");
         return false;
     }
@@ -108,7 +182,6 @@ export function speakLocally(
         handlers?.onDone?.();
     };
 
-    const utterance = new SpeechSynthesisUtterance(input);
     const availableVoices = window.speechSynthesis.getVoices();
     const normalizedVoiceName = voiceName?.trim().toLowerCase();
     let selectedVoice: SpeechSynthesisVoice | undefined;
@@ -118,21 +191,29 @@ export function speakLocally(
             selectedVoice = availableVoices.find((voice) => voice.name.toLowerCase().includes(normalizedVoiceName));
         }
     }
-    if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        utterance.lang = selectedVoice.lang || navigator.language || "en-US";
-    } else {
-        utterance.lang = navigator.language || "en-US";
-    }
-    utterance.rate = normalizeSpeechRate(rate, 1);
-    utterance.onend = () => finalize();
-    utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
-        handlers?.onError?.(event.error || "Speech synthesis failed.");
-        finalize();
-    };
-
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    const playbackRate = normalizeSpeechRate(rate, 1);
+    for (let idx = 0; idx < chunks.length; idx++) {
+        const utterance = new SpeechSynthesisUtterance(chunks[idx]);
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+            utterance.lang = selectedVoice.lang || navigator.language || "en-US";
+        } else {
+            utterance.lang = navigator.language || "en-US";
+        }
+        utterance.rate = playbackRate;
+        utterance.onend = () => {
+            if (idx === chunks.length - 1) {
+                finalize();
+            }
+        };
+        utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+            handlers?.onError?.(event.error || "Speech synthesis failed.");
+            window.speechSynthesis.cancel();
+            finalize();
+        };
+        window.speechSynthesis.speak(utterance);
+    }
     return true;
 }
 
