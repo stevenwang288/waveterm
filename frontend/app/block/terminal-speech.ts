@@ -14,15 +14,19 @@ const NodeTraceHintPattern = /^\s*\(use `node --trace-deprecation[^)]*\)\s*$/i;
 const CodexToolCallIntroPattern = /^(called|calling)\b/i;
 const CodexToolCallLinePattern = /^\s*[•●]?\s*(called|calling)\b/i;
 const CodexWorkingStatusLinePattern = /^\s*[•●]?\s*working\b.*\besc\s+to\s+interrupt\b.*$/i;
+const CodexWorkingLinePattern = /^\s*[•●]?\s*working\b/i;
 const TerminalBoxLinePattern = /^\s*[│┃╭╮╰╯├┤┬┴┼─━╶╴╷╵]+\s*.*$/;
 const TerminalSeparatorPattern = /^\s*[─━]{10,}\s*$/;
 const CodexBrandLinePattern = /^\s*>_\s*OpenAI\s+Codex\b/i;
 const CodexModelLinePattern = /^\s*(?:模型|model)\s*[:：]\s*.+$/i;
 const CodexDirectoryLinePattern = /^\s*(?:目录|directory|cwd)\s*[:：]\s*.+$/i;
-const CtrlCKeywordPattern = /\bctrl\s*\+\s*c\b/i;
-const CtrlCCountOrOrdinalPattern =
-    /(第一次|第二次|第三次|第四次|第[一二三四五六七八九十0-9]+次|\b(first|second|third|fourth|fifth)\b|\b\d+\s*(?:\/|of)\s*\d+\b)/i;
-const CtrlCRepeatHintPattern = /\bagain\b|再次|再按|再按一次|再按下/i;
+const CtrlQuitKeyPattern = /\bctrl(?:\s*[\+\-]\s*|\s+)(?:c|d)\b/i;
+const CtrlQuitCountOrOrdinalPattern =
+    /(第一次|第二次|第三次|第四次|第\s*[一二三四五六七八九十0-9]+\s*次|\b(first|second|third|fourth|fifth)\b|\b\d+\s*(?:\/|of)\s*\d+\b|\b\d+\s*x\b)/i;
+const CtrlQuitRepeatHintPattern =
+    /\bagain\b|\bonce\s+more\b|\bone\s+more(?:\s+time)?\b|\bconsecutive(?:ly)?\b|再次|再按|再按一次|再按下|连续/i;
+const CodexFooterHintPattern = /\bagain to (?:quit|edit previous message)\b/i;
+const CodexFooterHintZhPattern = /再次.*(?:退出|编辑上(?:一|1)条)/i;
 
 function isCodexUserPromptLine(line: string): boolean {
     return /^\s*[›❯](?:\s+.*)?$/.test(line) || /^\s*>\s+.+$/.test(line);
@@ -55,7 +59,8 @@ function isTerminalStatusNoiseLine(line: string): boolean {
     if (TerminalBoxLinePattern.test(line) || TerminalSeparatorPattern.test(line)) {
         return true;
     }
-    if (CodexWorkingStatusLinePattern.test(line)) {
+    // Codex working/progress status lines should never be spoken (not a formal reply).
+    if (CodexWorkingLinePattern.test(line) || CodexWorkingStatusLinePattern.test(line)) {
         return true;
     }
     // Codex progress/status lines often include "esc to interrupt" and should never be spoken.
@@ -66,7 +71,13 @@ function isTerminalStatusNoiseLine(line: string): boolean {
         return true;
     }
     // Ctrl+C repeat / multi-press status lines should never be spoken (they are not assistant replies).
-    if (CtrlCKeywordPattern.test(stripped) && (CtrlCRepeatHintPattern.test(stripped) || CtrlCCountOrOrdinalPattern.test(stripped))) {
+    if (
+        CtrlQuitKeyPattern.test(stripped) &&
+        (CtrlQuitRepeatHintPattern.test(stripped) || CtrlQuitCountOrOrdinalPattern.test(stripped))
+    ) {
+        return true;
+    }
+    if (CodexFooterHintPattern.test(stripped) || CodexFooterHintZhPattern.test(stripped)) {
         return true;
     }
     if (lowered.includes("for shortcuts") || lowered.includes("context left")) {
@@ -332,12 +343,10 @@ export function extractLatestTerminalFormalReply(
     if (codexReply) {
         return codexReply;
     }
-    if (requirePromptAfterCodexReply) {
-        // Strict mode: for Codex-like screens, only accept finalized assistant-bullet replies.
-        // Do not fall back to plain-text snapshots such as model/status lines.
-        if (hasCodexUiCues(withoutIFlowExecutionInfo)) {
-            return "";
-        }
+    // For Codex-like screens, only accept assistant-bullet replies.
+    // Do not fall back to plain-text snapshots such as footer/status lines.
+    if (hasCodexUiCues(withoutIFlowExecutionInfo)) {
+        return "";
     }
     return extractLatestPlainReply(withoutIFlowExecutionInfo, hadExecutionInfo, requirePromptAfterCodexReply);
 }

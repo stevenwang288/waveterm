@@ -86,6 +86,83 @@ describe("speakLatestTerminalFormalReply", () => {
         );
     });
 
+    it("ignores Codex footer / Ctrl+C hint lines (never speak them)", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: [
+                ">_ OpenAI Codex",
+                "Ctrl+C reserved for copy. Press consecutively: 3x interrupt, 4x exit.",
+                "Ctrl+C 预留给复制。连续按：第 3 次中断，第 4 次退出。",
+                "  ctrl + c again to quit",
+                "  esc again to edit previous message",
+            ],
+            lastupdated: 205,
+        } as CommandTermGetScrollbackLinesRtnData);
+
+        const onError = vi.fn();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-hints",
+            speechSettings: makeSettings(),
+            onError,
+        });
+
+        expect(ok).toBe(false);
+        expect(speechPlay).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
+    });
+
+    it("never speaks Codex working/progress status lines", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["› 你好", "• Working (20s  esc 中断)"],
+            lastupdated: 215,
+        } as CommandTermGetScrollbackLinesRtnData);
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["› 你好", "• Working (20s  esc 中断)"],
+            lastupdated: 215,
+        } as CommandTermGetScrollbackLinesRtnData);
+
+        const onError = vi.fn();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-working",
+            speechSettings: makeSettings(),
+            requirePromptAfterCodexReply: true,
+            onError,
+        });
+
+        expect(ok).toBe(false);
+        expect(speechPlay).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
+    });
+
+    it("does not include Codex Ctrl+C/ESC hints in the spoken assistant reply segment", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: [
+                "› q1",
+                "• 这是最终正式回复",
+                "Ctrl+C reserved for copy. Press consecutively: 3x interrupt, 4x exit.",
+                "  esc again to edit previous message",
+                "› ",
+            ],
+            lastupdated: 210,
+        } as CommandTermGetScrollbackLinesRtnData);
+        speechPlay.mockResolvedValueOnce(true);
+
+        const settings = makeSettings();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-hints-segment",
+            speechSettings: settings,
+        });
+
+        expect(ok).toBe(true);
+        expect(speechPlay).toHaveBeenCalledTimes(1);
+        expect(speechPlay).toHaveBeenCalledWith(
+            "这是最终正式回复",
+            settings,
+            "assistant",
+            expect.any(Function),
+            expect.objectContaining({ ownerId: undefined })
+        );
+    });
+
     it("does not speak codex in-progress bullet without trailing prompt boundary when required", async () => {
         termGetScrollback.mockResolvedValueOnce({
             lines: ["› 你好", "• 还在生成中的回复片段"],

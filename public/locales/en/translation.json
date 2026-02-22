@@ -800,6 +800,9 @@
       "disabledInProgram": "Wave AI integration disabled while you're inside {{program}}."
     },
     "sendToWaveAI": "Send to Wave AI",
+    "copySelection": "Copy selection",
+    "copyCurrentMessage": "Copy current message",
+    "noCurrentMessageToCopy": "No formal AI reply detected to copy",
     "translateSelection": "Translate Selection (Chinese)",
     "translateSelectionTitle": "Translation",
     "translating": "Translating…",

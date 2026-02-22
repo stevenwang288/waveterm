@@ -3,6 +3,7 @@
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
+import { getLatestTerminalFormalReplyText } from "@/app/block/terminal-speech";
 import i18next from "@/app/i18n";
 import { appHandleKeyDown } from "@/app/store/keymodel";
 import { modalsModel } from "@/app/store/modalmodel";
@@ -31,6 +32,7 @@ import {
     getOverrideConfigAtom,
     getSettingsKeyAtom,
     globalStore,
+    pushNotification,
     readAtom,
     recordTEvent,
     useBlockAtom,
@@ -1199,18 +1201,82 @@ export class TermViewModel implements ViewModel {
 
     getContextMenuItems(): ContextMenuItem[] {
         const menu: ContextMenuItem[] = [];
+        const blockId = this.blockId;
         const hasSelection = this.termRef.current?.terminal?.hasSelection();
         const selection = hasSelection ? this.termRef.current?.terminal.getSelection() : null;
 
         if (hasSelection) {
             menu.push({
-                label: i18next.t("ctx.copy"),
+                label: i18next.t("term.copySelection"),
                 click: () => {
                     if (selection) {
                         navigator.clipboard.writeText(selection);
                     }
                 },
             });
+        }
+
+        menu.push({
+            label: i18next.t("term.copyCurrentMessage"),
+            click: () => {
+                fireAndForget(async () => {
+                    const onError = (message: string) => {
+                        const now = Date.now();
+                        pushNotification({
+                            icon: "triangle-exclamation",
+                            title: i18next.t("operationFailed.copyTitle"),
+                            message: message || "",
+                            timestamp: new Date(now).toISOString(),
+                            expiration: now + 4000,
+                            type: "warning",
+                        });
+                    };
+
+                    let extracted = await getLatestTerminalFormalReplyText({
+                        blockId,
+                        onError,
+                        requirePromptAfterCodexReply: true,
+                    });
+                    if (!extracted) {
+                        extracted = await getLatestTerminalFormalReplyText({
+                            blockId,
+                            onError,
+                            requirePromptAfterCodexReply: false,
+                        });
+                    }
+                    const text = (extracted ?? "").trim();
+                    if (!text) {
+                        const now = Date.now();
+                        pushNotification({
+                            icon: "copy",
+                            title: i18next.t("term.noCurrentMessageToCopy"),
+                            message: "",
+                            timestamp: new Date(now).toISOString(),
+                            expiration: now + 2500,
+                            type: "info",
+                        });
+                        return;
+                    }
+
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        const now = Date.now();
+                        pushNotification({
+                            icon: "copy",
+                            title: i18next.t("common.copied"),
+                            message: "",
+                            timestamp: new Date(now).toISOString(),
+                            expiration: now + 1500,
+                            type: "info",
+                        });
+                    } catch (err) {
+                        onError(err instanceof Error ? err.message : String(err));
+                    }
+                });
+            },
+        });
+
+        if (hasSelection) {
             menu.push({ type: "separator" });
             menu.push({
                 label: i18next.t("term.sendToWaveAI"),
@@ -1269,6 +1335,8 @@ export class TermViewModel implements ViewModel {
                     },
                 });
             }
+            menu.push({ type: "separator" });
+        } else {
             menu.push({ type: "separator" });
         }
 

@@ -800,6 +800,9 @@
       "disabledInProgram": "当你处于 {{program}} 内时，Wave AI 集成将被禁用。"
     },
     "sendToWaveAI": "发送到 Wave AI",
+    "copySelection": "复制选中",
+    "copyCurrentMessage": "复制当前消息",
+    "noCurrentMessageToCopy": "没有检测到可复制的 AI 正式回复",
     "translateSelection": "翻译选中内容（中文）",
     "translateSelectionTitle": "翻译",
     "translating": "正在翻译…",
