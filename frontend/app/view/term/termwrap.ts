@@ -149,7 +149,7 @@ function handleOsc52Command(data: string, blockId: string, loaded: boolean, term
 
 // for xterm handlers, we return true always because we "own" OSC 7.
 // even if it is invalid we dont want to propagate to other handlers
-function handleOsc7Command(data: string, blockId: string, loaded: boolean): boolean {
+function handleOsc7Command(data: string, blockId: string, loaded: boolean, termWrap: TermWrap): boolean {
     if (data == null || data.length == 0) {
         console.log("Invalid OSC 7 command received (empty)");
         return true;
@@ -208,6 +208,7 @@ function handleOsc7Command(data: string, blockId: string, loaded: boolean): bool
         console.log("Invalid OSC 7 command received (blank path)", data);
         return true;
     }
+    termWrap.hasSeenOsc7Cwd = true;
 
     const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
     const blockData = globalStore.get(blockAtom);
@@ -539,28 +540,32 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                         rtInfo["shell:lastcmd"] = decodedCmd;
                         globalStore.set(termWrap.lastCommandAtom, decodedCmd);
                         checkCommandForTelemetry(decodedCmd);
-                        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
-                        const blockData = globalStore.get(blockAtom);
-                        const currentCwd =
-                            typeof blockData?.meta?.["cmd:cwd"] === "string"
-                                ? String(blockData.meta["cmd:cwd"]).trim()
-                                : "";
-                        const inferredCwd = inferNextCwdFromCommand(decodedCmd, currentCwd);
-                        if (!isBlank(inferredCwd) && inferredCwd !== currentCwd) {
-                            console.log("Inferred cwd update from command", {
-                                blockId,
-                                from: currentCwd || "-",
-                                to: inferredCwd,
-                            });
-                            fireAndForget(async () => {
-                                try {
-                                    await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
-                                        "cmd:cwd": inferredCwd,
-                                    });
-                                } catch (e) {
-                                    console.log("Inferred cwd update failed", { blockId, cmd: decodedCmd, error: e });
-                                }
-                            });
+                        // If the shell already emits OSC 7 cwd updates, treat them as authoritative and avoid
+                        // speculative cwd inference (which can cause the header path to "jump back").
+                        if (!termWrap.hasSeenOsc7Cwd) {
+                            const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+                            const blockData = globalStore.get(blockAtom);
+                            const currentCwd =
+                                typeof blockData?.meta?.["cmd:cwd"] === "string"
+                                    ? String(blockData.meta["cmd:cwd"]).trim()
+                                    : "";
+                            const inferredCwd = inferNextCwdFromCommand(decodedCmd, currentCwd);
+                            if (!isBlank(inferredCwd) && inferredCwd !== currentCwd) {
+                                console.log("Inferred cwd update from command", {
+                                    blockId,
+                                    from: currentCwd || "-",
+                                    to: inferredCwd,
+                                });
+                                fireAndForget(async () => {
+                                    try {
+                                        await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
+                                            "cmd:cwd": inferredCwd,
+                                        });
+                                    } catch (e) {
+                                        console.log("Inferred cwd update failed", { blockId, cmd: decodedCmd, error: e });
+                                    }
+                                });
+                            }
                         }
                     } catch (e) {
                         console.error("Error decoding cmd64:", e);
@@ -677,6 +682,7 @@ export class TermWrap {
     private writeSequence: number = 0;
     private lastAltBufAtomUpdateTs: number = 0;
     private lastTerminalStateSaveTs: number = 0;
+    hasSeenOsc7Cwd: boolean = false;
     // IME composition state tracking
     // Prevents duplicate input when switching input methods during composition (e.g., using Capslock)
     // xterm.js sends data during compositionupdate AND after compositionend, causing duplicates
@@ -764,7 +770,7 @@ export class TermWrap {
         }
         // Register OSC handlers
         this.terminal.parser.registerOscHandler(7, (data: string) => {
-            return handleOsc7Command(data, this.blockId, this.loaded);
+            return handleOsc7Command(data, this.blockId, this.loaded, this);
         });
         this.terminal.parser.registerOscHandler(52, (data: string) => {
             return handleOsc52Command(data, this.blockId, this.loaded, this);

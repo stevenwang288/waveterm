@@ -326,7 +326,7 @@ export class LayoutModel {
 
         this.ephemeralNode = atom();
         this.magnifiedNodeSizeAtom = getSettingsKeyAtom("window:magnifiedblocksize");
-        this.magnifiedNodeSizeOverrideAtom = atom<number | null>(null);
+        this.magnifiedNodeSizeOverrideAtom = atom<number | null>(null) as PrimitiveAtom<number | null>;
 
         this.magnifiedNodeIdAtom = atom((get) => {
             const treeState = get(this.localTreeStateAtom);

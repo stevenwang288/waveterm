@@ -353,17 +353,18 @@ export function extractLatestTerminalFormalReply(
 ): string {
     const requirePromptAfterCodexReply = options?.requirePromptAfterCodexReply ?? false;
     const normalized = normalizeTerminalScrollbackLines(lines);
-    const { lines: withoutIFlowExecutionInfo, hadExecutionInfo } = removeIFlowExecutionInfo(normalized);
+    const { lines: withoutIFlowExecutionInfo } = removeIFlowExecutionInfo(normalized);
     const codexReply = extractLatestCodexBulletReply(withoutIFlowExecutionInfo, requirePromptAfterCodexReply);
     if (codexReply) {
         return codexReply;
     }
-    // For Codex-like screens, only accept assistant-bullet replies.
-    // Do not fall back to plain-text snapshots such as footer/status lines.
-    if (hasCodexUiCues(withoutIFlowExecutionInfo)) {
-        return "";
+    if (requirePromptAfterCodexReply) {
+        const plainReply = extractLatestPlainReply(withoutIFlowExecutionInfo, false, requirePromptAfterCodexReply);
+        if (plainReply) {
+            return plainReply;
+        }
     }
-    return extractLatestPlainReply(withoutIFlowExecutionInfo, hadExecutionInfo, requirePromptAfterCodexReply);
+    return "";
 }
 
 type LoadLatestTerminalFormalReplyOptions = {

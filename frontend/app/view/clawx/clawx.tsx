@@ -156,7 +156,7 @@ class ClawXViewModel extends WebViewModel {
             oref: WOS.makeORef("block", this.blockId),
             meta: {
                 "clawx:pathscope": resolvedScope,
-            },
+            } as any,
         }).catch((error) => {
             console.warn("Failed to persist clawx:pathscope", error);
         });

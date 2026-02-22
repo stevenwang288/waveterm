@@ -119,7 +119,7 @@ class WorkspaceLayoutModel {
 
     private getPanelViewAtom(): jotai.Atom<string> {
         const tabORef = WOS.makeORef("tab", this.getTabId());
-        return getOrefMetaKeyAtom(tabORef, "waveai:panelview");
+        return getOrefMetaKeyAtom(tabORef, "waveai:panelview" as any) as jotai.Atom<string>;
     }
 
     registerRefs(
@@ -251,7 +251,7 @@ class WorkspaceLayoutModel {
         getApi().setWaveAIOpen(this.getAIPanelVisible() && view === "ai");
         RpcApi.SetMetaCommand(TabRpcClient, {
             oref: WOS.makeORef("tab", this.getTabId()),
-            meta: { "waveai:panelview": view },
+            meta: { "waveai:panelview": view } as any,
         });
 
         if (!this.getAIPanelVisible()) {

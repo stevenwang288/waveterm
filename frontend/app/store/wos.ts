@@ -17,6 +17,8 @@ type WaveObjectDataItemType<T extends WaveObj> = {
     loading: boolean;
 };
 
+const nullWaveObjectDataAtom = atom<WaveObjectDataItemType<any>>({ value: null, loading: false });
+
 type WaveObjectValue<T extends WaveObj> = {
     pendingPromise: Promise<T>;
     dataAtom: PrimitiveAtom<WaveObjectDataItemType<T>>;
@@ -224,15 +226,20 @@ function getWaveObjectLoadingAtom(oref: string): Atom<boolean> {
     });
 }
 
-function useWaveObjectValue<T extends WaveObj>(oref: string): [T, boolean] {
-    const wov = getWaveObjectValue<T>(oref);
+function useWaveObjectValue<T extends WaveObj>(oref: string | null): [T, boolean] {
+    const wov = oref ? getWaveObjectValue<T>(oref) : null;
     useEffect(() => {
+        if (!wov) {
+            return;
+        }
         wov.refCount++;
         return () => {
             wov.refCount--;
         };
-    }, [oref]);
-    const atomVal = useAtomValue(wov.dataAtom);
+    }, [wov]);
+    const atomVal = useAtomValue(
+        ((wov ? wov.dataAtom : nullWaveObjectDataAtom) as any) as PrimitiveAtom<WaveObjectDataItemType<T>>
+    );
     return [atomVal.value, atomVal.loading];
 }
 

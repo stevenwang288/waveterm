@@ -10,6 +10,7 @@ import { RpcApi } from "../frontend/app/store/wshclientapi";
 import { isDev } from "../frontend/util/isdev";
 import { fireAndForget } from "../frontend/util/util";
 import i18next from "./i18n-main";
+import { setUserConfirmedQuit } from "./emain-activity";
 import { delay } from "./emain-util";
 import { focusedWaveWindow, getAllWaveWindows } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";

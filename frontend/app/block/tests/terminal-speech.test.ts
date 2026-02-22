@@ -90,7 +90,7 @@ describe("extractLatestTerminalFormalReply", () => {
         expect(extractLatestTerminalFormalReply(lines)).toBe("");
     });
 
-    it("extracts IFLOW plain reply and strips execution metadata", () => {
+    it("returns empty for non-bullet output (strict formal-reply mode)", () => {
         const lines = [
             "2026年2月19日",
             "(node:30780) [DEP0040] DeprecationWarning: The `punycode` module is deprecated.",
@@ -104,16 +104,16 @@ describe("extractLatestTerminalFormalReply", () => {
             "</Execution Info>",
             "PS D:\\repo>",
         ];
-        expect(extractLatestTerminalFormalReply(lines)).toBe("2026年2月19日");
+        expect(extractLatestTerminalFormalReply(lines)).toBe("");
     });
 
-    it("extracts plain final reply when prompt boundary exists even without execution metadata", () => {
+    it("does not extract plain replies even when prompt boundaries exist", () => {
         const lines = [
             "› 今天是几号？",
             "今天是 2026 年 2 月 20 日，星期五。",
             "",
         ];
-        expect(extractLatestTerminalFormalReply(lines)).toBe("今天是 2026 年 2 月 20 日，星期五。");
+        expect(extractLatestTerminalFormalReply(lines)).toBe("");
     });
 
     it("filters codex startup box and model lines as non-reply noise", () => {

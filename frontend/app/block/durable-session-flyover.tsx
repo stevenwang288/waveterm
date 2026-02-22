@@ -176,12 +176,11 @@ function DurableStartingContent({ onClose }: DurableStartingContentProps) {
 
 interface DurableEndedContentProps {
     doneReason: string;
-    startupError?: string;
     viewModel: TermViewModel;
     onClose: () => void;
 }
 
-function DurableEndedContent({ doneReason, startupError, viewModel, onClose }: DurableEndedContentProps) {
+function DurableEndedContent({ doneReason, viewModel, onClose }: DurableEndedContentProps) {
     const handleRestartSession = () => {
         onClose();
         util.fireAndForget(() => viewModel.forceRestartController());
@@ -214,11 +213,6 @@ function DurableEndedContent({ doneReason, startupError, viewModel, onClose }: D
                     {titleText}
                 </div>
                 <div className="text-xs text-secondary leading-relaxed">{descriptionText}</div>
-                {startupError && (
-                    <div className="text-[11px] text-error leading-relaxed max-h-[3.5rem] overflow-y-auto">
-                        {startupError}
-                    </div>
-                )}
                 <button
                     className="bg-zinc-700 text-foreground rounded px-3 py-1.5 text-xs font-medium hover:bg-zinc-600 transition-colors cursor-pointer flex items-center justify-center gap-2 mt-1"
                     onClick={handleRestartSession}
@@ -279,11 +273,9 @@ function getContentToRender(
         return <DurableStartingContent onClose={onClose} />;
     } else if (status === "done") {
         const doneReason = jobStatus?.donereason;
-        const startupError = jobStatus?.startuperror;
         return (
             <DurableEndedContent
                 doneReason={doneReason}
-                startupError={startupError}
                 viewModel={viewModel}
                 onClose={onClose}
             />
@@ -334,8 +326,11 @@ export function DurableSessionFlyover({
     divClassName,
 }: DurableSessionFlyoverProps) {
     const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
-    const termDurableStatus = util.useAtomValueSafe(viewModel?.termDurableStatus);
-    const termConfigedDurable = util.useAtomValueSafe(viewModel?.termConfigedDurable);
+    if (!isTermViewModel(viewModel)) {
+        return null;
+    }
+    const termDurableStatus = util.useAtomValueSafe(viewModel.termDurableStatus);
+    const termConfigedDurable = util.useAtomValueSafe(viewModel.termConfigedDurable);
     const connName = blockData?.meta?.connection;
     const connStatus = jotai.useAtomValue(getConnStatusAtom(connName));
 
@@ -397,10 +392,6 @@ export function DurableSessionFlyover({
         handleClose: safePolygon(),
     });
     const { getReferenceProps, getFloatingProps } = useInteractions([hover]);
-
-    if (!isTermViewModel(viewModel)) {
-        return null;
-    }
 
     const content = getContentToRender(viewModel, handleClose, termDurableStatus, connStatus, termConfigedDurable);
     if (content == null) {

@@ -674,10 +674,14 @@ function registerGlobalKeys() {
         createTab();
         return true;
     });
-    globalKeyMap.set("Cmd:w", () => {
-        genericClose();
-        return true;
-    });
+    // On Windows, "Cmd" is mapped to Alt, and Alt+W is commonly used by users/IMEs.
+    // Reserve Alt+W and do not bind it to close behavior.
+    if (!isWindows()) {
+        globalKeyMap.set("Cmd:w", () => {
+            genericClose();
+            return true;
+        });
+    }
     globalKeyMap.set("Cmd:Shift:w", () => {
         simpleCloseStaticTab();
         return true;
@@ -941,10 +945,13 @@ function registerGlobalKeys() {
 }
 
 function registerBuilderGlobalKeys() {
-    globalKeyMap.set("Cmd:w", () => {
-        getApi().closeBuilderWindow();
-        return true;
-    });
+    // Keep Alt+W free on Windows.
+    if (!isWindows()) {
+        globalKeyMap.set("Cmd:w", () => {
+            getApi().closeBuilderWindow();
+            return true;
+        });
+    }
     const allKeys = Array.from(globalKeyMap.keys());
     getApi().registerGlobalWebviewKeys(allKeys);
 }

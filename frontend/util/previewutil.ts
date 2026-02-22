@@ -27,7 +27,7 @@ function runCliInExistingTerminal(cliCommand: string): boolean {
     fireAndForget(async () => {
         await RpcApi.SetMetaCommand(TabRpcClient, {
             oref: WOS.makeORef("block", targetBlockId),
-            meta: { "term:autoCmd": cliCommand },
+            meta: { "term:autoCmd": cliCommand } as any,
         });
         await RpcApi.ControllerInputCommand(TabRpcClient, {
             blockid: targetBlockId,

@@ -185,6 +185,7 @@ export class TermViewModel implements ViewModel {
     isCmdController: jotai.Atom<boolean>;
     isRestarting: jotai.PrimitiveAtom<boolean>;
     termDurableStatus: jotai.Atom<BlockJobStatusData | null>;
+    termConfigedDurable: jotai.Atom<boolean>;
     searchAtoms?: SearchAtoms;
     pendingInputQueue: string[] = [];
     isFlushingPendingInput: boolean = false;
@@ -462,6 +463,7 @@ export class TermViewModel implements ViewModel {
             }
             return blockJobStatus;
         });
+        this.termConfigedDurable = getBlockTermDurableAtom(this.blockId);
         this.blockJobStatusAtom = jotai.atom(null) as jotai.PrimitiveAtom<BlockJobStatusData>;
         this.blockJobStatusVersionTs = 0;
         const initialBlockJobStatus = RpcApi.BlockJobStatusCommand(TabRpcClient, blockId);
@@ -941,6 +943,25 @@ export class TermViewModel implements ViewModel {
         await RpcApi.SetMetaCommand(TabRpcClient, {
             oref: WOS.makeORef("block", this.blockId),
             meta: { "term:durable": false },
+        });
+        await RpcApi.ControllerDestroyCommand(TabRpcClient, this.blockId);
+        const termsize = {
+            rows: this.termRef.current?.terminal?.rows,
+            cols: this.termRef.current?.terminal?.cols,
+        };
+        await RpcApi.ControllerResyncCommand(TabRpcClient, {
+            tabid: globalStore.get(atoms.staticTabId),
+            blockid: this.blockId,
+            forcerestart: true,
+            rtopts: { termsize: termsize },
+        });
+    }
+
+    async restartSessionWithDurability(enableDurable: boolean) {
+        const durable = !!enableDurable;
+        await RpcApi.SetMetaCommand(TabRpcClient, {
+            oref: WOS.makeORef("block", this.blockId),
+            meta: { "term:durable": durable },
         });
         await RpcApi.ControllerDestroyCommand(TabRpcClient, this.blockId);
         const termsize = {
@@ -1660,7 +1681,7 @@ export class TermViewModel implements ViewModel {
                     click: () => {
                         RpcApi.SetMetaCommand(TabRpcClient, {
                             oref: WOS.makeORef("block", this.blockId),
-                            meta: { "term:bellnotify": null },
+                            meta: { "term:bellnotify": null } as any,
                         });
                     },
                 },
@@ -1671,7 +1692,7 @@ export class TermViewModel implements ViewModel {
                     click: () => {
                         RpcApi.SetMetaCommand(TabRpcClient, {
                             oref: WOS.makeORef("block", this.blockId),
-                            meta: { "term:bellnotify": true },
+                            meta: { "term:bellnotify": true } as any,
                         });
                     },
                 },
@@ -1682,7 +1703,7 @@ export class TermViewModel implements ViewModel {
                     click: () => {
                         RpcApi.SetMetaCommand(TabRpcClient, {
                             oref: WOS.makeORef("block", this.blockId),
-                            meta: { "term:bellnotify": false },
+                            meta: { "term:bellnotify": false } as any,
                         });
                     },
                 },

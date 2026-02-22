@@ -249,10 +249,7 @@ const GitPanel = memo(() => {
     const focusedBlockId = useAtomValue(FocusManager.getInstance().blockFocusAtom);
     const [state, setState] = useState<GitPanelState>(initialState);
 
-    const focusedBlockData = WOS.useWaveObjectValue<Block>(
-        focusedBlockId ? WOS.makeORef("block", focusedBlockId) : null,
-        [focusedBlockId]
-    )[0];
+    const [focusedBlockData] = WOS.useWaveObjectValue<Block>(focusedBlockId ? WOS.makeORef("block", focusedBlockId) : null);
 
     const cwd = useMemo(() => normalizeCwd(focusedBlockData?.meta?.["cmd:cwd"] ?? ""), [focusedBlockData?.meta]);
 

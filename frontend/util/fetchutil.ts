@@ -6,7 +6,7 @@
 let net: Electron.Net;
 
 // Avoid bundling the `electron` package into the renderer build. Vite knows this at build-time.
-if (import.meta.env.SSR) {
+if ((import.meta as any).env?.SSR) {
     try {
         import("electron").then(({ net: electronNet }) => (net = electronNet));
     } catch (e) {

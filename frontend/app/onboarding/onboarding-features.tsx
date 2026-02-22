@@ -18,7 +18,7 @@ import { DurableSessionPage } from "./onboarding-durable";
 import { FakeLayout } from "./onboarding-layout";
 import { useTranslation, Trans } from "react-i18next";
 
-type FeaturePageName = "waveai" | "magnify" | "files";
+type FeaturePageName = "waveai" | "magnify" | "files" | "durable";
 
 const WaveAIHeaderButton = () => (
     <span className="inline-flex h-[26px] px-1.5 items-center rounded-md box-border bg-hover text-accent text-[12px] align-middle">

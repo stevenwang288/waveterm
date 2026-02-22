@@ -941,49 +941,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         [captureCurrentLayoutState, readCliLayoutConfig, writeCliLayoutConfig]
     );
 
-    const applySavedLayoutSlot = useCallback(
-        (slotKey: string, fallbackPath: string) => {
-            fireAndForget(async () => {
-                const config = await readCliLayoutConfig();
-                const savedLayouts = config.savedLayouts ?? {};
-                const saved = savedLayouts[slotKey];
-                if (saved == null || saved.rows <= 0 || saved.cols <= 0) {
-                    return;
-                }
-
-                const matchingPreset = CLI_LAYOUT_PRESETS.find((preset) => preset.rows === saved.rows && preset.cols === saved.cols);
-                if (!matchingPreset) {
-                    return;
-                }
-
-                const normalizedPath = normalizeExplorerPath(fallbackPath);
-                const totalSlots = matchingPreset.rows * matchingPreset.cols;
-                const savedPaths = saved.paths ?? [];
-                const savedCommands = saved.commands ?? [];
-                const resolvedPaths = Array.from({ length: totalSlots }, (_, index) => {
-                    const path = normalizeExplorerPath(savedPaths[index] ?? "");
-                    return path || normalizedPath;
-                });
-                const resolvedCommands = Array.from({ length: totalSlots }, (_, index) => {
-                    const cmd = savedCommands[index];
-                    return typeof cmd === "string" ? cmd.trim() : "";
-                });
-
-                config.presets[matchingPreset.key] = {
-                    rows: matchingPreset.rows,
-                    cols: matchingPreset.cols,
-                    paths: resolvedPaths,
-                    commands: resolvedCommands,
-                    connection: saved.connection,
-                    updatedTs: Date.now(),
-                };
-                await writeCliLayoutConfig(config);
-                applyCliLayoutPreset(matchingPreset, normalizedPath);
-            });
-        },
-        [applyCliLayoutPreset, readCliLayoutConfig, writeCliLayoutConfig]
-    );
-
     const applyCliLayoutPreset = useCallback(
         (preset: CliLayoutPreset, path: string) => {
             const normalizedPath = normalizeExplorerPath(path);
@@ -1042,6 +999,49 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
             });
         },
         [connection, readCliLayoutConfig, t, writeCliLayoutConfig]
+    );
+
+    const applySavedLayoutSlot = useCallback(
+        (slotKey: string, fallbackPath: string) => {
+            fireAndForget(async () => {
+                const config = await readCliLayoutConfig();
+                const savedLayouts = config.savedLayouts ?? {};
+                const saved = savedLayouts[slotKey];
+                if (saved == null || saved.rows <= 0 || saved.cols <= 0) {
+                    return;
+                }
+
+                const matchingPreset = CLI_LAYOUT_PRESETS.find((preset) => preset.rows === saved.rows && preset.cols === saved.cols);
+                if (!matchingPreset) {
+                    return;
+                }
+
+                const normalizedPath = normalizeExplorerPath(fallbackPath);
+                const totalSlots = matchingPreset.rows * matchingPreset.cols;
+                const savedPaths = saved.paths ?? [];
+                const savedCommands = saved.commands ?? [];
+                const resolvedPaths = Array.from({ length: totalSlots }, (_, index) => {
+                    const path = normalizeExplorerPath(savedPaths[index] ?? "");
+                    return path || normalizedPath;
+                });
+                const resolvedCommands = Array.from({ length: totalSlots }, (_, index) => {
+                    const cmd = savedCommands[index];
+                    return typeof cmd === "string" ? cmd.trim() : "";
+                });
+
+                config.presets[matchingPreset.key] = {
+                    rows: matchingPreset.rows,
+                    cols: matchingPreset.cols,
+                    paths: resolvedPaths,
+                    commands: resolvedCommands,
+                    connection: saved.connection,
+                    updatedTs: Date.now(),
+                };
+                await writeCliLayoutConfig(config);
+                applyCliLayoutPreset(matchingPreset, normalizedPath);
+            });
+        },
+        [applyCliLayoutPreset, readCliLayoutConfig, writeCliLayoutConfig]
     );
 
     useEffect(() => {

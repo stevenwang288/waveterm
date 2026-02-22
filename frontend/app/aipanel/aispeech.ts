@@ -199,7 +199,8 @@ function hasMainProcessSpeechRequestApi(): boolean {
 
 function decodeBase64ToBytes(base64: string): Uint8Array {
     const binary = atob(base64 || "");
-    const bytes = new Uint8Array(binary.length);
+    const buffer = new ArrayBuffer(binary.length);
+    const bytes = new Uint8Array(buffer);
     for (let idx = 0; idx < binary.length; idx++) {
         bytes[idx] = binary.charCodeAt(idx);
     }
@@ -299,7 +300,7 @@ export async function requestOpenAICompatibleSpeechAudio(
             throw new Error("Speech API returned empty audio.");
         }
         const mimeType = contentType && !normalizedContentType.includes("json") ? contentType : "audio/mpeg";
-        return new Blob([responseBytes], { type: mimeType });
+        return new Blob([responseBytes.buffer as ArrayBuffer], { type: mimeType });
     }
 
     const response = await fetch(config.endpoint, {

@@ -51,6 +51,7 @@ type WaveWebviewTag = HTMLElement & {
     isDevToolsOpened: () => boolean;
     openDevTools: () => void;
     closeDevTools: () => void;
+    executeJavaScript: (code: string) => Promise<any>;
     findInPage: (text: string, options?: any) => void;
     stopFindInPage: (action: "clearSelection" | "keepSelection" | "activateSelection") => void;
     setUserAgent: (userAgent: string) => void;
@@ -287,7 +288,7 @@ export class WebViewModel implements ViewModel {
     hideNav: Atom<boolean>;
     searchAtoms?: SearchAtoms;
     typeaheadOpen: PrimitiveAtom<boolean>;
-    partitionOverride: PrimitiveAtom<string> | null;
+    partitionOverride: Atom<string> | null;
     userAgentType: Atom<string>;
 
     constructor(blockId: string, nodeModel: BlockNodeModel, tabModel: TabModel) {
@@ -1125,7 +1126,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
     const clawxBackgroundLoadRef = useRef(false);
     const clawxLaunchAttemptedRef = useRef(false);
     const resolveClawXLaunchCandidates = useCallback(() => {
-        const configuredPath = globalStore.get(getSettingsKeyAtom("clawx:exepath"));
+        const configuredPath = globalStore.get(getSettingsKeyAtom("clawx:exepath" as any));
         return buildClawXLaunchCandidates(
             getApi().getHomeDir(),
             typeof configuredPath === "string" ? configuredPath : ""

@@ -83,7 +83,7 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
     const speechProvider = useAtomValue(getSettingsKeyAtom("speech:provider")) ?? "local";
     const speechRate = useAtomValue(getSettingsKeyAtom("speech:rate")) ?? 1;
     const speechLocalEngineRaw = useAtomValue(getSettingsKeyAtom("speech:localengine")) ?? "edge";
-    const speechLocalEngine = speechLocalEngineRaw === "edge" ? "edge" : "edge";
+    const speechLocalEngine = speechLocalEngineRaw;
     const speechLocalModel = useAtomValue(getSettingsKeyAtom("speech:localmodel")) ?? "";
     const speechLocalModelPath = useAtomValue(getSettingsKeyAtom("speech:localmodelpath")) ?? "";
     const speechEndpoint = useAtomValue(getSettingsKeyAtom("speech:endpoint")) ?? "";
