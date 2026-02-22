@@ -44,7 +44,7 @@ const config = {
     nodeGypRebuild: false,
     electronCompile: false,
     directories: {
-        output: "make",
+        output: path.join("make", pkg.version),
     },
     files: [
         {
