@@ -15,6 +15,7 @@ const CodexToolCallIntroPattern = /^(called|calling)\b/i;
 const CodexToolCallLinePattern = /^\s*[•●]?\s*(called|calling)\b/i;
 const CodexWorkingStatusLinePattern = /^\s*[•●]?\s*working\b.*\besc\s+to\s+interrupt\b.*$/i;
 const CodexWorkingLinePattern = /^\s*[•●]?\s*working\b/i;
+const CodexMcpServerStatusLinePattern = /^\s*(?:starting|stopping|restarting)\s+mcp\s+servers?\b/i;
 const LeadingStatusDecorationPattern = /^[\s•●◦∙·\u2800-\u28ff|\/\\]+/u;
 const TerminalBoxLinePattern = /^\s*[│┃╭╮╰╯├┤┬┴┼─━╶╴╷╵]+\s*.*$/;
 const TerminalSeparatorPattern = /^\s*[─━]{10,}\s*$/;
@@ -71,6 +72,10 @@ function isTerminalStatusNoiseLine(line: string): boolean {
         CodexWorkingLinePattern.test(stripped) ||
         CodexWorkingStatusLinePattern.test(stripped)
     ) {
+        return true;
+    }
+    // Codex MCP server startup/shutdown status lines are never a formal reply.
+    if (CodexMcpServerStatusLinePattern.test(stripped)) {
         return true;
     }
     // Codex progress/status lines often include "esc to interrupt" and should never be spoken.

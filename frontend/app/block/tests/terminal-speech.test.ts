@@ -156,6 +156,11 @@ describe("extractLatestTerminalFormalReply", () => {
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
     });
 
+    it("ignores Codex MCP server startup status lines", () => {
+        const lines = ["› 你好", "Starting MCP servers (1/3): mcp-deepwiki, sequential-thinking", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
+    });
+
     it("ignores ctrl+c multi-press status lines", () => {
         const lines = ["› 你好", "• Ctrl+C 第一次（1/4）：再按一次退出", "› "];
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
