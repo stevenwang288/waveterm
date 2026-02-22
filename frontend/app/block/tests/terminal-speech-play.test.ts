@@ -133,6 +133,29 @@ describe("speakLatestTerminalFormalReply", () => {
         expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
     });
 
+    it("never speaks Codex working status lines with spinner prefixes", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["› 你好", "• ⠋ Working (20s  esc 中断)", "› "],
+            lastupdated: 215,
+        } as CommandTermGetScrollbackLinesRtnData);
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["› 你好", "• ⠋ Working (20s  esc 中断)", "› "],
+            lastupdated: 215,
+        } as CommandTermGetScrollbackLinesRtnData);
+
+        const onError = vi.fn();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-working-spinner",
+            speechSettings: makeSettings(),
+            requirePromptAfterCodexReply: true,
+            onError,
+        });
+
+        expect(ok).toBe(false);
+        expect(speechPlay).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
+    });
+
     it("does not include Codex Ctrl+C/ESC hints in the spoken assistant reply segment", async () => {
         termGetScrollback.mockResolvedValueOnce({
             lines: [

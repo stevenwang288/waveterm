@@ -15,6 +15,7 @@ const CodexToolCallIntroPattern = /^(called|calling)\b/i;
 const CodexToolCallLinePattern = /^\s*[•●]?\s*(called|calling)\b/i;
 const CodexWorkingStatusLinePattern = /^\s*[•●]?\s*working\b.*\besc\s+to\s+interrupt\b.*$/i;
 const CodexWorkingLinePattern = /^\s*[•●]?\s*working\b/i;
+const LeadingStatusDecorationPattern = /^[\s•●◦∙·\u2800-\u28ff|\/\\]+/u;
 const TerminalBoxLinePattern = /^\s*[│┃╭╮╰╯├┤┬┴┼─━╶╴╷╵]+\s*.*$/;
 const TerminalSeparatorPattern = /^\s*[─━]{10,}\s*$/;
 const CodexBrandLinePattern = /^\s*>_\s*OpenAI\s+Codex\b/i;
@@ -53,14 +54,23 @@ function isLikelyShellPromptLine(line: string): boolean {
     return false;
 }
 
+function stripLeadingStatusDecorations(line: string): string {
+    return line.replace(LeadingStatusDecorationPattern, "").trim();
+}
+
 function isTerminalStatusNoiseLine(line: string): boolean {
     const lowered = line.toLowerCase();
-    const stripped = line.replace(/^\s*[•●]\s+/, "").trim();
+    const stripped = stripLeadingStatusDecorations(line);
     if (TerminalBoxLinePattern.test(line) || TerminalSeparatorPattern.test(line)) {
         return true;
     }
     // Codex working/progress status lines should never be spoken (not a formal reply).
-    if (CodexWorkingLinePattern.test(line) || CodexWorkingStatusLinePattern.test(line)) {
+    if (
+        CodexWorkingLinePattern.test(line) ||
+        CodexWorkingStatusLinePattern.test(line) ||
+        CodexWorkingLinePattern.test(stripped) ||
+        CodexWorkingStatusLinePattern.test(stripped)
+    ) {
         return true;
     }
     // Codex progress/status lines often include "esc to interrupt" and should never be spoken.

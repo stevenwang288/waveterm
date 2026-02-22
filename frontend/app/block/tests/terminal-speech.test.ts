@@ -151,6 +151,11 @@ describe("extractLatestTerminalFormalReply", () => {
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
     });
 
+    it("ignores codex working status lines with spinner prefixes", () => {
+        const lines = ["› 你好", "⠋ Working (20s  esc 中断)", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
+    });
+
     it("ignores ctrl+c multi-press status lines", () => {
         const lines = ["› 你好", "• Ctrl+C 第一次（1/4）：再按一次退出", "› "];
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
