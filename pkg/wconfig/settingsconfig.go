@@ -84,24 +84,24 @@ type SettingsType struct {
 	AiFontSize      float64 `json:"ai:fontsize,omitempty"`
 	AiFixedFontSize float64 `json:"ai:fixedfontsize,omitempty"`
 
-	SpeechClear         bool   `json:"speech:*,omitempty"`
-	SpeechEnabled       *bool  `json:"speech:enabled,omitempty"`
-	SpeechProvider      string `json:"speech:provider,omitempty" jsonschema:"enum=local,enum=api"`
-	SpeechEndpoint      string `json:"speech:endpoint,omitempty"`
-	SpeechModel         string `json:"speech:model,omitempty"`
-	SpeechVoice         string `json:"speech:voice,omitempty"`
-	SpeechVoiceAssistant string `json:"speech:voiceassistant,omitempty"`
-	SpeechVoiceUser     string `json:"speech:voiceuser,omitempty"`
-	SpeechVoiceSystem   string `json:"speech:voicesystem,omitempty"`
-	SpeechFilterUrls    *bool  `json:"speech:filterurls,omitempty"`
-	SpeechFilterPaths   *bool  `json:"speech:filterpaths,omitempty"`
-	SpeechFilterCode    *bool  `json:"speech:filtercode,omitempty"`
-	SpeechAutoPlay      *bool  `json:"speech:autoplay,omitempty"`
-	SpeechManualButton  *bool  `json:"speech:manualbutton,omitempty"`
+	SpeechClear          bool     `json:"speech:*,omitempty"`
+	SpeechEnabled        *bool    `json:"speech:enabled,omitempty"`
+	SpeechProvider       string   `json:"speech:provider,omitempty" jsonschema:"enum=local,enum=api"`
+	SpeechEndpoint       string   `json:"speech:endpoint,omitempty"`
+	SpeechModel          string   `json:"speech:model,omitempty"`
+	SpeechVoice          string   `json:"speech:voice,omitempty"`
+	SpeechVoiceAssistant string   `json:"speech:voiceassistant,omitempty"`
+	SpeechVoiceUser      string   `json:"speech:voiceuser,omitempty"`
+	SpeechVoiceSystem    string   `json:"speech:voicesystem,omitempty"`
+	SpeechFilterUrls     *bool    `json:"speech:filterurls,omitempty"`
+	SpeechFilterPaths    *bool    `json:"speech:filterpaths,omitempty"`
+	SpeechFilterCode     *bool    `json:"speech:filtercode,omitempty"`
+	SpeechAutoPlay       *bool    `json:"speech:autoplay,omitempty"`
+	SpeechManualButton   *bool    `json:"speech:manualbutton,omitempty"`
 	SpeechRate           *float64 `json:"speech:rate,omitempty"`
-	SpeechLocalEngine   string `json:"speech:localengine,omitempty" jsonschema:"enum=browser,enum=edge,enum=melo"`
-	SpeechLocalModel    string `json:"speech:localmodel,omitempty"`
-	SpeechLocalModelPath string `json:"speech:localmodelpath,omitempty"`
+	SpeechLocalEngine    string   `json:"speech:localengine,omitempty" jsonschema:"enum=browser,enum=edge,enum=melo"`
+	SpeechLocalModel     string   `json:"speech:localmodel,omitempty"`
+	SpeechLocalModelPath string   `json:"speech:localmodelpath,omitempty"`
 
 	WaveAiShowCloudModes bool   `json:"waveai:showcloudmodes,omitempty"`
 	WaveAiDefaultMode    string `json:"waveai:defaultmode,omitempty"`
@@ -149,8 +149,8 @@ type SettingsType struct {
 
 	PreviewShowHiddenFiles *bool `json:"preview:showhiddenfiles,omitempty"`
 
-	TabPreset             string   `json:"tab:preset,omitempty"`
-	TabConfirmClose       bool     `json:"tab:confirmclose,omitempty"`
+	TabPreset               string   `json:"tab:preset,omitempty"`
+	TabConfirmClose         bool     `json:"tab:confirmclose,omitempty"`
 	TabSidePanelButtonOrder []string `json:"tab:sidepanelbuttonorder,omitempty"`
 
 	WidgetClear    bool  `json:"widget:*,omitempty"`
@@ -886,14 +886,30 @@ func SetConnectionsConfigValue(connName string, toMerge waveobj.MetaMapType) err
 	if m == nil {
 		m = make(waveobj.MetaMapType)
 	}
+	connName = strings.TrimSpace(connName)
+	if connName == "" {
+		return fmt.Errorf("connection name cannot be empty")
+	}
+	if toMerge == nil {
+		delete(m, connName)
+		return WriteWaveHomeConfigFile(ConnectionsFile, m)
+	}
 	connData := m.GetMap(connName)
 	if connData == nil {
 		connData = make(waveobj.MetaMapType)
 	}
 	for configKey, val := range toMerge {
+		if val == nil {
+			delete(connData, configKey)
+			continue
+		}
 		connData[configKey] = val
 	}
-	m[connName] = connData
+	if len(connData) == 0 {
+		delete(m, connName)
+	} else {
+		m[connName] = connData
+	}
 	return WriteWaveHomeConfigFile(ConnectionsFile, m)
 }
 

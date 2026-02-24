@@ -506,7 +506,16 @@
     "disconnectedFrom": "Disconnected from {{conn}}",
     "wshNotInstalled": "wsh is not installed for this connection",
     "remotes": "Remotes",
-    "noRemoteConnections": "No remote connections"
+    "managedRemotes": "Managed (connections.json)",
+    "discoveredRemotes": "Discovered (Wave / SSH)",
+    "noRemoteConnections": "No remote connections",
+    "noManagedConnections": "No managed servers",
+    "noDiscoveredConnections": "No discovered servers",
+    "discoveredTag": "discovered",
+    "addToManagedList": "Add to managed list",
+    "addDiscoveredServer": "Add discovered server",
+    "editServer": "Edit server",
+    "removeServerConfirm": "Remove server {{server}} from managed list?"
   },
   "connStatus": {
     "disconnected": "Disconnected from {{connName}}",

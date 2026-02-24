@@ -506,7 +506,16 @@
     "wshNotInstalled": "该连接未安装 wsh",
     "gitBash": "Git Bash",
     "remotes": "远程",
-    "noRemoteConnections": "暂无远程连接"
+    "managedRemotes": "已管理（connections.json）",
+    "discoveredRemotes": "自动发现（Wave / SSH）",
+    "noRemoteConnections": "暂无远程连接",
+    "noManagedConnections": "暂无已管理服务器",
+    "noDiscoveredConnections": "暂无自动发现服务器",
+    "discoveredTag": "自动发现",
+    "addToManagedList": "添加到已管理列表",
+    "addDiscoveredServer": "添加自动发现服务器",
+    "editServer": "编辑服务器",
+    "removeServerConfirm": "确认将服务器 {{server}} 从已管理列表移除吗？"
   },
   "connStatus": {
     "disconnected": "已从 {{connName}} 断开连接",
