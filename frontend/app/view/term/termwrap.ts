@@ -1605,6 +1605,43 @@ export class TermWrap {
         }
     }
 
+    getBufferLineIndexFromClientY(clientY: number): number | null {
+        if (!this.terminal || !this.connectElem || !Number.isFinite(clientY)) {
+            return null;
+        }
+        const buffer = this.terminal.buffer.active;
+        if (!buffer || buffer.length <= 0) {
+            return null;
+        }
+        const rowsContainer = this.connectElem.querySelector(".xterm-rows") as HTMLDivElement | null;
+        const rect = rowsContainer?.getBoundingClientRect() ?? this.connectElem.getBoundingClientRect();
+        if (!rect || rect.height <= 0 || this.terminal.rows <= 0) {
+            return null;
+        }
+        const relativeY = clientY - rect.top;
+        const rowHeight = rect.height / this.terminal.rows;
+        if (!Number.isFinite(rowHeight) || rowHeight <= 0) {
+            return null;
+        }
+        const clampedRelativeY = Math.min(Math.max(relativeY, 0), Math.max(0, rect.height - 1));
+        const viewportRow = Math.floor(clampedRelativeY / rowHeight);
+        const bufferLine = buffer.viewportY + Math.max(0, Math.min(viewportRow, this.terminal.rows - 1));
+        return Math.max(0, Math.min(bufferLine, buffer.length - 1));
+    }
+
+    getRawBufferLines(): string[] {
+        if (!this.terminal) {
+            return [];
+        }
+        const buffer = this.terminal.buffer.active;
+        const lines: string[] = [];
+        for (let idx = 0; idx < buffer.length; idx++) {
+            const line = buffer.getLine(idx);
+            lines.push(line ? line.translateToString(true) : "");
+        }
+        return lines;
+    }
+
     getScrollbackContent(): string {
         if (!this.terminal) {
             return "";

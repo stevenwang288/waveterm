@@ -42,6 +42,10 @@ const CtrlQuitRepeatHintPattern =
 const CodexFooterHintPattern = /\bagain to (?:quit|edit previous message)\b/i;
 const CodexFooterHintZhPattern = /再次.*(?:退出|编辑上(?:一|1)条)/i;
 
+function normalizeTerminalLine(line: string): string {
+    return line.replace(AnsiEscapePattern, "").replace(/\r/g, "").replace(/\s+$/g, "").trimEnd();
+}
+
 function isCodexUserPromptLine(line: string): boolean {
     return /^\s*[›❯](?:\s+.*)?$/.test(line) || /^\s*>\s+.+$/.test(line);
 }
@@ -155,9 +159,7 @@ function hasCodexUiCues(lines: string[]): boolean {
 }
 
 function normalizeTerminalScrollbackLines(lines: string[]): string[] {
-    const normalized = lines
-        .map((line) => line.replace(AnsiEscapePattern, "").replace(/\r/g, "").replace(/\s+$/g, ""))
-        .map((line) => line.trimEnd());
+    const normalized = lines.map((line) => normalizeTerminalLine(line));
     while (normalized.length > 0 && normalized[normalized.length - 1].trim() === "") {
         normalized.pop();
     }
@@ -246,6 +248,138 @@ function buildPlainReplyFromSegment(lines: string[]): string {
         return true;
     });
     return trimLineList(cleaned).join("\n").trim();
+}
+
+export type TerminalParagraphKind = "assistant" | "user";
+
+export type TerminalParagraphByLineResult = {
+    kind: TerminalParagraphKind;
+    text: string;
+    startLine: number;
+    endLine: number;
+};
+
+type TerminalConversationSegment = {
+    kind: TerminalParagraphKind;
+    startLine: number;
+    endLineExclusive: number;
+};
+
+function buildUserPromptFromSegment(lines: string[]): string {
+    if (lines.length === 0) {
+        return "";
+    }
+    const cleaned: string[] = [];
+    for (let idx = 0; idx < lines.length; idx++) {
+        if (isTerminalStatusNoiseLine(lines[idx])) {
+            continue;
+        }
+        let line = lines[idx];
+        if (idx === 0 && isCodexUserPromptLine(line)) {
+            line = line.replace(/^\s*[›❯]\s*/, "").replace(/^\s*>\s+/, "");
+        }
+        if (isLikelyShellPromptLine(line)) {
+            continue;
+        }
+        cleaned.push(line);
+    }
+    return trimLineList(cleaned).join("\n").trim();
+}
+
+function buildConversationSegments(lines: string[]): TerminalConversationSegment[] {
+    const segments: TerminalConversationSegment[] = [];
+    let current: TerminalConversationSegment | null = null;
+    for (let idx = 0; idx < lines.length; idx++) {
+        const line = lines[idx] ?? "";
+        let nextKind: TerminalParagraphKind | null = null;
+        if (isCodexUserPromptLine(line)) {
+            nextKind = "user";
+        } else if (isCodexAssistantReplyLine(line) && !isTerminalStatusNoiseLine(line)) {
+            nextKind = "assistant";
+        }
+        if (!nextKind) {
+            continue;
+        }
+        if (current) {
+            current.endLineExclusive = idx;
+            segments.push(current);
+        }
+        current = {
+            kind: nextKind,
+            startLine: idx,
+            endLineExclusive: lines.length,
+        };
+    }
+    if (current) {
+        segments.push(current);
+    }
+    return segments;
+}
+
+function extractSegmentText(lines: string[], segment: TerminalConversationSegment): string {
+    const segmentLines = lines.slice(segment.startLine, segment.endLineExclusive);
+    if (segment.kind === "assistant") {
+        return buildCodexReplyFromSegment(segmentLines);
+    }
+    return buildUserPromptFromSegment(segmentLines);
+}
+
+function collectSegmentIndexesInPriorityOrder(
+    segments: TerminalConversationSegment[],
+    targetLine: number
+): number[] {
+    if (segments.length === 0) {
+        return [];
+    }
+    let activeIdx = segments.findIndex((segment) => targetLine >= segment.startLine && targetLine < segment.endLineExclusive);
+    if (activeIdx < 0) {
+        for (let idx = segments.length - 1; idx >= 0; idx--) {
+            if (segments[idx].startLine <= targetLine) {
+                activeIdx = idx;
+                break;
+            }
+        }
+        if (activeIdx < 0) {
+            activeIdx = 0;
+        }
+    }
+    const indexes: number[] = [];
+    for (let idx = activeIdx; idx >= 0; idx--) {
+        indexes.push(idx);
+    }
+    for (let idx = activeIdx + 1; idx < segments.length; idx++) {
+        indexes.push(idx);
+    }
+    return indexes;
+}
+
+export function extractTerminalParagraphByLine(lines: string[], lineIndex: number): TerminalParagraphByLineResult | null {
+    if (!lines || lines.length === 0) {
+        return null;
+    }
+    const normalizedLines = lines.map((line) => normalizeTerminalLine(line));
+    const segments = buildConversationSegments(normalizedLines);
+    if (segments.length === 0) {
+        return null;
+    }
+    const maxLine = normalizedLines.length - 1;
+    const clampedLine =
+        Number.isFinite(lineIndex) && lineIndex >= 0 ? Math.min(Math.floor(lineIndex), maxLine) : maxLine;
+    const candidateIndexes = collectSegmentIndexesInPriorityOrder(segments, clampedLine);
+    for (const segmentIdx of candidateIndexes) {
+        const segment = segments[segmentIdx];
+        const text = extractSegmentText(normalizedLines, segment).trim();
+        if (!text) {
+            continue;
+        }
+        return {
+            kind: segment.kind,
+            text,
+            startLine: segment.startLine,
+            endLine: Math.max(segment.startLine, segment.endLineExclusive - 1),
+        };
+    }
+    return null;
 }
 
 function extractLatestCodexBulletReply(lines: string[], requirePromptAfterReply: boolean): string {

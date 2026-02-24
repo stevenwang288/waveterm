@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractLatestTerminalFormalReply } from "../terminal-speech";
+import { extractLatestTerminalFormalReply, extractTerminalParagraphByLine } from "../terminal-speech";
 
 describe("extractLatestTerminalFormalReply", () => {
     it("extracts the latest assistant bullet reply", () => {
@@ -207,5 +207,41 @@ describe("extractLatestTerminalFormalReply", () => {
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe(
             "你可以按 Ctrl+C 停止服务。"
         );
+    });
+});
+
+describe("extractTerminalParagraphByLine", () => {
+    it("extracts assistant paragraph for a clicked assistant line", () => {
+        const lines = ["› 用户问题", "• 这是助手回复第一行", "  这是助手回复第二行", "› 下一条提问"];
+        expect(extractTerminalParagraphByLine(lines, 2)).toMatchObject({
+            kind: "assistant",
+            text: "这是助手回复第一行\n  这是助手回复第二行",
+        });
+    });
+
+    it("extracts user paragraph for a clicked user line", () => {
+        const lines = ["› 帮我总结一下这个文件", "• 好的，我来总结。", "› 再补充测试策略"];
+        expect(extractTerminalParagraphByLine(lines, 0)).toMatchObject({
+            kind: "user",
+            text: "帮我总结一下这个文件",
+        });
+        expect(extractTerminalParagraphByLine(lines, 2)).toMatchObject({
+            kind: "user",
+            text: "再补充测试策略",
+        });
+    });
+
+    it("falls back to nearest prior non-empty segment when clicked line is noise/blank", () => {
+        const lines = [
+            "› 用户问题",
+            "• 最终回复内容",
+            "Starting MCP servers (1/3): mcp-deepwiki",
+            "",
+            "› ",
+        ];
+        expect(extractTerminalParagraphByLine(lines, 3)).toMatchObject({
+            kind: "assistant",
+            text: "最终回复内容",
+        });
     });
 });

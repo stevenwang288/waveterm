@@ -3,7 +3,7 @@
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
-import { getLatestTerminalFormalReplyText } from "@/app/block/terminal-speech";
+import { extractTerminalParagraphByLine, getLatestTerminalFormalReplyText } from "@/app/block/terminal-speech";
 import i18next from "@/app/i18n";
 import { appHandleKeyDown } from "@/app/store/keymodel";
 import { modalsModel } from "@/app/store/modalmodel";
@@ -1220,80 +1220,123 @@ export class TermViewModel implements ViewModel {
         return buildPathMenuItems(items);
     }
 
-    getContextMenuItems(): ContextMenuItem[] {
+    private pushCopyFailureNotification(message: string) {
+        const now = Date.now();
+        pushNotification({
+            icon: "triangle-exclamation",
+            title: i18next.t("operationFailed.copyTitle"),
+            message: message || "",
+            timestamp: new Date(now).toISOString(),
+            expiration: now + 4000,
+            type: "warning",
+        });
+    }
+
+    private pushCopySuccessNotification() {
+        const now = Date.now();
+        pushNotification({
+            icon: "copy",
+            title: i18next.t("common.copied"),
+            message: "",
+            timestamp: new Date(now).toISOString(),
+            expiration: now + 1500,
+            type: "info",
+        });
+    }
+
+    private pushNoCopyTargetNotification(titleKey: string) {
+        const now = Date.now();
+        pushNotification({
+            icon: "copy",
+            title: i18next.t(titleKey),
+            message: "",
+            timestamp: new Date(now).toISOString(),
+            expiration: now + 2500,
+            type: "info",
+        });
+    }
+
+    private async resolveSmartParagraphText(contextMenuClientY?: number): Promise<string> {
+        const termWrap = this.termRef.current;
+        const rawLines = termWrap?.getRawBufferLines() ?? [];
+        if (rawLines.length > 0) {
+            const lineIndex =
+                Number.isFinite(contextMenuClientY) && contextMenuClientY != null
+                    ? termWrap?.getBufferLineIndexFromClientY(contextMenuClientY) ?? rawLines.length - 1
+                    : rawLines.length - 1;
+            const paragraph = extractTerminalParagraphByLine(rawLines, lineIndex);
+            if (paragraph?.text?.trim()) {
+                return paragraph.text.trim();
+            }
+        }
+
+        const onError = (message: string) => this.pushCopyFailureNotification(message);
+        let extracted = await getLatestTerminalFormalReplyText({
+            blockId: this.blockId,
+            onError,
+            requirePromptAfterCodexReply: true,
+        });
+        if (!extracted) {
+            extracted = await getLatestTerminalFormalReplyText({
+                blockId: this.blockId,
+                onError,
+                requirePromptAfterCodexReply: false,
+            });
+        }
+        return (extracted ?? "").trim();
+    }
+
+    private copySelectionToClipboard(text: string, emptyNoticeKey: string) {
+        const normalizedText = (text ?? "").trim();
+        if (!normalizedText) {
+            this.pushNoCopyTargetNotification(emptyNoticeKey);
+            return;
+        }
+        fireAndForget(async () => {
+            try {
+                await navigator.clipboard.writeText(normalizedText);
+                this.pushCopySuccessNotification();
+            } catch (err) {
+                this.pushCopyFailureNotification(err instanceof Error ? err.message : String(err));
+            }
+        });
+    }
+
+    getContextMenuItems(contextMenuOpts?: { clientY?: number }): ContextMenuItem[] {
         const menu: ContextMenuItem[] = [];
-        const blockId = this.blockId;
+        const contextMenuClientY = contextMenuOpts?.clientY;
         const hasSelection = this.termRef.current?.terminal?.hasSelection();
         const selection = hasSelection ? this.termRef.current?.terminal.getSelection() : null;
 
-        if (hasSelection) {
-            menu.push({
-                label: i18next.t("term.copySelection"),
-                click: () => {
-                    if (selection) {
-                        navigator.clipboard.writeText(selection);
-                    }
-                },
-            });
-        }
-
         menu.push({
-            label: i18next.t("term.copyCurrentMessage"),
+            label: i18next.t("term.copySmartParagraph"),
             click: () => {
                 fireAndForget(async () => {
-                    const onError = (message: string) => {
-                        const now = Date.now();
-                        pushNotification({
-                            icon: "triangle-exclamation",
-                            title: i18next.t("operationFailed.copyTitle"),
-                            message: message || "",
-                            timestamp: new Date(now).toISOString(),
-                            expiration: now + 4000,
-                            type: "warning",
-                        });
-                    };
-
-                    let extracted = await getLatestTerminalFormalReplyText({
-                        blockId,
-                        onError,
-                        requirePromptAfterCodexReply: true,
-                    });
-                    if (!extracted) {
-                        extracted = await getLatestTerminalFormalReplyText({
-                            blockId,
-                            onError,
-                            requirePromptAfterCodexReply: false,
-                        });
-                    }
-                    const text = (extracted ?? "").trim();
+                    const text = await this.resolveSmartParagraphText(contextMenuClientY);
                     if (!text) {
-                        const now = Date.now();
-                        pushNotification({
-                            icon: "copy",
-                            title: i18next.t("term.noCurrentMessageToCopy"),
-                            message: "",
-                            timestamp: new Date(now).toISOString(),
-                            expiration: now + 2500,
-                            type: "info",
-                        });
+                        this.pushNoCopyTargetNotification("term.noSmartParagraphToCopy");
                         return;
                     }
 
                     try {
                         await navigator.clipboard.writeText(text);
-                        const now = Date.now();
-                        pushNotification({
-                            icon: "copy",
-                            title: i18next.t("common.copied"),
-                            message: "",
-                            timestamp: new Date(now).toISOString(),
-                            expiration: now + 1500,
-                            type: "info",
-                        });
+                        this.pushCopySuccessNotification();
                     } catch (err) {
-                        onError(err instanceof Error ? err.message : String(err));
+                        this.pushCopyFailureNotification(err instanceof Error ? err.message : String(err));
                     }
                 });
+            },
+        });
+
+        menu.push({
+            label: i18next.t("term.copyPreciseSelection"),
+            enabled: !!hasSelection,
+            click: () => {
+                if (!selection) {
+                    this.pushNoCopyTargetNotification("term.noSelectionToCopy");
+                    return;
+                }
+                this.copySelectionToClipboard(selection, "term.noSelectionToCopy");
             },
         });
 
