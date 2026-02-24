@@ -436,7 +436,10 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
                     )}
 
                     {showAdvanced && showLocalEndpointSection && (
-                        <Card title="本地服务 Endpoint" desc="留空时自动使用默认端口（Edge=5050）。">
+                        <Card
+                            title="本地服务 Endpoint"
+                            desc="留空时自动使用默认端口（Edge=5050）。Wave 会在 Windows 上自动提供内置本地 TTS；若该端口已有兼容服务则优先使用。"
+                        >
                             <div className="flex flex-wrap items-center gap-2">
                                 <input
                                     className="w-[380px] max-w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5"

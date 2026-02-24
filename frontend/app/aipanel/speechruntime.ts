@@ -12,6 +12,22 @@ import { getSpeechVoiceForRole, ResolvedSpeechSettings, SpeechRole } from "./spe
 
 type SpeechStateListener = (isActive: boolean) => void;
 type SpeechOwnerId = string | null;
+type SpeechLogEntry = {
+    event: string;
+    transport?: string;
+    role?: string;
+    ownerId?: string;
+    playId?: number;
+    chunkIndex?: number;
+    chunkCount?: number;
+    text?: string;
+    endpoint?: string;
+    model?: string;
+    voice?: string;
+    error?: string;
+    ts?: number;
+};
+type SpeechLogBase = Omit<SpeechLogEntry, "event" | "chunkIndex" | "chunkCount" | "text" | "error" | "ts">;
 
 type SpeechPlayOptions = {
     ownerId?: string;
@@ -34,6 +50,26 @@ class SpeechRuntime {
     private normalizeOwnerId(ownerId?: string): string | undefined {
         const trimmed = ownerId?.trim();
         return trimmed ? trimmed : undefined;
+    }
+
+    private logSpeech(entry: SpeechLogEntry): void {
+        if (typeof window === "undefined") {
+            return;
+        }
+        const api = (window as any)?.api;
+        if (!api || typeof api.speechLog !== "function") {
+            return;
+        }
+        try {
+            void Promise.resolve(
+                api.speechLog({
+                    ...entry,
+                    ts: entry.ts ?? Date.now(),
+                })
+            ).catch(() => {});
+        } catch {
+            // best-effort diagnostics only
+        }
     }
 
     private isListenerActive(ownerId?: string): boolean {
@@ -97,6 +133,13 @@ class SpeechRuntime {
         if (normalizedOwnerId && this.activeOwnerId && this.activeOwnerId !== normalizedOwnerId) {
             return;
         }
+        if (this.isActive) {
+            this.logSpeech({
+                event: "stop",
+                ownerId: this.activeOwnerId ?? undefined,
+                playId: this.playSeq,
+            });
+        }
         this.playSeq += 1;
         stopLocalSpeechSynthesis();
         if (this.apiAbort) {
@@ -112,12 +155,18 @@ class SpeechRuntime {
         voiceName: string,
         settings: ResolvedSpeechSettings,
         onError: (message: string) => void,
-        playId: number
+        playId: number,
+        logBase: SpeechLogBase
     ): boolean {
         if (!this.isCurrentPlay(playId)) {
             return false;
         }
         if (!canUseLocalSpeechSynthesis()) {
+            this.logSpeech({
+                ...logBase,
+                event: "error",
+                error: "Speech synthesis is not available.",
+            });
             onError("Speech synthesis is not available.");
             return false;
         }
@@ -130,6 +179,10 @@ class SpeechRuntime {
                     if (!this.isCurrentPlay(playId)) {
                         return;
                     }
+                    this.logSpeech({
+                        ...logBase,
+                        event: "end",
+                    });
                     this.setActive(false);
                 },
                 onError: (errorMessage) => {
@@ -137,7 +190,18 @@ class SpeechRuntime {
                         return;
                     }
                     if (!this.isBenignInterruption(errorMessage)) {
+                        this.logSpeech({
+                            ...logBase,
+                            event: "error",
+                            error: errorMessage,
+                        });
                         onError(errorMessage);
+                    } else {
+                        this.logSpeech({
+                            ...logBase,
+                            event: "end",
+                            error: "interrupted",
+                        });
                     }
                     this.setActive(false);
                 },
@@ -170,10 +234,24 @@ class SpeechRuntime {
         const ownerId = this.normalizeOwnerId(options?.ownerId);
         const messageText = text.trim();
         if (!settings.enabled) {
+            this.logSpeech({
+                event: "error",
+                transport: settings.transport,
+                role,
+                ownerId,
+                error: "Speech is disabled in settings.",
+            });
             onError("Speech is disabled in settings.");
             return false;
         }
         if (!messageText) {
+            this.logSpeech({
+                event: "error",
+                transport: settings.transport,
+                role,
+                ownerId,
+                error: "No text content to read.",
+            });
             onError("No text content to read.");
             return false;
         }
@@ -183,9 +261,31 @@ class SpeechRuntime {
         this.setActive(true, ownerId);
 
         const roleVoice = getSpeechVoiceForRole(settings, role);
+        const logBase: SpeechLogBase = {
+            transport: settings.transport,
+            role,
+            ownerId,
+            playId,
+            endpoint: settings.endpoint,
+            model: settings.model,
+            voice: roleVoice,
+        };
 
         if (settings.transport === "browser") {
-            const started = this.playWithBrowserSpeech(messageText, roleVoice, settings, onError, playId);
+            this.logSpeech({
+                ...logBase,
+                event: "start",
+                chunkCount: 1,
+                text: messageText,
+            });
+            this.logSpeech({
+                ...logBase,
+                event: "chunk",
+                chunkIndex: 0,
+                chunkCount: 1,
+                text: messageText,
+            });
+            const started = this.playWithBrowserSpeech(messageText, roleVoice, settings, onError, playId, logBase);
             if (!started) {
                 if (this.isCurrentPlay(playId)) {
                     this.setActive(false);
@@ -198,6 +298,11 @@ class SpeechRuntime {
             if (this.isCurrentPlay(playId)) {
                 this.setActive(false);
             }
+            this.logSpeech({
+                ...logBase,
+                event: "error",
+                error: "Speech endpoint is not configured.",
+            });
             onError("Speech endpoint is not configured.");
             return false;
         }
@@ -207,9 +312,21 @@ class SpeechRuntime {
             if (this.isCurrentPlay(playId)) {
                 this.setActive(false);
             }
+            this.logSpeech({
+                ...logBase,
+                event: "error",
+                error: "No text content to read.",
+            });
             onError("No text content to read.");
             return false;
         }
+
+        this.logSpeech({
+            ...logBase,
+            event: "start",
+            chunkCount: chunks.length,
+            text: messageText,
+        });
 
         const abortController = new AbortController();
         this.apiAbort = abortController;
@@ -251,6 +368,13 @@ class SpeechRuntime {
                 finishPlayback();
                 return false;
             }
+            this.logSpeech({
+                ...logBase,
+                event: "chunk",
+                chunkIndex,
+                chunkCount: chunks.length,
+                text: chunkText,
+            });
 
             let speechBlob: Blob;
             try {
@@ -268,6 +392,13 @@ class SpeechRuntime {
                     finishPlayback();
                     return false;
                 }
+                this.logSpeech({
+                    ...logBase,
+                    event: "error",
+                    chunkIndex,
+                    chunkCount: chunks.length,
+                    error: error instanceof Error ? error.message : String(error),
+                });
                 onError(error instanceof Error ? error.message : String(error));
                 finishPlayback();
                 return false;
@@ -305,6 +436,10 @@ class SpeechRuntime {
                     return;
                 }
                 clearAbortController();
+                this.logSpeech({
+                    ...logBase,
+                    event: "end",
+                });
                 this.setActive(false);
             };
             audio.onerror = () => {
@@ -313,6 +448,13 @@ class SpeechRuntime {
                 }
                 const endpointHint = settings.endpoint ?? "unknown-endpoint";
                 const modelHint = settings.model || "unknown-model";
+                this.logSpeech({
+                    ...logBase,
+                    event: "error",
+                    chunkIndex,
+                    chunkCount: chunks.length,
+                    error: `Speech playback failed (endpoint=${endpointHint}, model=${modelHint}).`,
+                });
                 onError(`Speech playback failed (endpoint=${endpointHint}, model=${modelHint}).`);
                 finishPlayback();
             };
@@ -330,6 +472,13 @@ class SpeechRuntime {
                 }
                 const endpointHint = settings.endpoint ?? "unknown-endpoint";
                 const modelHint = settings.model || "unknown-model";
+                this.logSpeech({
+                    ...logBase,
+                    event: "error",
+                    chunkIndex,
+                    chunkCount: chunks.length,
+                    error: `Speech playback failed (endpoint=${endpointHint}, model=${modelHint}).`,
+                });
                 onError(`Speech playback failed (endpoint=${endpointHint}, model=${modelHint}).`);
                 finishPlayback();
                 return false;
@@ -351,6 +500,11 @@ class SpeechRuntime {
                 return false;
             }
             if (!abortController.signal.aborted) {
+                this.logSpeech({
+                    ...logBase,
+                    event: "error",
+                    error: error instanceof Error ? error.message : String(error),
+                });
                 onError(error instanceof Error ? error.message : String(error));
             }
             finishPlayback();

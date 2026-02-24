@@ -76,6 +76,21 @@ contextBridge.exposeInMainWorld("api", {
         headers?: Record<string, string>;
         body?: string;
     }) => ipcRenderer.invoke("speech-request", req),
+    speechLog: (entry: {
+        event: string;
+        transport?: string;
+        role?: string;
+        ownerId?: string;
+        playId?: number;
+        chunkIndex?: number;
+        chunkCount?: number;
+        text?: string;
+        endpoint?: string;
+        model?: string;
+        voice?: string;
+        error?: string;
+        ts?: number;
+    }) => ipcRenderer.invoke("speech-log", entry),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),

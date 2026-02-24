@@ -42,6 +42,7 @@ import {
 import { ensureHotSpareTab, setMaxTabCacheSize } from "./emain-tabview";
 import { getIsWaveSrvDead, getWaveSrvProc, getWaveSrvReady, runWaveSrv } from "./emain-wavesrv";
 import i18next from "./i18n-main";
+import { startBuiltinLocalTtsServers, stopBuiltinLocalTtsServers } from "./local-tts-server";
 import {
     createBrowserWindow,
     createNewWaveWindow,
@@ -290,6 +291,8 @@ electronApp.on("before-quit", (e) => {
         return;
     }
     setGlobalIsQuitting(true);
+    // Best-effort shutdown for the built-in local TTS servers.
+    void stopBuiltinLocalTtsServers();
     updater?.stop();
     if (unamePlatform == "win32") {
         // win32 doesn't have a SIGINT, so we just let electron die, which
@@ -426,6 +429,19 @@ async function appMain() {
         electronApp.quit();
         return;
     }
+    // When a user tries to launch WAVE again, bring the existing window to the foreground
+    // instead of silently doing nothing (which looks like a crash).
+    electronApp.on("second-instance", () => {
+        const selectedWindow = focusedWaveWindow;
+        const firstWaveWindow = getAllWaveWindows()[0];
+        if (selectedWindow) {
+            selectedWindow.focus();
+        } else if (firstWaveWindow) {
+            firstWaveWindow.focus();
+        } else {
+            fireAndForget(createNewWaveWindow);
+        }
+    });
     try {
         await runWaveSrv(handleWSEvent);
     } catch (e) {
@@ -436,6 +452,14 @@ async function appMain() {
     await electronApp.whenReady();
     configureAuthKeyRequestInjection(electron.session.defaultSession);
     initIpcHandlers();
+
+    // Start built-in local TTS service in the background on Windows.
+    // Keep startup responsive and avoid any visible startup jank tied to local TTS initialization.
+    setTimeout(() => {
+        fireAndForget(async () => {
+            await startBuiltinLocalTtsServers();
+        });
+    }, 500);
 
     await sleep(10); // wait a bit for wavesrv to be ready
     try {

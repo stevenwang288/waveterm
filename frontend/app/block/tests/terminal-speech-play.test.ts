@@ -174,6 +174,24 @@ describe("speakLatestTerminalFormalReply", () => {
         expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
     });
 
+    it("never speaks Codex MCP server startup status lines in Chinese", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["• 正在启动 MCP 服务器（1/4）：mcp-deepwiki，openaiDeveloperDocs，sequential-thinking"],
+            lastupdated: 226,
+        } as CommandTermGetScrollbackLinesRtnData);
+
+        const onError = vi.fn();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-mcp-startup-zh",
+            speechSettings: makeSettings(),
+            onError,
+        });
+
+        expect(ok).toBe(false);
+        expect(speechPlay).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
+    });
+
     it("does not include Codex Ctrl+C/ESC hints in the spoken assistant reply segment", async () => {
         termGetScrollback.mockResolvedValueOnce({
             lines: [

@@ -66,6 +66,9 @@ describe("speechRuntime race handling", () => {
     const originalAudio = globalThis.Audio as any;
     const originalCreateObjectURL = URL.createObjectURL;
     const originalRevokeObjectURL = URL.revokeObjectURL;
+    let originalWindowApi: any;
+
+    const getSpeechLogMock = () => (globalThis as any).window?.api?.speechLog as ReturnType<typeof vi.fn>;
 
     beforeEach(async () => {
         MockAudio.instances = [];
@@ -74,6 +77,15 @@ describe("speechRuntime race handling", () => {
         globalThis.Audio = MockAudio as any;
         URL.createObjectURL = vi.fn(() => `blob:mock-${nextBlobId++}`);
         URL.revokeObjectURL = vi.fn();
+        const globalAny = globalThis as any;
+        originalWindowApi = globalAny.window?.api;
+        if (!globalAny.window) {
+            globalAny.window = {};
+        }
+        globalAny.window.api = {
+            ...(originalWindowApi ?? {}),
+            speechLog: vi.fn(async () => true),
+        };
 
         const { speechRuntime } = await import("@/app/aipanel/speechruntime");
         speechRuntime.stop();
@@ -85,6 +97,10 @@ describe("speechRuntime race handling", () => {
         globalThis.Audio = originalAudio;
         URL.createObjectURL = originalCreateObjectURL;
         URL.revokeObjectURL = originalRevokeObjectURL;
+        const globalAny = globalThis as any;
+        if (globalAny.window) {
+            globalAny.window.api = originalWindowApi;
+        }
         vi.clearAllMocks();
     });
 
@@ -180,5 +196,44 @@ describe("speechRuntime race handling", () => {
 
         unsubA();
         unsubB();
+    });
+
+    it("logs spoken chunks and completion for api transport", async () => {
+        const { speechRuntime } = await import("@/app/aipanel/speechruntime");
+        const settings = makeSettings();
+        const onError = vi.fn();
+
+        const started = await speechRuntime.play("  assistant reply  ", settings, "assistant", onError);
+        expect(started).toBe(true);
+
+        const speechLog = getSpeechLogMock();
+        expect(speechLog).toHaveBeenCalled();
+        const payloads = speechLog.mock.calls.map((call) => call[0]);
+        expect(payloads.some((payload) => payload?.event === "start")).toBe(true);
+        expect(
+            payloads.some(
+                (payload) => payload?.event === "chunk" && payload?.chunkIndex === 0 && payload?.text === "assistant reply"
+            )
+        ).toBe(true);
+
+        MockAudio.instances[0]?.onended?.();
+        const postEndPayloads = speechLog.mock.calls.map((call) => call[0]);
+        expect(postEndPayloads.some((payload) => payload?.event === "end")).toBe(true);
+        expect(onError).not.toHaveBeenCalled();
+    });
+
+    it("logs speech-error when non-benign playback failure occurs", async () => {
+        const { speechRuntime } = await import("@/app/aipanel/speechruntime");
+        const settings = makeSettings();
+        const onError = vi.fn();
+        MockAudio.nextPlayError = new Error("network failure");
+
+        const started = await speechRuntime.play("assistant reply", settings, "assistant", onError);
+
+        expect(started).toBe(false);
+        expect(onError).toHaveBeenCalled();
+        const speechLog = getSpeechLogMock();
+        const payloads = speechLog.mock.calls.map((call) => call[0]);
+        expect(payloads.some((payload) => payload?.event === "error")).toBe(true);
     });
 });

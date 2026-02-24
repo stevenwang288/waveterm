@@ -148,6 +148,21 @@ declare global {
             headers: Record<string, string>;
             bodyBase64: string;
         }>; // speech-request
+        speechLog: (entry: {
+            event: string;
+            transport?: string;
+            role?: string;
+            ownerId?: string;
+            playId?: number;
+            chunkIndex?: number;
+            chunkCount?: number;
+            text?: string;
+            endpoint?: string;
+            model?: string;
+            voice?: string;
+            error?: string;
+            ts?: number;
+        }) => Promise<boolean>; // speech-log
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh

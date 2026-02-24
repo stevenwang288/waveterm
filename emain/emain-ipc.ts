@@ -28,6 +28,7 @@ import { handleCtrlShiftState } from "./emain-util";
 import { getWaveVersion } from "./emain-wavesrv";
 import { createNewWaveWindow, focusedWaveWindow, getWaveWindowByWebContentsId } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
+import { synthesizeSpeechToWavBase64 } from "./local-tts-win";
 
 const electronApp = electron.app;
 
@@ -127,6 +128,50 @@ type SpeechRequestResult = {
     bodyBase64: string;
 };
 
+type SpeechLogData = {
+    event?: string;
+    transport?: string;
+    role?: string;
+    ownerId?: string;
+    playId?: number;
+    chunkIndex?: number;
+    chunkCount?: number;
+    text?: string;
+    endpoint?: string;
+    model?: string;
+    voice?: string;
+    error?: string;
+    ts?: number;
+};
+
+const MaxSpeechLogTextLength = 20000;
+
+function clampSpeechLogText(value: unknown): string {
+    const text = typeof value === "string" ? value : String(value ?? "");
+    if (text.length <= MaxSpeechLogTextLength) {
+        return text;
+    }
+    return `${text.slice(0, MaxSpeechLogTextLength)}…[truncated ${text.length - MaxSpeechLogTextLength} chars]`;
+}
+
+function normalizeSpeechLogData(entry: SpeechLogData): Record<string, string | number | null> {
+    return {
+        event: clampSpeechLogText(entry?.event || "unknown"),
+        transport: clampSpeechLogText(entry?.transport || ""),
+        role: clampSpeechLogText(entry?.role || ""),
+        ownerId: clampSpeechLogText(entry?.ownerId || ""),
+        playId: Number.isFinite(entry?.playId) ? Number(entry.playId) : null,
+        chunkIndex: Number.isFinite(entry?.chunkIndex) ? Number(entry.chunkIndex) : null,
+        chunkCount: Number.isFinite(entry?.chunkCount) ? Number(entry.chunkCount) : null,
+        text: clampSpeechLogText(entry?.text || ""),
+        endpoint: clampSpeechLogText(entry?.endpoint || ""),
+        model: clampSpeechLogText(entry?.model || ""),
+        voice: clampSpeechLogText(entry?.voice || ""),
+        error: clampSpeechLogText(entry?.error || ""),
+        ts: Number.isFinite(entry?.ts) ? Number(entry.ts) : Date.now(),
+    };
+}
+
 function getSingleHeaderVal(headers: Record<string, string | string[]>, key: string): string {
     const val = headers[key];
     if (val == null) {
@@ -208,19 +253,60 @@ function getUrlInSession(session: Electron.Session, url: string): Promise<UrlInS
     });
 }
 
-function runSpeechRequestInMain(req: SpeechRequestData): Promise<SpeechRequestResult> {
+function isBuiltinLocalSpeechCandidate(requestUrl: URL): boolean {
+    if (process.platform !== "win32") {
+        return false;
+    }
+    if (!requestUrl) {
+        return false;
+    }
+    if (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") {
+        return false;
+    }
+    const host = requestUrl.hostname.toLowerCase();
+    if (host !== "127.0.0.1" && host !== "localhost") {
+        return false;
+    }
+    const port = requestUrl.port || (requestUrl.protocol === "https:" ? "443" : "80");
+    if (port !== "5050" && port !== "5051") {
+        return false;
+    }
+    return requestUrl.pathname.toLowerCase() === "/v1/audio/speech";
+}
+
+function parseLocalSpeechPayload(body: unknown): { input: string; voice?: string; speed?: number } {
+    if (typeof body !== "string" || !body.trim()) {
+        return { input: "" };
+    }
+    try {
+        const parsed = JSON.parse(body) as any;
+        return {
+            input: typeof parsed?.input === "string" ? parsed.input : "",
+            voice: typeof parsed?.voice === "string" ? parsed.voice : undefined,
+            speed: typeof parsed?.speed === "number" ? parsed.speed : undefined,
+        };
+    } catch {
+        return { input: "" };
+    }
+}
+
+async function runBuiltinLocalSpeechRequest(req: SpeechRequestData): Promise<SpeechRequestResult> {
+    const payload = parseLocalSpeechPayload(req?.body);
+    const audioBase64 = await synthesizeSpeechToWavBase64({
+        input: payload.input,
+        voice: payload.voice,
+        speed: payload.speed,
+    });
+    return {
+        status: 200,
+        statusText: "OK",
+        headers: { "content-type": "audio/wav" },
+        bodyBase64: audioBase64,
+    };
+}
+
+function runNetSpeechRequest(req: SpeechRequestData, requestUrl: URL): Promise<SpeechRequestResult> {
     return new Promise((resolve, reject) => {
-        if (!req?.url) {
-            reject(new Error("Missing speech request url."));
-            return;
-        }
-        let requestUrl: URL;
-        try {
-            requestUrl = new URL(req.url);
-        } catch {
-            reject(new Error("Invalid speech request url."));
-            return;
-        }
         const netRequest = electron.net.request({
             url: requestUrl.toString(),
             method: req.method?.toUpperCase() || "POST",
@@ -265,6 +351,46 @@ function runSpeechRequestInMain(req: SpeechRequestData): Promise<SpeechRequestRe
         }
         netRequest.end();
     });
+}
+
+async function runSpeechRequestInMain(req: SpeechRequestData): Promise<SpeechRequestResult> {
+    if (!req?.url) {
+        throw new Error("Missing speech request url.");
+    }
+    let requestUrl: URL;
+    try {
+        requestUrl = new URL(req.url);
+    } catch {
+        throw new Error("Invalid speech request url.");
+    }
+
+    const allowBuiltinLocalFallback = isBuiltinLocalSpeechCandidate(requestUrl);
+    try {
+        const result = await runNetSpeechRequest(req, requestUrl);
+        if (!allowBuiltinLocalFallback) {
+            return result;
+        }
+
+        const contentType = (result.headers?.["content-type"] ?? "").toLowerCase();
+        const status = Number(result.status ?? 0);
+        const bodyOk = typeof result.bodyBase64 === "string" && result.bodyBase64.length > 0;
+        const isAudio =
+            contentType.includes("audio/") ||
+            contentType.includes("application/octet-stream") ||
+            contentType.includes("binary/octet-stream");
+        const looksLikeJson = contentType.includes("application/json");
+        const ok = status >= 200 && status < 300;
+
+        if (ok && isAudio && bodyOk && !looksLikeJson) {
+            return result;
+        }
+        return await runBuiltinLocalSpeechRequest(req);
+    } catch (e) {
+        if (!allowBuiltinLocalFallback) {
+            throw e;
+        }
+        return await runBuiltinLocalSpeechRequest(req);
+    }
 }
 
 function saveImageFileWithNativeDialog(defaultFileName: string, mimeType: string, readStream: Readable) {
@@ -694,6 +820,12 @@ export function initIpcHandlers() {
 
     electron.ipcMain.handle("speech-request", async (_event, req: SpeechRequestData) => {
         return await runSpeechRequestInMain(req);
+    });
+
+    electron.ipcMain.handle("speech-log", async (_event, entry: SpeechLogData) => {
+        const normalized = normalizeSpeechLogData(entry ?? {});
+        console.log("speech-log", JSON.stringify(normalized));
+        return true;
     });
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {

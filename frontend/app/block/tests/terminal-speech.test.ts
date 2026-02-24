@@ -156,8 +156,25 @@ describe("extractLatestTerminalFormalReply", () => {
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
     });
 
+    it("ignores standalone elapsed esc-interrupt status lines", () => {
+        const lines = ["› 你好", "• 这是最终正式回复", "(3m 23s  esc 中断)", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe(
+            "这是最终正式回复"
+        );
+    });
+
+    it("ignores codex working status lines with zh esc-interrupt hint", () => {
+        const lines = ["› 你好", "• Working (3m 23s  esc 中断)", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
+    });
+
     it("ignores Codex MCP server startup status lines", () => {
         const lines = ["› 你好", "Starting MCP servers (1/3): mcp-deepwiki, sequential-thinking", "› "];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
+    });
+
+    it("ignores Codex MCP server startup status lines in Chinese", () => {
+        const lines = ["› 你好", "• 正在启动 MCP 服务器（1/4）：mcp-deepwiki，openaiDeveloperDocs，sequential-thinking", "› "];
         expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("");
     });
 

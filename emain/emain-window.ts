@@ -892,15 +892,18 @@ export async function createNewWaveWindow() {
 export async function relaunchBrowserWindows() {
     console.log("relaunchBrowserWindows");
     setGlobalIsRelaunching(true);
-    const windows = getAllWaveWindows();
-    if (windows.length > 0) {
-        for (const window of windows) {
-            console.log("relaunch -- closing window", window.waveWindowId);
-            window.close();
+    try {
+        const windows = getAllWaveWindows();
+        if (windows.length > 0) {
+            for (const window of windows) {
+                console.log("relaunch -- closing window", window.waveWindowId);
+                window.close();
+            }
+            await delay(1200);
         }
-        await delay(1200);
+    } finally {
+        setGlobalIsRelaunching(false);
     }
-    setGlobalIsRelaunching(false);
 
     const clientData = await ClientService.GetClientData();
     const fullConfig = await RpcApi.GetFullConfigCommand(ElectronWshClient);
@@ -909,26 +912,41 @@ export async function relaunchBrowserWindows() {
     const isFirstRelaunch = !hasCompletedFirstRelaunch;
     const primaryWindowId = windowIds.length > 0 ? windowIds[0] : null;
     for (const windowId of windowIds.slice().reverse()) {
-        const windowData: WaveWindow = await WindowService.GetWindow(windowId);
-        if (windowData == null) {
-            console.log("relaunch -- window data not found, closing window", windowId);
-            await WindowService.CloseWindow(windowId, true);
-            continue;
+        try {
+            const windowData: WaveWindow = await WindowService.GetWindow(windowId);
+            if (windowData == null) {
+                console.log("relaunch -- window data not found, closing window", windowId);
+                await WindowService.CloseWindow(windowId, true);
+                continue;
+            }
+            const isPrimaryStartupWindow = isFirstRelaunch && windowId === primaryWindowId;
+            console.log(
+                "relaunch -- creating window",
+                windowId,
+                windowData,
+                isPrimaryStartupWindow ? "(primary startup)" : ""
+            );
+            const win = await createBrowserWindow(windowData, fullConfig, {
+                unamePlatform,
+                isPrimaryStartupWindow,
+                foregroundWindow: windowId === primaryWindowId,
+            });
+            wins.push(win);
+        } catch (error) {
+            console.log("relaunch -- error restoring window", windowId, serializeErrorForLog(error));
         }
-        const isPrimaryStartupWindow = isFirstRelaunch && windowId === primaryWindowId;
-        console.log(
-            "relaunch -- creating window",
-            windowId,
-            windowData,
-            isPrimaryStartupWindow ? "(primary startup)" : ""
-        );
-        const win = await createBrowserWindow(windowData, fullConfig, {
-            unamePlatform,
-            isPrimaryStartupWindow,
-            foregroundWindow: windowId === primaryWindowId,
-        });
-        wins.push(win);
     }
+
+    if (wins.length === 0) {
+        console.log("relaunch -- no windows restored, creating fallback window");
+        const fallbackWindow = await createBrowserWindow(null, fullConfig, {
+            unamePlatform,
+            isPrimaryStartupWindow: isFirstRelaunch,
+            foregroundWindow: true,
+        });
+        wins.push(fallbackWindow);
+    }
+
     hasCompletedFirstRelaunch = true;
     for (const win of wins) {
         console.log("show window", win.waveWindowId);

@@ -13,13 +13,21 @@ const NodeDeprecationWarningPattern = /^\s*\(node:\d+\)\s+\[dep\d+\]/i;
 const NodeTraceHintPattern = /^\s*\(use `node --trace-deprecation[^)]*\)\s*$/i;
 const CodexToolCallIntroPattern = /^(called|calling)\b/i;
 const CodexToolCallLinePattern = /^\s*[•●]?\s*(called|calling)\b/i;
+// Codex TUI uses "• ..." for many non-assistant, non-final lines (exec/tool/status UI).
+// These should never be spoken as the "final formal reply".
+const CodexMetaBulletLinePattern =
+    /^\s*[•●]?\s*(?:Ran|Exploring|Explored|Searched|Updated Plan|Updated|Added|Deleted)\b/i;
 const CodexWorkingStatusLinePattern = /^\s*[•●]?\s*working\b.*\besc\s+to\s+interrupt\b.*$/i;
 const CodexWorkingLinePattern = /^\s*[•●]?\s*working\b/i;
-const CodexMcpServerStatusLinePattern = /^\s*(?:starting|stopping|restarting)\s+mcp\s+servers?\b/i;
+const CodexMcpServerStatusLinePattern =
+    /^\s*(?:(?:starting|stopping|restarting|checking)\s+mcp\s+servers?\b|(?:正在)?(?:启动|停止|重启|检测|检查|自检)\s*mcp\s*服务器(?:$|[\s（(：:，,]))/i;
 const CodexInferenceFooterPattern =
     /^\s*[─━—–-]*\s*(?:inference|推理)[:：]\s*\d+.*(?:call(?:s)?|次(?:调用)?|调用).*(?:streams?|流)[:：]\s*\d+.*(?:events?|事件)\b.*$/i;
 const CodexBottomStatusLinePattern =
     /^\s*(?:gpt-[\w.-]+|o\d(?:-[\w.-]+)?|claude[\w.-]*|gemini[\w.-]*|qwen[\w.-]*|deepseek[\w.-]*)\b.*[•·]\s*\d+%\s+left\b.*$/i;
+const CodexEscInterruptHintPattern = /\besc\b.*(?:interrupt|中断|打断)\b/i;
+const CodexElapsedEscInterruptLinePattern =
+    /^\s*[（(]?\s*(?:(?:\d+\s*[hms]\s*){1,4}|\d+\s*[:：]\s*\d+(?:\s*[:：]\s*\d+)?)\s*\besc\b.*(?:interrupt|中断|打断)\s*[）)]?\s*$/i;
 const LeadingStatusDecorationPattern = /^[\s•●◦∙·\u2800-\u28ff|\/\\]+/u;
 const TerminalBoxLinePattern = /^\s*[│┃╭╮╰╯├┤┬┴┼─━╶╴╷╵]+\s*.*$/;
 const TerminalSeparatorPattern = /^\s*[─━]{10,}\s*$/;
@@ -69,6 +77,10 @@ function isTerminalStatusNoiseLine(line: string): boolean {
     if (TerminalBoxLinePattern.test(line) || TerminalSeparatorPattern.test(line)) {
         return true;
     }
+    // Codex "meta" bullet rows: exec summaries, search summaries, plan updates, patch summaries.
+    if (CodexMetaBulletLinePattern.test(stripped)) {
+        return true;
+    }
     // Codex working/progress status lines should never be spoken (not a formal reply).
     if (
         CodexWorkingLinePattern.test(line) ||
@@ -90,8 +102,12 @@ function isTerminalStatusNoiseLine(line: string): boolean {
     if (CodexBottomStatusLinePattern.test(stripped)) {
         return true;
     }
-    // Codex progress/status lines often include "esc to interrupt" and should never be spoken.
-    if (lowered.includes("esc to interrupt")) {
+    // Codex progress/status lines often include interrupt hints and should never be spoken.
+    if (
+        lowered.includes("esc to interrupt") ||
+        CodexEscInterruptHintPattern.test(stripped) ||
+        CodexElapsedEscInterruptLinePattern.test(stripped)
+    ) {
         return true;
     }
     if (CodexBrandLinePattern.test(line) || CodexModelLinePattern.test(line) || CodexDirectoryLinePattern.test(line)) {
@@ -235,7 +251,7 @@ function buildPlainReplyFromSegment(lines: string[]): string {
 function extractLatestCodexBulletReply(lines: string[], requirePromptAfterReply: boolean): string {
     let latestReplyIdx = -1;
     for (let idx = lines.length - 1; idx >= 0; idx--) {
-        if (isCodexAssistantReplyLine(lines[idx])) {
+        if (isCodexAssistantReplyLine(lines[idx]) && !isTerminalStatusNoiseLine(lines[idx])) {
             latestReplyIdx = idx;
             break;
         }
