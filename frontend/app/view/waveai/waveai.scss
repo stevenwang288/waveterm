@@ -15,18 +15,13 @@
             margin-bottom: 0;
             height: 100%;
 
-            .chat-window {
-                flex-flow: column nowrap;
-                display: flex;
-                gap: 8px;
-
-                // This is the filler that will push the chat messages to the bottom until the chat window is full
-                .filler {
-                    flex: 1 1 auto;
-                }
-
-                .chat-msg-container {
+                .chat-window {
+                    flex-flow: column nowrap;
                     display: flex;
+                    gap: 8px;
+
+                    .chat-msg-container {
+                        display: flex;
                     gap: 8px;
                     .chat-msg {
                         margin: 10px 0;

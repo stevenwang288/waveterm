@@ -619,7 +619,6 @@ const ChatWindow = memo(
                 events={{ initialized: handleScrollbarInitialized, updated: handleScrollbarUpdated }}
             >
                 <div ref={chatWindowRef} className="chat-window" style={msgWidths}>
-                    <div className="filler"></div>
                     {splitMessages.map((chitem, idx) => (
                         <ChatItem key={idx} chatItemAtom={chitem} model={model} />
                     ))}

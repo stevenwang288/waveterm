@@ -8,7 +8,7 @@ import { globalEvents } from "emain/emain-events";
 import { sprintf } from "sprintf-js";
 import * as services from "../frontend/app/store/services";
 import { initElectronWshrpc, shutdownWshrpc } from "../frontend/app/store/wshrpcutil-base";
-import { fireAndForget, sleep } from "../frontend/util/util";
+import { fireAndForget, isBlank, sleep } from "../frontend/util/util";
 import { AuthKey, configureAuthKeyRequestInjection } from "./authkey";
 import {
     getActivityState,
@@ -64,6 +64,12 @@ let confirmQuit = true;
 
 const waveDataDir = getWaveDataDir();
 const waveConfigDir = getWaveConfigDir();
+const DEFAULT_TRUSTED_SELF_SIGNED_HTTPS_HOSTS = ["192.168.1.250", "192.168.1.250:8006"];
+const TRUSTED_SELF_SIGNED_CERT_ERROR_CODES = new Set([
+    "net::ERR_CERT_AUTHORITY_INVALID",
+    "net::ERR_CERT_COMMON_NAME_INVALID",
+    "net::ERR_CERT_INVALID",
+]);
 
 electron.nativeTheme.themeSource = "dark";
 
@@ -82,6 +88,64 @@ console.log(
 );
 if (isDev) {
     console.log("waveterm-app WAVETERM_DEV set");
+}
+
+function getTrustedSelfSignedHttpsHosts(): Set<string> {
+    const hosts = new Set<string>();
+    for (const host of DEFAULT_TRUSTED_SELF_SIGNED_HTTPS_HOSTS) {
+        const normalizedHost = String(host ?? "").trim().toLowerCase();
+        if (!isBlank(normalizedHost)) {
+            hosts.add(normalizedHost);
+        }
+    }
+
+    const envValue = process.env.WAVETERM_TRUSTED_SELF_SIGNED_HOSTS ?? "";
+    if (!isBlank(envValue)) {
+        for (const rawHost of envValue.split(",")) {
+            const normalizedHost = rawHost.trim().toLowerCase();
+            if (!isBlank(normalizedHost)) {
+                hosts.add(normalizedHost);
+            }
+        }
+    }
+    return hosts;
+}
+
+function shouldAllowTrustedSelfSignedCert(urlText: string, errCode: string, trustedHosts: Set<string>): boolean {
+    if (isBlank(urlText) || trustedHosts.size === 0) {
+        return false;
+    }
+    const normalizedErrCode = String(errCode ?? "").trim();
+    if (!TRUSTED_SELF_SIGNED_CERT_ERROR_CODES.has(normalizedErrCode)) {
+        return false;
+    }
+    try {
+        const urlObj = new URL(urlText);
+        if (urlObj.protocol !== "https:") {
+            return false;
+        }
+        const host = String(urlObj.host ?? "").trim().toLowerCase();
+        const hostname = String(urlObj.hostname ?? "").trim().toLowerCase();
+        return trustedHosts.has(host) || trustedHosts.has(hostname);
+    } catch {
+        return false;
+    }
+}
+
+function configureTrustedSelfSignedCertificateBypass() {
+    const trustedHosts = getTrustedSelfSignedHttpsHosts();
+    if (trustedHosts.size === 0) {
+        return;
+    }
+    console.log("trusted self-signed https hosts enabled:", Array.from(trustedHosts));
+    electronApp.on("certificate-error", (event, _webContents, url, error, _certificate, callback) => {
+        if (shouldAllowTrustedSelfSignedCert(url, error, trustedHosts)) {
+            event.preventDefault();
+            callback(true);
+            return;
+        }
+        callback(false);
+    });
 }
 
 function handleWSEvent(evtMsg: WSEventType) {
@@ -450,6 +514,7 @@ async function appMain() {
     const ready = await getWaveSrvReady();
     console.log("wavesrv ready signal received", ready, Date.now() - startTs, "ms");
     await electronApp.whenReady();
+    configureTrustedSelfSignedCertificateBypass();
     configureAuthKeyRequestInjection(electron.session.defaultSession);
     initIpcHandlers();
 

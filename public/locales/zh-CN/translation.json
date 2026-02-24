@@ -119,6 +119,9 @@
     "layoutTitle": "布局 {{rows}}×{{cols}}",
     "addOnly": "仅加入预设",
     "addAndOpen": "加入并打开",
+    "pveWallName": "PVE",
+    "pveWallDesc": "一键打开 PVE 屏幕墙（2×5）",
+    "pveWallTitle": "打开 PVE 屏幕墙布局",
     "saveToSlot": "保存到 {{slot}}",
     "loadSlot": "加载 {{slot}}",
     "presets": {

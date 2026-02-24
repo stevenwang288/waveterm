@@ -11,7 +11,7 @@ import {
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getLayoutModelForStaticTab } from "@/layout/index";
-import { openCliLayoutInNewTab } from "@/util/clilayout";
+import { openCliLayoutInNewTab, openPveDashboardWallInNewTab } from "@/util/clilayout";
 import { base64ToString, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -340,6 +340,12 @@ const LayoutsPanel = memo(() => {
         [getFallbackFromFocus, openLayoutStateInNewTab, presetStates, t]
     );
 
+    const openPveWall = useCallback(() => {
+        fireAndForget(async () => {
+            await openPveDashboardWallInNewTab();
+        });
+    }, []);
+
     const saveCurrentLayout = useCallback(() => {
         fireAndForget(async () => {
             const snapshot = captureCurrentLayoutState();
@@ -459,6 +465,19 @@ const LayoutsPanel = memo(() => {
                         </div>
                     );
                 })}
+                <div
+                    className="mt-1 flex items-center px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer border border-cyan-500/20"
+                    onClick={openPveWall}
+                    title={t("clilayout.pveWallTitle")}
+                >
+                    <i className="fa fa-display mr-2 text-cyan-300" />
+                    <div className="flex-1 overflow-hidden">
+                        <div className="flex items-center">
+                            <span className="truncate font-medium">{t("clilayout.pveWallName")}</span>
+                        </div>
+                        <div className="text-[10px] text-secondary/80 truncate">{t("clilayout.pveWallDesc")}</div>
+                    </div>
+                </div>
             </div>
 
             <div className="px-3 pt-2 pb-1 text-xs text-secondary/80 uppercase tracking-wide">{t("clilayout.savedConfigs")}</div>

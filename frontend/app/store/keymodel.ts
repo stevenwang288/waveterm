@@ -697,6 +697,8 @@ function registerGlobalKeys() {
     globalKeyMap.set("Cmd:m", toggleMagnifyFocusedNode);
     if (isWindows()) {
         globalKeyMap.set("Ctrl:q", toggleMagnifyFocusedNode);
+        globalKeyMap.set("Cmd:q", toggleMagnifyFocusedNode);
+        globalKeyMap.set("Cmd:c{KeyQ}", toggleMagnifyFocusedNode);
     }
     globalKeyMap.set("Ctrl:Tab", () => {
         switchBlockByCycle(1);

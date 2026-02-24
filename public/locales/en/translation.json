@@ -119,6 +119,9 @@
     "layoutTitle": "Layout {{rows}}×{{cols}}",
     "addOnly": "Add to preset only",
     "addAndOpen": "Add and open",
+    "pveWallName": "PVE",
+    "pveWallDesc": "Open PVE dashboard wall (2×5)",
+    "pveWallTitle": "Open PVE dashboard wall layout",
     "saveToSlot": "Save to {{slot}}",
     "loadSlot": "Load {{slot}}",
     "presets": {

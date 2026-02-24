@@ -6,6 +6,18 @@ import { atoms, createBlockSplitHorizontally, createBlockSplitVertically, getApi
 import { ObjectService, WorkspaceService } from "@/store/services";
 import { fireAndForget, isBlank } from "@/util/util";
 
+export type CliLayoutSlot = {
+    type?: "term" | "web";
+    path?: string;
+    command?: string;
+    connection?: string;
+    url?: string;
+    hideNav?: boolean;
+    zoom?: number;
+    title?: string;
+    partition?: string;
+};
+
 export type CliLayoutState = {
     rows: number;
     cols: number;
@@ -14,6 +26,7 @@ export type CliLayoutState = {
     connection?: string;
     updatedTs?: number;
     name?: string;
+    slots?: CliLayoutSlot[];
 };
 
 type PendingCliLayout = {
@@ -25,6 +38,10 @@ type PendingCliLayout = {
 
 const PENDING_KEY_PREFIX = "waveterm:pending-cli-layout:";
 const PENDING_VERSION = 1 as const;
+const DEFAULT_PVE_TAB_NAME = "PVE";
+const DEFAULT_PVE_HOST = "192.168.1.250:8006";
+const DEFAULT_PVE_VMIDS = [100, 101, 110, 111, 112, 120, 130, 140, 160, 161];
+const DEFAULT_PVE_WEB_PARTITION = "persist:pve-wall";
 
 function makePendingKey(tabId: string): string {
     return `${PENDING_KEY_PREFIX}${tabId}`;
@@ -44,6 +61,37 @@ function normalizePath(path: string): string {
     }
     return trimmed.replace(/[\\/]+$/, "");
 }
+
+function normalizeConnectionName(connection?: string): string {
+    if (typeof connection !== "string") {
+        return "";
+    }
+    return connection.trim();
+}
+
+function normalizeZoom(zoom: unknown): number | undefined {
+    const next = Number(zoom);
+    if (!Number.isFinite(next)) {
+        return undefined;
+    }
+    return Math.max(0.25, Math.min(3, next));
+}
+
+type ResolvedLayoutSlot =
+    | {
+          type: "web";
+          url: string;
+          hideNav: boolean;
+          zoom?: number;
+          title?: string;
+          partition?: string;
+      }
+    | {
+          type: "term";
+          path: string;
+          command: string;
+          connection?: string;
+      };
 
 async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: string): Promise<void> {
     if (state == null) {
@@ -88,7 +136,40 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
         const cmd = state.commands?.[index];
         return typeof cmd === "string" ? cmd.trim() : "";
     });
-    const effectiveConnection = !isBlank(state.connection) ? state.connection : fallbackConn;
+    const effectiveConnection = !isBlank(state.connection) ? normalizeConnectionName(state.connection) : fallbackConn;
+    const resolvedSlots: ResolvedLayoutSlot[] = Array.from({ length: totalSlots }, (_, index) => {
+        const rawSlot = state.slots?.[index];
+        const url = typeof rawSlot?.url === "string" ? rawSlot.url.trim() : "";
+        const rawType = rawSlot?.type;
+        const hasExplicitType = typeof rawType === "string" && !isBlank(rawType);
+        const normalizedType = rawType === "web" || (!hasExplicitType && !isBlank(url)) ? "web" : "term";
+        if (normalizedType === "web" && !isBlank(url)) {
+            const hideNav = rawSlot?.hideNav !== false;
+            const zoom = normalizeZoom(rawSlot?.zoom);
+            const title = typeof rawSlot?.title === "string" ? rawSlot.title.trim() : "";
+            const partition = typeof rawSlot?.partition === "string" ? rawSlot.partition.trim() : "";
+            return {
+                type: "web",
+                url,
+                hideNav,
+                zoom,
+                title: isBlank(title) ? undefined : title,
+                partition: isBlank(partition) ? undefined : partition,
+            };
+        }
+
+        const slotPath = normalizePath(rawSlot?.path ?? resolvedPaths[index]);
+        const slotCommand = typeof rawSlot?.command === "string" ? rawSlot.command.trim() : resolvedCommands[index];
+        const slotConnection = !isBlank(rawSlot?.connection)
+            ? normalizeConnectionName(rawSlot.connection)
+            : effectiveConnection;
+        return {
+            type: "term",
+            path: isBlank(slotPath) ? fallbackPath : slotPath,
+            command: slotCommand,
+            connection: isBlank(slotConnection) ? undefined : slotConnection,
+        };
+    });
 
     const leafOrder = globalStore.get(layoutModel.leafOrder) ?? [];
     const otherBlockIds = leafOrder
@@ -101,19 +182,41 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
         }
     }
 
-    const makeTermBlockDef = (index: number): BlockDef => {
+    const makeBlockDef = (index: number): BlockDef => {
+        const slot = resolvedSlots[index];
+        if (slot?.type === "web") {
+            const meta: Record<string, any> = {
+                view: "web",
+                url: slot.url,
+            };
+            if (slot.hideNav) {
+                meta["web:hidenav"] = true;
+            }
+            if (slot.zoom != null && Number.isFinite(slot.zoom) && slot.zoom !== 1) {
+                meta["web:zoom"] = slot.zoom;
+            }
+            if (!isBlank(slot.title)) {
+                meta["display:name"] = slot.title;
+            }
+            if (!isBlank(slot.partition)) {
+                meta["web:partition"] = slot.partition;
+            }
+            return { meta };
+        }
+
         const meta: Record<string, any> = {
             controller: "shell",
             view: "term",
         };
-        const cwd = resolvedPaths[index];
+        const cwd = slot?.type === "term" ? slot.path : resolvedPaths[index];
         if (!isBlank(cwd)) {
             meta["cmd:cwd"] = cwd;
         }
-        if (!isBlank(effectiveConnection)) {
-            meta.connection = effectiveConnection;
+        const connection = slot?.type === "term" ? slot.connection : effectiveConnection;
+        if (!isBlank(connection)) {
+            meta.connection = connection;
         }
-        const command = resolvedCommands[index];
+        const command = slot?.type === "term" ? slot.command : resolvedCommands[index];
         if (!isBlank(command)) {
             meta["term:autoCmd"] = command;
             meta["cmd:initscript"] = `${command}\n`;
@@ -121,13 +224,13 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
         return { meta };
     };
 
-    const firstBlockId = await replaceBlock(targetBlockId, makeTermBlockDef(0), true);
+    const firstBlockId = await replaceBlock(targetBlockId, makeBlockDef(0), true);
     const rowRootBlockIds: string[] = [firstBlockId];
     const createdBlockIds: string[] = [firstBlockId];
 
     for (let rowIndex = 1; rowIndex < rows; rowIndex++) {
         const pathIndex = rowIndex * cols;
-        const newRowRootId = await createBlockSplitVertically(makeTermBlockDef(pathIndex), rowRootBlockIds[rowIndex - 1], "after");
+        const newRowRootId = await createBlockSplitVertically(makeBlockDef(pathIndex), rowRootBlockIds[rowIndex - 1], "after");
         rowRootBlockIds.push(newRowRootId);
         createdBlockIds.push(newRowRootId);
     }
@@ -136,7 +239,7 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
         let rowAnchorBlockId = rowRootBlockIds[rowIndex];
         for (let colIndex = 1; colIndex < cols; colIndex++) {
             const pathIndex = rowIndex * cols + colIndex;
-            rowAnchorBlockId = await createBlockSplitHorizontally(makeTermBlockDef(pathIndex), rowAnchorBlockId, "after");
+            rowAnchorBlockId = await createBlockSplitHorizontally(makeBlockDef(pathIndex), rowAnchorBlockId, "after");
             createdBlockIds.push(rowAnchorBlockId);
         }
     }
@@ -198,6 +301,41 @@ export async function openCliLayoutInNewTab(state: CliLayoutState, tabName: stri
             cols: Number(state?.cols) || 1,
             paths: Array.isArray(state?.paths) ? state.paths : [],
             commands: Array.isArray(state?.commands) ? state.commands : [],
+            slots: Array.isArray(state?.slots)
+                ? state.slots.map((slot) => {
+                      if (slot == null || typeof slot !== "object") {
+                          return {};
+                      }
+                      const nextSlot: CliLayoutSlot = {
+                          type: slot.type === "web" ? "web" : "term",
+                      };
+                      if (typeof slot.path === "string") {
+                          nextSlot.path = slot.path;
+                      }
+                      if (typeof slot.command === "string") {
+                          nextSlot.command = slot.command;
+                      }
+                      if (typeof slot.connection === "string") {
+                          nextSlot.connection = slot.connection;
+                      }
+                      if (typeof slot.url === "string") {
+                          nextSlot.url = slot.url;
+                      }
+                      if (typeof slot.hideNav === "boolean") {
+                          nextSlot.hideNav = slot.hideNav;
+                      }
+                      if (slot.zoom != null) {
+                          nextSlot.zoom = normalizeZoom(slot.zoom);
+                      }
+                      if (typeof slot.title === "string") {
+                          nextSlot.title = slot.title;
+                      }
+                      if (typeof slot.partition === "string") {
+                          nextSlot.partition = slot.partition;
+                      }
+                      return nextSlot;
+                  })
+                : [],
         },
     };
     try {
@@ -207,6 +345,33 @@ export async function openCliLayoutInNewTab(state: CliLayoutState, tabName: stri
         return;
     }
     getApi().setActiveTab(newTabId);
+}
+
+function makePveVmConsoleUrl(vmid: number): string {
+    return `https://${DEFAULT_PVE_HOST}/#v1:0:=qemu%2F${vmid}:4:5::::8::`;
+}
+
+export async function openPveDashboardWallInNewTab(): Promise<void> {
+    const slots: CliLayoutSlot[] = DEFAULT_PVE_VMIDS.map((vmid) => ({
+        type: "web",
+        title: `VM ${vmid}`,
+        url: makePveVmConsoleUrl(vmid),
+        hideNav: true,
+        zoom: 0.9,
+        partition: DEFAULT_PVE_WEB_PARTITION,
+    }));
+    await openCliLayoutInNewTab(
+        {
+            rows: 2,
+            cols: 5,
+            paths: [],
+            commands: [],
+            slots,
+            updatedTs: Date.now(),
+        },
+        DEFAULT_PVE_TAB_NAME,
+        "pve-wall"
+    );
 }
 
 export function maybeApplyPendingCliLayout(tabId: string): void {

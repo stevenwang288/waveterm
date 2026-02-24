@@ -22,7 +22,7 @@ import {
 } from "./emain-activity";
 import { createBuilderWindow, getAllBuilderWindows, getBuilderWindowByWebContentsId } from "./emain-builder";
 import i18next from "./i18n-main";
-import { callWithOriginalXdgCurrentDesktopAsync, unamePlatform } from "./emain-platform";
+import { callWithOriginalXdgCurrentDesktopAsync, getWaveDataDir, unamePlatform } from "./emain-platform";
 import { getWaveTabViewByWebContentsId } from "./emain-tabview";
 import { handleCtrlShiftState } from "./emain-util";
 import { getWaveVersion } from "./emain-wavesrv";
@@ -145,6 +145,8 @@ type SpeechLogData = {
 };
 
 const MaxSpeechLogTextLength = 20000;
+const SpeechLogDirName = "logs";
+const SpeechLogFilePrefix = "tts-speech";
 
 function clampSpeechLogText(value: unknown): string {
     const text = typeof value === "string" ? value : String(value ?? "");
@@ -170,6 +172,26 @@ function normalizeSpeechLogData(entry: SpeechLogData): Record<string, string | n
         error: clampSpeechLogText(entry?.error || ""),
         ts: Number.isFinite(entry?.ts) ? Number(entry.ts) : Date.now(),
     };
+}
+
+function getSpeechLogFilePath(ts: number): string {
+    const date = new Date(ts);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const fileName = `${SpeechLogFilePrefix}-${yyyy}${mm}${dd}.ndjson`;
+    return path.join(getWaveDataDir(), SpeechLogDirName, fileName);
+}
+
+async function appendSpeechLogData(entry: Record<string, string | number | null>): Promise<void> {
+    try {
+        const ts = Number(entry.ts ?? Date.now());
+        const filePath = getSpeechLogFilePath(Number.isFinite(ts) ? ts : Date.now());
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.promises.appendFile(filePath, `${JSON.stringify(entry)}\n`, { encoding: "utf8" });
+    } catch (error) {
+        console.log("speech-log append failed", error instanceof Error ? error.message : String(error));
+    }
 }
 
 function getSingleHeaderVal(headers: Record<string, string | string[]>, key: string): string {
@@ -824,6 +846,7 @@ export function initIpcHandlers() {
 
     electron.ipcMain.handle("speech-log", async (_event, entry: SpeechLogData) => {
         const normalized = normalizeSpeechLogData(entry ?? {});
+        await appendSpeechLogData(normalized);
         console.log("speech-log", JSON.stringify(normalized));
         return true;
     });
