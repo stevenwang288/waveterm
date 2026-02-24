@@ -10,6 +10,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { shouldIncludeWidgetForWorkspace } from "@/app/workspace/widgetfilter";
 import { GitPanel } from "@/app/workspace/git-panel";
+import { openPveDashboardWallInNewTab } from "@/util/clilayout";
 import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
@@ -531,6 +532,12 @@ const Widgets = memo(() => {
         WorkspaceLayoutModel.getInstance().toggleSidePanelView("git");
     }, []);
 
+    const openPveWall = useCallback(() => {
+        fireAndForget(async () => {
+            await openPveDashboardWallInNewTab();
+        });
+    }, []);
+
     const normalizePathForScope = useCallback((pathValue: string): string => {
         const rawPath = typeof pathValue === "string" ? pathValue.trim() : "";
         if (!rawPath) {
@@ -669,7 +676,7 @@ const Widgets = memo(() => {
             newMode = "compact";
 
             // Calculate total widget count for supercompact check
-            const utilityWidgets = (isDev() || featureWaveAppBuilder) ? 6 : 5;
+            const utilityWidgets = (isDev() || featureWaveAppBuilder) ? 7 : 6;
             const totalWidgets = (widgets?.length || 0) + utilityWidgets;
             const minHeightPerWidget = 32;
             const requiredHeight = totalWidgets * minHeightPerWidget;
@@ -775,6 +782,19 @@ const Widgets = memo(() => {
                             <div
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={() => {
+                                    openPveWall();
+                                    setIsAppsOpen(false);
+                                }}
+                            >
+                                <Tooltip content={t("clilayout.pveWallTitle")} placement="right" disable={false}>
+                                    <div>
+                                        <i className={makeIconClass("display", true)}></i>
+                                    </div>
+                                </Tooltip>
+                            </div>
+                            <div
+                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                                onClick={() => {
                                     openClawXBlock(CLAWX_LOCAL_URL);
                                     setIsAppsOpen(false);
                                 }}
@@ -859,6 +879,26 @@ const Widgets = memo(() => {
                                     {mode === "normal" && (
                                         <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
                                             {t("workspace.git")}
+                                        </div>
+                                    )}
+                                </div>
+                            </Tooltip>
+                        </div>
+                        <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={() => {
+                                openPveWall();
+                                setIsAppsOpen(false);
+                            }}
+                        >
+                            <Tooltip content={t("clilayout.pveWallTitle")} placement="right" disable={false}>
+                                <div className="flex flex-col items-center w-full">
+                                    <div>
+                                        <i className={makeIconClass("display", true)}></i>
+                                    </div>
+                                    {mode === "normal" && (
+                                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                                            {t("clilayout.pveWallName")}
                                         </div>
                                     )}
                                 </div>
@@ -954,6 +994,12 @@ const Widgets = memo(() => {
                         <i className={makeIconClass("robot", true)}></i>
                     </div>
                     <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.ai")}</div>
+                </div>
+                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                    <div>
+                        <i className={makeIconClass("display", true)}></i>
+                    </div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("clilayout.pveWallName")}</div>
                 </div>
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>

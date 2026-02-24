@@ -122,6 +122,7 @@ const PVE_AUTOLOGIN_HOSTS_ENV = "WAVETERM_PVE_AUTOLOGIN_HOSTS";
 const PVE_AUTOLOGIN_JSON_ENV = "WAVETERM_PVE_AUTOLOGIN_JSON";
 const PVE_AUTOLOGIN_USERNAME_ENV = "WAVETERM_PVE_AUTOLOGIN_USERNAME";
 const PVE_AUTOLOGIN_PASSWORD_ENV = "WAVETERM_PVE_AUTOLOGIN_PASSWORD";
+const PVE_AUTO_OPEN_CONSOLE_ENV = "WAVETERM_PVE_AUTO_OPEN_CONSOLE";
 const PVE_AUTOLOGIN_DEFAULT_HOST = "default";
 
 function getEnvValue(name: string): string {
@@ -134,6 +135,52 @@ function getEnvValue(name: string): string {
 
 function normalizeHostToken(value: string): string {
     return String(value ?? "").trim().toLowerCase();
+}
+
+function isTruthyEnv(value: string): boolean {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function isFalsyEnv(value: string): boolean {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off";
+}
+
+function getSearchFlag(name: string): boolean | null {
+    try {
+        const value = String(new URLSearchParams(window.location?.search ?? "").get(name) ?? "").trim();
+        if (!value) {
+            return null;
+        }
+        if (isTruthyEnv(value)) {
+            return true;
+        }
+        if (isFalsyEnv(value)) {
+            return false;
+        }
+    } catch {
+        // ignore parse errors
+    }
+    return null;
+}
+
+function shouldAutoOpenPveConsole(): boolean {
+    const searchFlag = getSearchFlag("wave_pve_auto_console");
+    if (searchFlag != null) {
+        return searchFlag;
+    }
+    const envValue = getEnvValue(PVE_AUTO_OPEN_CONSOLE_ENV);
+    if (!envValue.trim()) {
+        return false;
+    }
+    if (isFalsyEnv(envValue)) {
+        return false;
+    }
+    if (isTruthyEnv(envValue)) {
+        return true;
+    }
+    return true;
 }
 
 function getPveAutoLoginHosts(): Set<string> {
@@ -212,6 +259,18 @@ function getHostForPveAutoLogin(): string {
 
 function isVisibleInput(elem: HTMLInputElement): boolean {
     if (!elem || elem.disabled || elem.readOnly) {
+        return false;
+    }
+    const rect = elem.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) {
+        return false;
+    }
+    const style = window.getComputedStyle(elem);
+    return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function isVisibleElement(elem: HTMLElement | null): boolean {
+    if (!elem) {
         return false;
     }
     const rect = elem.getBoundingClientRect();
@@ -304,6 +363,45 @@ function persistPveCredentials(host: string, username: string, password: string)
     }
 }
 
+function isPveVmPage(): boolean {
+    const hashText = String(window.location?.hash ?? "").toLowerCase();
+    return hashText.includes("qemu%2f");
+}
+
+function findPveConsoleTrigger(): HTMLElement | null {
+    const candidates = Array.from(document.querySelectorAll("button, a, div, span")) as HTMLElement[];
+    for (const elem of candidates) {
+        if (!isVisibleElement(elem)) {
+            continue;
+        }
+        const text = String(elem.textContent ?? "").replace(/\s+/g, "").toLowerCase();
+        if (!text) {
+            continue;
+        }
+        if (text.includes("控制台") || text.includes("console")) {
+            return elem;
+        }
+    }
+    return null;
+}
+
+function findPveNoVncMenuItem(): HTMLElement | null {
+    const candidates = Array.from(document.querySelectorAll("button, a, div, span")) as HTMLElement[];
+    for (const elem of candidates) {
+        if (!isVisibleElement(elem)) {
+            continue;
+        }
+        const text = String(elem.textContent ?? "").replace(/\s+/g, "").toLowerCase();
+        if (!text) {
+            continue;
+        }
+        if (text.includes("novnc") || text.includes("html5")) {
+            return elem;
+        }
+    }
+    return null;
+}
+
 function setupPveAutoLogin() {
     const host = getHostForPveAutoLogin();
     if (!host || !PVE_AUTOLOGIN_HOSTS.has(host)) {
@@ -324,6 +422,7 @@ function setupPveAutoLogin() {
     };
 
     let autoLoginTriggered = false;
+    let autoConsoleTriggered = false;
     const maybeAutoLogin = () => {
         const handles = findPveLoginFormHandles();
         if (!handles) {
@@ -364,11 +463,33 @@ function setupPveAutoLogin() {
         );
     };
 
+    const maybeAutoOpenConsole = () => {
+        if (!shouldAutoOpenPveConsole() || autoConsoleTriggered || !isPveVmPage()) {
+            return;
+        }
+        if (findPveLoginFormHandles()) {
+            return;
+        }
+        const consoleTrigger = findPveConsoleTrigger();
+        if (!consoleTrigger) {
+            return;
+        }
+        autoConsoleTriggered = true;
+        consoleTrigger.click();
+        setTimeout(() => {
+            const menuItem = findPveNoVncMenuItem();
+            if (menuItem) {
+                menuItem.click();
+            }
+        }, 180);
+    };
+
     document.addEventListener(
         "click",
         () => {
             setTimeout(() => {
                 tryPersistCurrentForm();
+                maybeAutoOpenConsole();
             }, 0);
         },
         true
@@ -379,6 +500,7 @@ function setupPveAutoLogin() {
             if (event.key === "Enter") {
                 setTimeout(() => {
                     tryPersistCurrentForm();
+                    maybeAutoOpenConsole();
                 }, 0);
             }
         },
@@ -387,11 +509,15 @@ function setupPveAutoLogin() {
 
     const observer = new MutationObserver(() => {
         maybeAutoLogin();
+        maybeAutoOpenConsole();
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     maybeAutoLogin();
+    maybeAutoOpenConsole();
     setTimeout(maybeAutoLogin, 500);
+    setTimeout(maybeAutoOpenConsole, 500);
     setTimeout(maybeAutoLogin, 1200);
+    setTimeout(maybeAutoOpenConsole, 1200);
 }
 
 if (document.readyState === "loading") {

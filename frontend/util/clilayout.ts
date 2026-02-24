@@ -347,15 +347,16 @@ export async function openCliLayoutInNewTab(state: CliLayoutState, tabName: stri
     getApi().setActiveTab(newTabId);
 }
 
-function makePveVmConsoleUrl(vmid: number): string {
-    return `https://${DEFAULT_PVE_HOST}/#v1:0:=qemu%2F${vmid}:4:5::::8::`;
+function makePveVmConsoleUrl(vmid: number, autoOpenConsole = false): string {
+    const query = autoOpenConsole ? "?wave_pve_auto_console=1" : "";
+    return `https://${DEFAULT_PVE_HOST}/${query}#v1:0:=qemu%2F${vmid}:4:5::::8::`;
 }
 
 export async function openPveDashboardWallInNewTab(): Promise<void> {
     const slots: CliLayoutSlot[] = DEFAULT_PVE_VMIDS.map((vmid) => ({
         type: "web",
         title: `VM ${vmid}`,
-        url: makePveVmConsoleUrl(vmid),
+        url: makePveVmConsoleUrl(vmid, vmid === 112),
         hideNav: true,
         zoom: 0.9,
         partition: DEFAULT_PVE_WEB_PARTITION,
