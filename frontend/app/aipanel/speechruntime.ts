@@ -2,11 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
-    canUseLocalSpeechSynthesis,
     chunkSpeechInput,
     requestOpenAICompatibleSpeechAudio,
-    speakLocally,
-    stopLocalSpeechSynthesis,
 } from "./aispeech";
 import { getSpeechVoiceForRole, ResolvedSpeechSettings, SpeechRole } from "./speechsettings";
 
@@ -141,73 +138,12 @@ class SpeechRuntime {
             });
         }
         this.playSeq += 1;
-        stopLocalSpeechSynthesis();
         if (this.apiAbort) {
             this.apiAbort.abort();
             this.apiAbort = null;
         }
         this.cleanupApiAudioResources();
         this.setActive(false);
-    }
-
-    private playWithBrowserSpeech(
-        text: string,
-        voiceName: string,
-        settings: ResolvedSpeechSettings,
-        onError: (message: string) => void,
-        playId: number,
-        logBase: SpeechLogBase
-    ): boolean {
-        if (!this.isCurrentPlay(playId)) {
-            return false;
-        }
-        if (!canUseLocalSpeechSynthesis()) {
-            this.logSpeech({
-                ...logBase,
-                event: "error",
-                error: "Speech synthesis is not available.",
-            });
-            onError("Speech synthesis is not available.");
-            return false;
-        }
-        return speakLocally(
-            text,
-            voiceName,
-            settings.rate,
-            {
-                onDone: () => {
-                    if (!this.isCurrentPlay(playId)) {
-                        return;
-                    }
-                    this.logSpeech({
-                        ...logBase,
-                        event: "end",
-                    });
-                    this.setActive(false);
-                },
-                onError: (errorMessage) => {
-                    if (!this.isCurrentPlay(playId)) {
-                        return;
-                    }
-                    if (!this.isBenignInterruption(errorMessage)) {
-                        this.logSpeech({
-                            ...logBase,
-                            event: "error",
-                            error: errorMessage,
-                        });
-                        onError(errorMessage);
-                    } else {
-                        this.logSpeech({
-                            ...logBase,
-                            event: "end",
-                            error: "interrupted",
-                        });
-                    }
-                    this.setActive(false);
-                },
-            },
-            settings.filterOptions
-        );
     }
 
     private isBenignInterruption(error: unknown): boolean {
@@ -271,27 +207,17 @@ class SpeechRuntime {
             voice: roleVoice,
         };
 
-        if (settings.transport === "browser") {
-            this.logSpeech({
-                ...logBase,
-                event: "start",
-                chunkCount: 1,
-                text: messageText,
-            });
-            this.logSpeech({
-                ...logBase,
-                event: "chunk",
-                chunkIndex: 0,
-                chunkCount: 1,
-                text: messageText,
-            });
-            const started = this.playWithBrowserSpeech(messageText, roleVoice, settings, onError, playId, logBase);
-            if (!started) {
-                if (this.isCurrentPlay(playId)) {
-                    this.setActive(false);
-                }
+        if (settings.transport !== "api") {
+            if (this.isCurrentPlay(playId)) {
+                this.setActive(false);
             }
-            return started;
+            this.logSpeech({
+                ...logBase,
+                event: "error",
+                error: `Unsupported speech transport: ${settings.transport}`,
+            });
+            onError(`Unsupported speech transport: ${settings.transport}`);
+            return false;
         }
 
         if (!settings.endpoint) {

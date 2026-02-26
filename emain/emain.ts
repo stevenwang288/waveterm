@@ -42,7 +42,6 @@ import {
 import { ensureHotSpareTab, setMaxTabCacheSize } from "./emain-tabview";
 import { getIsWaveSrvDead, getWaveSrvProc, getWaveSrvReady, runWaveSrv } from "./emain-wavesrv";
 import i18next from "./i18n-main";
-import { startBuiltinLocalTtsServers, stopBuiltinLocalTtsServers } from "./local-tts-server";
 import {
     createBrowserWindow,
     createNewWaveWindow,
@@ -355,8 +354,6 @@ electronApp.on("before-quit", (e) => {
         return;
     }
     setGlobalIsQuitting(true);
-    // Best-effort shutdown for the built-in local TTS servers.
-    void stopBuiltinLocalTtsServers();
     updater?.stop();
     if (unamePlatform == "win32") {
         // win32 doesn't have a SIGINT, so we just let electron die, which
@@ -496,12 +493,24 @@ async function appMain() {
     // When a user tries to launch WAVE again, bring the existing window to the foreground
     // instead of silently doing nothing (which looks like a crash).
     electronApp.on("second-instance", () => {
+        const bringToFront = (win: WaveBrowserWindow) => {
+            try {
+                win.show();
+            } catch (e) {
+                console.log("second-instance: failed to show window", e);
+            }
+            try {
+                win.focus();
+            } catch (e) {
+                console.log("second-instance: failed to focus window", e);
+            }
+        };
         const selectedWindow = focusedWaveWindow;
         const firstWaveWindow = getAllWaveWindows()[0];
         if (selectedWindow) {
-            selectedWindow.focus();
+            bringToFront(selectedWindow);
         } else if (firstWaveWindow) {
-            firstWaveWindow.focus();
+            bringToFront(firstWaveWindow);
         } else {
             fireAndForget(createNewWaveWindow);
         }
@@ -517,14 +526,6 @@ async function appMain() {
     configureTrustedSelfSignedCertificateBypass();
     configureAuthKeyRequestInjection(electron.session.defaultSession);
     initIpcHandlers();
-
-    // Start built-in local TTS service in the background on Windows.
-    // Keep startup responsive and avoid any visible startup jank tied to local TTS initialization.
-    setTimeout(() => {
-        fireAndForget(async () => {
-            await startBuiltinLocalTtsServers();
-        });
-    }, 500);
 
     await sleep(10); // wait a bit for wavesrv to be ready
     try {

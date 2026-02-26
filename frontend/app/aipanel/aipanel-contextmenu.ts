@@ -128,7 +128,7 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
     });
 
     const speechEnabled = globalStore.get(getSettingsKeyAtom("speech:enabled")) ?? true;
-    const speechProvider = globalStore.get(getSettingsKeyAtom("speech:provider")) ?? "local";
+    const speechProvider = "local";
     const speechEndpoint = globalStore.get(getSettingsKeyAtom("speech:endpoint")) ?? "";
     const speechModel = globalStore.get(getSettingsKeyAtom("speech:model")) ?? "";
     const speechVoice = globalStore.get(getSettingsKeyAtom("speech:voice")) ?? "";
@@ -183,21 +183,14 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
         {
             label: i18next.t("aipanel.speech.providerLocal", { defaultValue: "Use Local Voice" }),
             type: "checkbox",
-            checked: resolvedSpeech.provider === "local",
+            checked: true,
             click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, { "speech:provider": "local" });
+                RpcApi.SetConfigCommand(TabRpcClient, {
+                    "speech:provider": "local",
+                    "speech:localengine": "edge",
+                    "speech:model": "edge-tts",
+                });
             },
-        },
-        {
-            label: i18next.t("aipanel.speech.providerApi", { defaultValue: "Use API Voice" }),
-            type: "checkbox",
-            checked: resolvedSpeech.provider === "api",
-            click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, { "speech:provider": "api" });
-            },
-        },
-        {
-            type: "separator",
         },
         {
             label: i18next.t("aipanel.speech.autoPlay", { defaultValue: "Auto-play new replies" }),

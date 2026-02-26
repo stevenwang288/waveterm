@@ -187,16 +187,16 @@ export class WaveTabView extends WebContentsView {
             this.isWaveReady = true;
         });
         wcIdToWaveTabMap.set(this.webContents.id, this);
-        if (isDevVite) {
-            this.webContents.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html`);
-        } else {
-            this.webContents.loadFile(path.join(getElectronAppBasePath(), "frontend", "index.html"));
-        }
+
+        // Attach listeners before the initial navigation so we don't miss early failures.
         this.webContents.on("render-process-gone", (_event, details) => {
             logTabViewWebContentsEvent(this, "render-process-gone", {
                 reason: details?.reason,
                 exitCode: details?.exitCode,
             });
+        });
+        this.webContents.on("did-finish-load", () => {
+            logTabViewWebContentsEvent(this, "did-finish-load");
         });
         this.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
             logTabViewWebContentsEvent(this, "did-fail-load", {
@@ -240,6 +240,12 @@ export class WaveTabView extends WebContentsView {
             this.webContents.send("zoom-factor-change", this.webContents.getZoomFactor());
         });
         this.setBackgroundColor(computeBgColor(fullConfig));
+
+        if (isDevVite) {
+            this.webContents.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html`);
+        } else {
+            this.webContents.loadFile(path.join(getElectronAppBasePath(), "frontend", "index.html"));
+        }
     }
 
     get waveTabId(): string {
@@ -413,8 +419,11 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
     tabView.webContents.on("zoom-changed", (e) => {
         tabView.webContents.send("zoom-changed");
     });
-    tabView.webContents.setWindowOpenHandler(({ url, frameName }) => {
-        if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://")) {
+    tabView.webContents.setWindowOpenHandler(({ url, userGesture }) => {
+        // Only open external browsers on explicit user gestures. Some pages attempt to `window.open()` on load,
+        // which is disruptive (and can look like WAVE is "randomly launching Chrome").
+        const isExternalUrl = url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://");
+        if (userGesture && isExternalUrl) {
             console.log("openExternal fallback", url);
             shell.openExternal(url);
         }

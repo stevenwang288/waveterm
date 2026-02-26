@@ -210,8 +210,15 @@ async function main() {
             const url = req && typeof req.url === "string" ? req.url : "";
             const body = req && typeof req.body === "string" ? req.body : "";
             let input = null;
-            try { input = JSON.parse(body || "{}")?.input ?? null; } catch {}
-            window.__waveTtsSmoke.speechRequests.push({ ts: Date.now(), url, input, bodyLen: body.length });
+            let model = null;
+            let voice = null;
+            try {
+              const parsed = JSON.parse(body || "{}") || {};
+              input = parsed?.input ?? null;
+              model = parsed?.model ?? null;
+              voice = parsed?.voice ?? null;
+            } catch {}
+            window.__waveTtsSmoke.speechRequests.push({ ts: Date.now(), url, input, model, voice, bodyLen: body.length });
           } catch {}
           return await origReq(req);
         };
@@ -231,11 +238,20 @@ async function main() {
             const body = init && typeof init.body === "string" ? init.body : "";
             if (method.toUpperCase() === "POST" && /audio\/speech/i.test(url) && body) {
               let parsedInput = null;
-              try { parsedInput = JSON.parse(body || "{}")?.input ?? null; } catch {}
+              let parsedModel = null;
+              let parsedVoice = null;
+              try {
+                const parsed = JSON.parse(body || "{}") || {};
+                parsedInput = parsed?.input ?? null;
+                parsedModel = parsed?.model ?? null;
+                parsedVoice = parsed?.voice ?? null;
+              } catch {}
               window.__waveTtsSmoke.speechRequests.push({
                 ts: Date.now(),
                 url,
                 input: parsedInput,
+                model: parsedModel,
+                voice: parsedVoice,
                 bodyLen: body.length,
               });
             }
@@ -340,7 +356,8 @@ async function main() {
   return { ok: true };
 })()`);
 
-                // Turn on TERMINAL auto-play (local per-block toggle) by clicking the header chip.
+                // Validate terminal defaults and UI: auto-play should be ON by default,
+                // and the AI shell-integration sparkles indicator should not appear in the terminal header.
                 const enableAutoRes = await cdp.evaluate(String.raw`(() => {
   try {
     const termWrap = window.term;
@@ -352,16 +369,21 @@ async function main() {
     if (!root) {
       return { ok: false, error: "terminal block root not found", blockId };
     }
+
+    const sparklesCount = root.querySelectorAll('.block-frame-end-icons i[class*="sparkles"]').length;
+    if (sparklesCount > 0) {
+      return { ok: false, error: "unexpected sparkles icon in terminal header", blockId, sparklesCount };
+    }
     const btn = root.querySelector(".block-frame-speech-mode");
     if (!btn) {
       return { ok: false, error: "terminal speech-mode chip not found", blockId };
     }
-    const before = String(btn.textContent || "").trim();
-    const isAuto = before.includes("自动") || before.toUpperCase().includes("AUTO");
-    if (!isAuto && typeof btn.click === "function") {
-      btn.click();
+    const isAuto = btn.classList && btn.classList.contains("is-auto-on");
+    const beforeTitle = String(btn.getAttribute("title") || "").trim();
+    if (!isAuto) {
+      return { ok: false, error: "terminal autoplay is not enabled by default", blockId, beforeTitle, sparklesCount };
     }
-    return { ok: true, blockId, before, clicked: !isAuto };
+    return { ok: true, blockId, isAuto, disabled: !!btn.disabled, beforeTitle, sparklesCount };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
@@ -377,7 +399,7 @@ async function main() {
                     continue;
                 }
 
-                const chipDeadline = Date.now() + 8000;
+                const chipDeadline = Date.now() + 20000;
                 let chipState = null;
                 while (Date.now() < chipDeadline) {
                     chipState = await cdp.evaluate(String.raw`(() => {
@@ -386,31 +408,36 @@ async function main() {
     const blockId = termWrap?.blockId || "";
     const root = blockId ? document.querySelector('[data-blockid="' + blockId + '"]') : null;
     const btn = root ? root.querySelector(".block-frame-speech-mode") : null;
-    const text = btn ? String(btn.textContent || "").trim() : "";
-    return { ok: true, text };
+    const isAuto = !!btn && btn.classList && btn.classList.contains("is-auto-on");
+    const disabled = !!btn && !!btn.disabled;
+    const title = btn ? String(btn.getAttribute("title") || "").trim() : "";
+    return { ok: true, isAuto, disabled, title };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
 })()`);
-                    const chipText = String(chipState?.text || "");
-                    if (chipText.includes("自动") || chipText.toUpperCase().includes("AUTO")) {
+                    if (chipState?.isAuto && !chipState?.disabled) {
                         break;
                     }
                     await sleep(250);
                 }
 
-                const chipTextFinal = String(chipState?.text || "");
-                if (!(chipTextFinal.includes("自动") || chipTextFinal.toUpperCase().includes("AUTO"))) {
+                if (!chipState?.isAuto || chipState?.disabled) {
                     failures.push({
                         title: candidate.title,
                         url: candidate.url,
-                        error: "terminal autoplay chip did not switch to auto",
+                        error: chipState?.disabled
+                            ? "terminal autoplay chip stayed disabled (speech may be off)"
+                            : "terminal autoplay chip did not switch to auto",
                         details: { enableAutoRes, chipState },
                     });
                     continue;
                 }
 
-                // Terminal autoplay should NOT speak historical content immediately when you enable it.
+                // Give the terminal header a moment to establish an autoplay baseline once speech becomes enabled.
+                await sleep(300);
+
+                // Terminal autoplay should NOT speak historical content immediately at startup.
                 const quietDeadline = Date.now() + 2500;
                 let quietState = null;
                 while (Date.now() < quietDeadline) {
@@ -475,7 +502,14 @@ async function main() {
     }
 
     const expected = ${JSON.stringify(expectedText)};
-    const content = ["› smoke question", "• " + expected, "›"].join("\\r\\n") + "\\r\\n";
+    const content = [
+      "› smoke question",
+      "• " + expected,
+      // These transient Codex UI lines should never be spoken as part of the formal reply.
+      "Conversation interrupted - tell the model what to do differently.",
+      "Something went wrong? Hit /feedback to report the issue.",
+      "›",
+    ].join("\\r\\n") + "\\r\\n";
     const bytes = new TextEncoder().encode(content);
     let bin = "";
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -495,6 +529,22 @@ async function main() {
                     });
                     continue;
                 }
+
+                // TermWrap updates lastOutputTs before the xterm write completes. Nudge the output timestamp
+                // again after the write queue likely flushed so strict freshness checks don't race.
+                await sleep(900);
+                await cdp.evaluate(String.raw`(() => {
+  try {
+    const termWrap = window.term;
+    if (termWrap?.lastOutputTsAtom && window.globalStore?.set) {
+      window.globalStore.set(termWrap.lastOutputTsAtom, Date.now());
+      return { ok: true };
+    }
+    return { ok: false, error: "missing termWrap.lastOutputTsAtom or globalStore.set" };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+})()`);
 
                 // Wait for TTS hook to fire and validate the spoken text.
                 const ttsDeadline = Date.now() + 30000;
@@ -611,22 +661,31 @@ async function main() {
                 // Switch to Speech file entry (label is default "Speech" even under zh-CN).
                 const selectDeadline = Date.now() + 60000;
                 let selected = false;
+                let sidebarSample = null;
                 while (Date.now() < selectDeadline) {
                     const res = await cdp.evaluate(String.raw`(() => {
   const items = Array.from(document.querySelectorAll('div[class*="cursor-pointer"][class*="border-b"]'));
   const item = items.find((el) => {
     const name = el.querySelector('div[class*="whitespace-nowrap"]');
-    return name && (name.textContent || "").trim() === "Speech";
+    const label = name && (name.textContent || "").trim();
+    return label === "Speech" || label === "语音播报" || label === "语音";
   });
   if (item && typeof item.click === "function") {
     item.click();
     return { clicked: true };
   }
-  return { clicked: false };
+  const sample = items.slice(0, 20).map((el) => {
+    const name = el.querySelector('div[class*="whitespace-nowrap"]');
+    return (name && (name.textContent || "").trim()) || "";
+  });
+  return { clicked: false, sample };
 })()`);
                     if (res?.clicked) {
                         selected = true;
                         break;
+                    }
+                    if (res?.sample) {
+                        sidebarSample = res.sample;
                     }
                     await sleep(250);
                 }
@@ -635,9 +694,21 @@ async function main() {
                         title: candidate.title,
                         url: candidate.url,
                         error: "failed to select Speech config view",
+                        details: sidebarSample ? { sidebar: sidebarSample } : undefined,
                     });
                     continue;
                 }
+
+                // Clear previous calls so we only observe the settings test button click.
+                await cdp.evaluate(String.raw`(() => {
+  if (window.__waveTtsSmoke) {
+    window.__waveTtsSmoke.speechSynthesisCalls = [];
+    window.__waveTtsSmoke.audioPlayCalls = [];
+    window.__waveTtsSmoke.speechRequests = [];
+    window.__waveTtsSmoke.errors = [];
+  }
+  return { ok: true };
+})()`);
 
                 // Click the "播放测试" button.
                 const playDeadline = Date.now() + 60000;
@@ -678,11 +749,16 @@ async function main() {
                     state = await cdp.evaluate(String.raw`(() => ({
   speechSynthesisCalls: window.__waveTtsSmoke?.speechSynthesisCalls?.length || 0,
   audioPlayCalls: window.__waveTtsSmoke?.audioPlayCalls?.length || 0,
+  speechRequestCalls: window.__waveTtsSmoke?.speechRequests?.length || 0,
+  lastSpeechRequest: window.__waveTtsSmoke?.speechRequests?.slice(-1)?.[0] || null,
   lastSpeechSynthesisText: window.__waveTtsSmoke?.speechSynthesisCalls?.slice(-1)?.[0]?.text || null,
   lastAudioSrc: window.__waveTtsSmoke?.audioPlayCalls?.slice(-1)?.[0]?.src || null,
   hookErrors: window.__waveTtsSmoke?.errors || [],
 }))()`);
-                    const ok = (state?.speechSynthesisCalls || 0) > 0 || (state?.audioPlayCalls || 0) > 0;
+                    const ok =
+                        (state?.speechSynthesisCalls || 0) > 0 ||
+                        (state?.audioPlayCalls || 0) > 0 ||
+                        (state?.speechRequestCalls || 0) > 0;
                     if (ok) {
                         console.log(
                             JSON.stringify(

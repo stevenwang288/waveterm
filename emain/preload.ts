@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld("api", {
         headers?: Record<string, string>;
         body?: string;
     }) => ipcRenderer.invoke("speech-request", req),
+    getListeningPortOwner: (port: number) => ipcRenderer.invoke("get-listening-port-owner", port),
     speechLog: (entry: {
         event: string;
         transport?: string;

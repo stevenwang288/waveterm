@@ -3,6 +3,7 @@
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
+import { execSync } from "node:child_process";
 import { defineConfig } from "electron-vite";
 import { ViteImageOptimizer } from "vite-plugin-image-optimizer";
 import svgr from "vite-plugin-svgr";
@@ -11,6 +12,25 @@ import tsconfigPaths from "vite-tsconfig-paths";
 // from our electron build
 const CHROME = "chrome140";
 const NODE = "node22";
+
+type UiBuildInfo = {
+    commit: string;
+    dirty: boolean;
+    buildIso: string;
+};
+
+function getUiBuildInfo(): UiBuildInfo {
+    const buildIso = new Date().toISOString();
+    try {
+        const commit = execSync("git rev-parse --short HEAD", { encoding: "utf8", windowsHide: true }).trim();
+        const dirty = execSync("git status --porcelain=v1", { encoding: "utf8", windowsHide: true }).trim().length > 0;
+        return { commit, dirty, buildIso };
+    } catch {
+        return { commit: "", dirty: false, buildIso };
+    }
+}
+
+const uiBuildInfo = getUiBuildInfo();
 
 // for debugging
 // target is like -- path.resolve(__dirname, "frontend/app/workspace/workspace-layout-model.ts");
@@ -97,6 +117,9 @@ export default defineConfig({
         define: {
             "process.env.WS_NO_BUFFER_UTIL": "true",
             "process.env.WS_NO_UTF_8_VALIDATE": "true",
+            "process.env.WAVETERM_UI_COMMIT": JSON.stringify(uiBuildInfo.commit),
+            "process.env.WAVETERM_UI_DIRTY": JSON.stringify(uiBuildInfo.dirty ? "1" : "0"),
+            "process.env.WAVETERM_UI_BUILD_ISO": JSON.stringify(uiBuildInfo.buildIso),
         },
     },
     preload: {

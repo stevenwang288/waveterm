@@ -391,6 +391,11 @@ const AIPanelComponentInner = memo(() => {
     useEffect(() => {
         const prevStatus = prevStatusRef.current;
         prevStatusRef.current = status;
+        // Prevent speaking historical messages loaded during startup / initial chat restore.
+        // Autoplay should only happen for *new* assistant messages after the panel is ready.
+        if (!initialLoadDone) {
+            return;
+        }
         // Some providers may skip "streaming" (ready -> submitted -> ready). We still want to autoplay
         // when a new assistant message arrives and the final state is ready.
         if (!speechSettings.enabled || !speechSettings.autoPlay || status !== "ready" || prevStatus === "ready") {
@@ -428,7 +433,7 @@ const AIPanelComponentInner = memo(() => {
             },
             { ownerId: "aipanel" }
         );
-    }, [messages, model, speechSettings, status]);
+    }, [initialLoadDone, messages, model, speechSettings, status]);
 
     const handleKeyDown = (waveEvent: WaveKeyboardEvent): boolean => {
         if (checkKeyPressed(waveEvent, "Cmd:k")) {

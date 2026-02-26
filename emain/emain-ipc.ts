@@ -1,4 +1,4 @@
-// Copyright 2025, Command Line Inc.
+﻿// Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import * as electron from "electron";
@@ -28,7 +28,7 @@ import { handleCtrlShiftState } from "./emain-util";
 import { getWaveVersion } from "./emain-wavesrv";
 import { createNewWaveWindow, focusedWaveWindow, getWaveWindowByWebContentsId } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
-import { synthesizeSpeechToWavBase64 } from "./local-tts-win";
+import { synthesizeEdgeTtsToMp3Base64 } from "./local-tts-edge";
 
 const electronApp = electron.app;
 
@@ -153,7 +153,7 @@ function clampSpeechLogText(value: unknown): string {
     if (text.length <= MaxSpeechLogTextLength) {
         return text;
     }
-    return `${text.slice(0, MaxSpeechLogTextLength)}…[truncated ${text.length - MaxSpeechLogTextLength} chars]`;
+    return `${text.slice(0, MaxSpeechLogTextLength)}...[truncated ${text.length - MaxSpeechLogTextLength} chars]`;
 }
 
 function normalizeSpeechLogData(entry: SpeechLogData): Record<string, string | number | null> {
@@ -296,6 +296,127 @@ function isBuiltinLocalSpeechCandidate(requestUrl: URL): boolean {
     return requestUrl.pathname.toLowerCase() === "/v1/audio/speech";
 }
 
+function isBuiltinEdgeTtsCandidate(requestUrl: URL): boolean {
+    if (!requestUrl) {
+        return false;
+    }
+    if (requestUrl.protocol !== "wave:") {
+        return false;
+    }
+    if (requestUrl.hostname.toLowerCase() !== "edge-tts") {
+        return false;
+    }
+    return requestUrl.pathname.toLowerCase() === "/v1/audio/speech";
+}
+
+type WindowsListeningPortOwnerInfo = {
+    pid: number;
+    name?: string;
+    path?: string;
+    commandLine?: string;
+};
+
+function redactWindowsCommandLine(value: string): string {
+    const raw = (value ?? "").toString().trim();
+    if (!raw) {
+        return "";
+    }
+    let redacted = raw;
+    redacted = redacted.replace(
+        /\b(OPENAI_API_KEY|SENTRY_AUTH_TOKEN|TAVILY_API_KEY|EXA_API_KEY|API_KEY|AUTH_TOKEN|TOKEN|PASSWORD|SECRET)\s*=\s*([^\s"']+)/gi,
+        "$1=[REDACTED]"
+    );
+    redacted = redacted.replace(/(--(?:api-?key|auth-?token|token|password|secret|key)=)([^\s"']+)/gi, "$1[REDACTED]");
+    redacted = redacted.replace(
+        /(--(?:api-?key|auth-?token|token|password|secret|key)\s+)([^\s"']+)/gi,
+        "$1[REDACTED]"
+    );
+    const maxLen = 420;
+    if (redacted.length > maxLen) {
+        return `${redacted.slice(0, maxLen)}…`;
+    }
+    return redacted;
+}
+
+async function getWindowsListeningPortOwner(port: number): Promise<WindowsListeningPortOwnerInfo | null> {
+    if (process.platform !== "win32" || !Number.isFinite(port) || port <= 0) {
+        return null;
+    }
+    try {
+        const psScript = [
+            "$ErrorActionPreference = 'SilentlyContinue'",
+            `$port = ${Math.trunc(port)}`,
+            "$conn = Get-NetTCPConnection -State Listen -LocalPort $port | Select-Object -First 1",
+            "if (-not $conn) { return }",
+            "$pid = $conn.OwningProcess",
+            "if (-not $pid) { return }",
+            "$proc = Get-CimInstance Win32_Process -Filter (\"ProcessId=\" + $pid) | Select-Object -First 1 Name,ExecutablePath,CommandLine",
+            "$name = $null",
+            "$path = $null",
+            "$cmd = $null",
+            "if ($proc) { $name = $proc.Name; $path = $proc.ExecutablePath; $cmd = $proc.CommandLine }",
+            "$obj = [pscustomobject]@{ pid = [int]$pid; name = $name; path = $path; commandLine = $cmd }",
+            "$obj | ConvertTo-Json -Compress",
+        ].join("; ");
+        const { stdout } = await execFileAsync(
+            "powershell.exe",
+            ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", psScript],
+            {
+                windowsHide: true,
+                timeout: 3000,
+                maxBuffer: 1024 * 1024,
+            }
+        );
+        const raw = (stdout ?? "").toString().trim().replace(/^\uFEFF/, "");
+        if (!raw) {
+            return null;
+        }
+        const parsed = JSON.parse(raw) as any;
+        const pid = Number(parsed?.pid);
+        if (!Number.isFinite(pid) || pid <= 0) {
+            return null;
+        }
+        const name = typeof parsed?.name === "string" ? parsed.name.trim() : "";
+        const path = typeof parsed?.path === "string" ? parsed.path.trim() : "";
+        const commandLineRaw = typeof parsed?.commandLine === "string" ? parsed.commandLine.trim() : "";
+        const commandLine = commandLineRaw ? redactWindowsCommandLine(commandLineRaw) : "";
+        return {
+            pid: Math.trunc(pid),
+            name: name || undefined,
+            path: path || undefined,
+            commandLine: commandLine || undefined,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function formatWindowsListeningPortOwner(info: WindowsListeningPortOwnerInfo | null): string {
+    if (!info) {
+        return "";
+    }
+    const parts = [`PID=${info.pid}`];
+    if (info.name) {
+        parts.push(`name=${info.name}`);
+    }
+    if (info.path) {
+        parts.push(`path=${info.path}`);
+    }
+    if (info.commandLine) {
+        parts.push(`cmd=${info.commandLine}`);
+    }
+    return parts.join(", ");
+}
+
+function makeSpeechErrorResponse(status: number, statusText: string, message: string): SpeechRequestResult {
+    return {
+        status,
+        statusText,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+        bodyBase64: Buffer.from((message ?? "").toString(), "utf8").toString("base64"),
+    };
+}
+
 function parseLocalSpeechPayload(body: unknown): { input: string; voice?: string; speed?: number } {
     if (typeof body !== "string" || !body.trim()) {
         return { input: "" };
@@ -312,9 +433,9 @@ function parseLocalSpeechPayload(body: unknown): { input: string; voice?: string
     }
 }
 
-async function runBuiltinLocalSpeechRequest(req: SpeechRequestData): Promise<SpeechRequestResult> {
+async function runBuiltinEdgeSpeechRequest(req: SpeechRequestData): Promise<SpeechRequestResult> {
     const payload = parseLocalSpeechPayload(req?.body);
-    const audioBase64 = await synthesizeSpeechToWavBase64({
+    const audioBase64 = await synthesizeEdgeTtsToMp3Base64({
         input: payload.input,
         voice: payload.voice,
         speed: payload.speed,
@@ -322,7 +443,7 @@ async function runBuiltinLocalSpeechRequest(req: SpeechRequestData): Promise<Spe
     return {
         status: 200,
         statusText: "OK",
-        headers: { "content-type": "audio/wav" },
+        headers: { "content-type": "audio/mpeg" },
         bodyBase64: audioBase64,
     };
 }
@@ -377,42 +498,50 @@ function runNetSpeechRequest(req: SpeechRequestData, requestUrl: URL): Promise<S
 
 async function runSpeechRequestInMain(req: SpeechRequestData): Promise<SpeechRequestResult> {
     if (!req?.url) {
-        throw new Error("Missing speech request url.");
+        return makeSpeechErrorResponse(400, "Bad Request", "Missing speech request url.");
     }
     let requestUrl: URL;
     try {
         requestUrl = new URL(req.url);
     } catch {
-        throw new Error("Invalid speech request url.");
+        return makeSpeechErrorResponse(400, "Bad Request", "Invalid speech request url.");
     }
 
-    const allowBuiltinLocalFallback = isBuiltinLocalSpeechCandidate(requestUrl);
-    try {
-        const result = await runNetSpeechRequest(req, requestUrl);
-        if (!allowBuiltinLocalFallback) {
-            return result;
+    if (isBuiltinEdgeTtsCandidate(requestUrl)) {
+        try {
+            return await runBuiltinEdgeSpeechRequest(req);
+        } catch (e) {
+            const message =
+                `内置 Edge TTS 合成失败。` +
+                ` 原始错误：${e instanceof Error ? e.message : String(e)}`;
+            return makeSpeechErrorResponse(502, "Bad Gateway", message);
         }
-
-        const contentType = (result.headers?.["content-type"] ?? "").toLowerCase();
-        const status = Number(result.status ?? 0);
-        const bodyOk = typeof result.bodyBase64 === "string" && result.bodyBase64.length > 0;
-        const isAudio =
-            contentType.includes("audio/") ||
-            contentType.includes("application/octet-stream") ||
-            contentType.includes("binary/octet-stream");
-        const looksLikeJson = contentType.includes("application/json");
-        const ok = status >= 200 && status < 300;
-
-        if (ok && isAudio && bodyOk && !looksLikeJson) {
-            return result;
-        }
-        return await runBuiltinLocalSpeechRequest(req);
-    } catch (e) {
-        if (!allowBuiltinLocalFallback) {
-            throw e;
-        }
-        return await runBuiltinLocalSpeechRequest(req);
     }
+
+    // Edge-only: do not proxy external TTS endpoints (API or localhost sidecars).
+    // This removes accidental downgrade to low-quality fallback TTS and avoids port conflicts.
+    if (requestUrl.protocol === "http:" || requestUrl.protocol === "https:") {
+        // Special-case old configs pointing to 127.0.0.1:5050/5051 for better diagnostics.
+        if (isBuiltinLocalSpeechCandidate(requestUrl)) {
+            const port = Number(requestUrl.port || "0");
+            if (Number.isFinite(port) && port > 0) {
+                const owner = await getWindowsListeningPortOwner(port);
+                const formatted = formatWindowsListeningPortOwner(owner);
+                const message =
+                    `检测到旧版本地语音 Endpoint：${requestUrl.toString()}。` +
+                    (formatted ? ` 端口占用：${formatted}。` : "") +
+                    ` 当前版本只支持内置 Edge TTS（wave://edge-tts/v1/audio/speech），无需端口。`;
+                return makeSpeechErrorResponse(400, "Bad Request", message);
+            }
+        }
+        return makeSpeechErrorResponse(
+            400,
+            "Bad Request",
+            `当前版本只支持内置 Edge TTS（wave://edge-tts/v1/audio/speech），不支持外部 Endpoint：${requestUrl.toString()}`
+        );
+    }
+
+    return makeSpeechErrorResponse(400, "Bad Request", `Unsupported speech endpoint protocol: ${requestUrl.protocol}`);
 }
 
 function saveImageFileWithNativeDialog(defaultFileName: string, mimeType: string, readStream: Readable) {
@@ -641,8 +770,12 @@ async function runCodexTranslate(text: string): Promise<string> {
 }
 
 export function initIpcHandlers() {
+    const debugOpenExternal = process.env.WAVETERM_DEBUG_OPEN_EXTERNAL === "1";
     electron.ipcMain.on("open-external", (event, url) => {
         if (url && typeof url === "string") {
+            if (debugOpenExternal) {
+                console.log("openExternal", url);
+            }
             fireAndForget(() =>
                 callWithOriginalXdgCurrentDesktopAsync(() =>
                     electron.shell.openExternal(url).catch((err) => {
@@ -716,7 +849,14 @@ export function initIpcHandlers() {
     });
 
     electron.ipcMain.on("get-about-modal-details", (event) => {
-        event.returnValue = getWaveVersion() as AboutModalDetails;
+        const base = getWaveVersion() as AboutModalDetails;
+        event.returnValue = {
+            ...base,
+            uiCommit: (process.env.WAVETERM_UI_COMMIT ?? "").toString(),
+            uiBuildIso: (process.env.WAVETERM_UI_BUILD_ISO ?? "").toString(),
+            uiDirty: (process.env.WAVETERM_UI_DIRTY ?? "") === "1",
+            profile: (process.env.WAVETERM_PROFILE ?? "").toString(),
+        } as AboutModalDetails;
     });
 
     electron.ipcMain.on("get-zoom-factor", (event) => {
@@ -842,6 +982,14 @@ export function initIpcHandlers() {
 
     electron.ipcMain.handle("speech-request", async (_event, req: SpeechRequestData) => {
         return await runSpeechRequestInMain(req);
+    });
+
+    electron.ipcMain.handle("get-listening-port-owner", async (_event, port: number) => {
+        const normalized = Number(port);
+        if (!Number.isFinite(normalized) || normalized <= 0 || normalized > 65535) {
+            return null;
+        }
+        return await getWindowsListeningPortOwner(Math.trunc(normalized));
     });
 
     electron.ipcMain.handle("speech-log", async (_event, entry: SpeechLogData) => {

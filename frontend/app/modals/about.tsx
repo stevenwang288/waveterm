@@ -124,13 +124,26 @@ const AboutModal = ({}: AboutModalProps) => {
                     </div>
                 </div>
                 <div className="items-center gap-4 self-stretch w-full text-center">
-                    {t("about.clientVersion", {
-                        version: details.version,
-                        dev: isDev() ? "dev-" : "",
-                        buildTime: details.buildTime,
-                    })}
-                    <br />
-                    {t("about.updateChannel", { channel: updaterChannel })}
+                    <div>
+                        {t("about.clientVersion", {
+                            version: details.version,
+                            dev: isDev() ? "dev-" : "",
+                            buildTime: details.buildTime,
+                        })}
+                    </div>
+                    <div>{t("about.updateChannel", { channel: updaterChannel })}</div>
+                    {!!details.uiCommit && (
+                        <div className="text-xs text-secondary">
+                            {t("about.uiBuild", {
+                                commit: details.uiCommit,
+                                buildIso: details.uiBuildIso || "",
+                                dirty: details.uiDirty ? t("about.dirtySuffix") : "",
+                            })}
+                        </div>
+                    )}
+                    {!!details.profile && (
+                        <div className="text-xs text-secondary">{t("about.profile", { profile: details.profile })}</div>
+                    )}
                 </div>
                 <div className="flex items-start gap-[10px] self-stretch w-full text-center">
                     <a

@@ -148,6 +148,12 @@ declare global {
             headers: Record<string, string>;
             bodyBase64: string;
         }>; // speech-request
+        getListeningPortOwner: (port: number) => Promise<{
+            pid: number;
+            name?: string;
+            path?: string;
+            commandLine?: string;
+        } | null>; // get-listening-port-owner
         speechLog: (entry: {
             event: string;
             transport?: string;
@@ -407,6 +413,10 @@ declare global {
     interface AboutModalDetails {
         version: string;
         buildTime: number;
+        uiCommit?: string;
+        uiBuildIso?: string;
+        uiDirty?: boolean;
+        profile?: string;
     }
 
     interface GitRunResult {

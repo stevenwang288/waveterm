@@ -91,12 +91,20 @@ export function shNavHandler(event: Electron.Event<Electron.WebContentsWillNavig
         return;
     }
     event.preventDefault();
-    if (url.startsWith("https://") || url.startsWith("http://") || url.startsWith("file://")) {
-        console.log("open external, shNav", url);
-        electron.shell.openExternal(url);
-    } else {
-        console.log("navigation canceled", url);
+    const isExternalUrl = url.startsWith("https://") || url.startsWith("http://") || url.startsWith("file://");
+    if (isExternalUrl) {
+        // Never auto-launch an external browser here. Some pages attempt to navigate on load, which can look like
+        // WAVE is "randomly launching Chrome" (and can hang on profile-selection prompts).
+        // Renderer code should explicitly request external opens via the open-external IPC channel.
+        if (process.env.WAVETERM_ALLOW_OPEN_EXTERNAL_ON_NAV === "1") {
+            console.log("open external, shNav", url);
+            electron.shell.openExternal(url);
+        } else {
+            console.log("navigation canceled (external blocked)", url);
+        }
+        return;
     }
+    console.log("navigation canceled", url);
 }
 
 export function shFrameNavHandler(event: Electron.Event<Electron.WebContentsWillFrameNavigateEventParams>) {
@@ -109,9 +117,13 @@ export function shFrameNavHandler(event: Electron.Event<Electron.WebContentsWill
     if (event.frame.name == "webview") {
         // "webview" links always open in new window
         // this will *not* effect the initial load because srcdoc does not count as an electron navigation
-        console.log("open external, frameNav", url);
         event.preventDefault();
-        electron.shell.openExternal(url);
+        if (process.env.WAVETERM_ALLOW_OPEN_EXTERNAL_ON_NAV === "1") {
+            console.log("open external, frameNav", url);
+            electron.shell.openExternal(url);
+        } else {
+            console.log("frame navigation canceled (external blocked)", url);
+        }
         return;
     }
     if (
@@ -140,9 +152,9 @@ export function shFrameNavHandler(event: Electron.Event<Electron.WebContentsWill
                 // allowed
                 return;
             }
-            // If navigation is not to expected port, open externally
+            // If navigation is not to expected port, cancel it instead of launching an external browser.
             event.preventDefault();
-            electron.shell.openExternal(url);
+            console.log(`frame navigation canceled (tsunami port mismatch expected=${expectedPort})`, url);
             return;
         } catch (e) {
             // Invalid URL, fall through to prevent navigation

@@ -3,11 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/aipanel/aispeech", () => {
     return {
-        canUseLocalSpeechSynthesis: vi.fn(() => false),
         chunkSpeechInput: vi.fn((text: string) => [text]),
         requestOpenAICompatibleSpeechAudio: vi.fn(async () => new Blob(["mock-audio"], { type: "audio/mpeg" })),
-        speakLocally: vi.fn(() => false),
-        stopLocalSpeechSynthesis: vi.fn(),
     };
 });
 
@@ -45,7 +42,7 @@ function makeSettings(): ResolvedSpeechSettings {
         autoPlay: false,
         showManualButton: true,
         rate: 1,
-        endpoint: "http://127.0.0.1:5050/v1/audio/speech",
+        endpoint: "wave://edge-tts/v1/audio/speech",
         model: "edge-tts",
         token: "",
         voice: "zh-CN-XiaoxiaoNeural",

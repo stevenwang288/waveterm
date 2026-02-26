@@ -569,6 +569,12 @@ export class WaveAIModel {
         globalStore.set(this.isLoadingChatAtom, true);
         const messages = await this.loadInitialChat();
         this.useChatSetMessages?.(messages);
+
+        // Avoid auto-playing historical assistant messages after startup / chat restore.
+        // We only want auto-play for *new* assistant replies that arrive after this point.
+        const latestAssistant = [...(messages ?? [])].reverse().find((message) => message?.role === "assistant" && message?.id);
+        globalStore.set(this.lastAutoPlayedMessageId, latestAssistant?.id ?? null);
+
         globalStore.set(this.isLoadingChatAtom, false);
         setTimeout(() => {
             this.scrollToBottom();

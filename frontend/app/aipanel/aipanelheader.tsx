@@ -135,16 +135,7 @@ export const AIPanelHeader = memo(() => {
         );
     };
 
-    const speechEngineLabel =
-        speechSettings.transport === "browser"
-            ? "系统语音"
-            : speechSettings.provider === "local"
-              ? speechSettings.localEngine === "edge"
-                  ? "Edge"
-                  : speechSettings.localEngine === "melo"
-                    ? "Melo"
-                    : "API"
-              : "API";
+    const speechEngineLabel = "Edge";
     const speechHintParts = [
         speechEngineLabel,
         speechSettings.transport === "api" ? speechSettings.model : "",
@@ -167,7 +158,6 @@ export const AIPanelHeader = memo(() => {
             onContextMenu={handleContextMenu}
         >
             <h2 className="text-white text-sm @xs:text-lg font-semibold flex items-center gap-2 flex-shrink-0 whitespace-nowrap">
-                <i className="fa fa-sparkles text-accent"></i>
                 {t("aipanel.header")}
             </h2>
 

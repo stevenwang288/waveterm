@@ -16,7 +16,38 @@ import i18next from "./i18n-main";
 // On Linux, it will store to ~/.config/waveterm/electron
 // On Windows, it will store to %LOCALAPPDATA%/waveterm/electron
 const isDev = !app.isPackaged;
-app.setName(isDev ? "wave-dev/electron" : "wave/electron");
+
+function getArgValue(name: string): string {
+    const argv = process.argv ?? [];
+    const prefix = `${name}=`;
+    for (let idx = 0; idx < argv.length; idx++) {
+        const token = argv[idx] ?? "";
+        if (token === name && idx + 1 < argv.length) {
+            return String(argv[idx + 1] ?? "").trim();
+        }
+        if (typeof token === "string" && token.startsWith(prefix)) {
+            return token.slice(prefix.length).trim();
+        }
+    }
+    return "";
+}
+
+// Profile controls where Wave stores config/data and whether it should behave like a dev instance.
+// Useful for verifying packaged builds against a dev profile without "feeling like a different app".
+// Examples:
+//   WAVE.exe --profile dev
+//   set WAVETERM_PROFILE=dev
+const profile = (process.env.WAVETERM_PROFILE ?? getArgValue("--profile") ?? "").trim().toLowerCase();
+const isDevProfile = isDev || profile === "dev";
+
+app.setName(isDevProfile ? "wave-dev/electron" : "wave/electron");
+
+// On Windows, set an explicit AppUserModelId so the taskbar entry stays stable and
+// dev/prod instances don't stomp each other's identity.
+if (process.platform === "win32") {
+    const baseAppId = "dev.commandline.wave";
+    app.setAppUserModelId(isDevProfile ? `${baseAppId}.dev` : baseAppId);
+}
 
 // Allow spawning an isolated sidecar instance for smoke testing without
 // conflicting with an already-running stable WAVE instance. Electron's
@@ -40,7 +71,7 @@ if (electronUserDataOverride) {
     }
 }
 const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;
-console.log(`Running in ${isDev ? "development" : "production"} mode`);
+console.log(`Running in ${isDev ? "development" : "production"} mode${isDevProfile && !isDev ? " (dev profile)" : ""}`);
 if (isDev) {
     process.env[WaveDevVarName] = "1";
 }
@@ -49,12 +80,12 @@ if (isDevVite) {
 }
 
 const waveDirNamePrefix = "wave";
-const waveDirNameSuffix = isDev ? "dev" : "";
+const waveDirNameSuffix = isDevProfile ? "dev" : "";
 const waveDirName = `${waveDirNamePrefix}${waveDirNameSuffix ? `-${waveDirNameSuffix}` : ""}`;
 
 const paths = envPaths(waveDirNamePrefix, { suffix: waveDirNameSuffix });
 
-app.setName(isDev ? "WAVE (Dev)" : "WAVE");
+app.setName(isDevProfile ? "WAVE (Dev)" : "WAVE");
 const unamePlatform = process.platform;
 const unameArch: string = process.arch;
 keyutil.setKeyUtilPlatform(unamePlatform);

@@ -218,13 +218,9 @@ const HeaderEndIcons = React.memo(
     const speechFilterUrls = jotai.useAtomValue(getSettingsKeyAtom("speech:filterurls"));
     const speechFilterPaths = jotai.useAtomValue(getSettingsKeyAtom("speech:filterpaths"));
     const speechFilterCode = jotai.useAtomValue(getSettingsKeyAtom("speech:filtercode"));
-    const speechAutoPlayAtom = React.useMemo(() => {
-        return useBlockAtom(blockId, "speech:autoplay-local", () => {
-            // Default terminal speech mode: auto on. Users can switch to manual if they prefer.
-            return jotai.atom(true) as jotai.PrimitiveAtom<boolean>;
-        }) as jotai.PrimitiveAtom<boolean>;
-    }, [blockId]);
-    const [speechAutoPlay, setSpeechAutoPlay] = jotai.useAtom(speechAutoPlayAtom);
+    // Terminal AI speech should default to auto-play. The header toggle created confusion,
+    // so we keep it always-on here and expose controls in Settings.
+    const speechAutoPlay = true;
     const speechAutoPlayBaselineTsAtom = React.useMemo(() => {
         return useBlockAtom(blockId, "speech:autoplay-baseline-ts", () => {
             return jotai.atom(0) as jotai.PrimitiveAtom<number>;
@@ -392,16 +388,7 @@ const HeaderEndIcons = React.memo(
     if (endIconButtons && endIconButtons.length > 0) {
         endIconsElem.push(...endIconButtons.map((button, idx) => <IconButton key={idx} decl={button} />));
     }
-    const speechEngineLabel =
-        speechSettings.transport === "browser"
-            ? "系统语音"
-            : speechSettings.provider === "local"
-              ? speechSettings.localEngine === "edge"
-                  ? "Edge"
-                  : speechSettings.localEngine === "melo"
-                    ? "Melo"
-                    : "API"
-              : "API";
+    const speechEngineLabel = "Edge";
     const speechHintParts = [
         speechEngineLabel,
         speechSettings.transport === "api" ? speechSettings.model : "",
@@ -608,27 +595,71 @@ const HeaderEndIcons = React.memo(
     }, [isTerminalBlock, lastCommandDoneTs, scheduleTerminalPayloadRefresh, shellState]);
 
     const prevAutoPlayRef = React.useRef(speechSettings.autoPlay);
+    const autoPlayBaselineInitializedRef = React.useRef(false);
+    const sessionStartTsRef = React.useRef(Date.now());
+    const autoPlayStartupSuppressedRef = React.useRef(false);
     React.useEffect(() => {
-        // If auto-play is already enabled (for example after a hot reload), establish a baseline so we
-        // only speak replies that happen after this point (never historical scrollback).
+        // Establish a per-session baseline so we never auto-play historical scrollback
+        // restored during startup. This must not persist across app restarts.
         if (!isTerminalBlock || !speechSettings.enabled || !speechSettings.autoPlay) {
+            autoPlayBaselineInitializedRef.current = false;
+            autoPlayStartupSuppressedRef.current = false;
             return;
         }
-        const existingBaseline = Number(speechAutoPlayBaselineTsRef.current) || 0;
-        if (existingBaseline > 0) {
+        if (autoPlayBaselineInitializedRef.current) {
             return;
         }
+        autoPlayBaselineInitializedRef.current = true;
         const currentOutputTs = Number(lastOutputTsRef.current);
         const commandDoneTs = Number(lastCommandDoneTsRef.current);
         const outputTs = Number.isFinite(currentOutputTs) && currentOutputTs > 0 ? currentOutputTs : 0;
         const doneTs = Number.isFinite(commandDoneTs) && commandDoneTs > 0 ? commandDoneTs : 0;
-        const baselineTs = doneTs > 0 ? Math.max(doneTs, outputTs) : outputTs;
-        if (baselineTs <= 0) {
-            return;
-        }
+        const baselineTs = doneTs > 0 || outputTs > 0 ? (doneTs > 0 ? Math.max(doneTs, outputTs) : outputTs) : Date.now();
         speechAutoPlayBaselineTsRef.current = baselineTs;
         setSpeechAutoPlayBaselineTs(baselineTs);
     }, [isTerminalBlock, setSpeechAutoPlayBaselineTs, speechSettings.autoPlay, speechSettings.enabled]);
+    React.useEffect(() => {
+        // Suppress auto-play for any formal reply payload restored from a previous session.
+        // A new reply generated after startup should still auto-play normally.
+        if (!isTerminalBlock || !speechSettings.enabled || !speechSettings.autoPlay) {
+            autoPlayStartupSuppressedRef.current = false;
+            return;
+        }
+        if (autoPlayStartupSuppressedRef.current) {
+            return;
+        }
+        const payload = speechFormalReplyPayload;
+        if (!payload?.id || !payload.text.trim()) {
+            return;
+        }
+        const payloadTs = Number(payload.outputTs) || 0;
+        const baselineTs = Number(speechAutoPlayBaselineTsRef.current) || 0;
+        const sessionStartTs = Number(sessionStartTsRef.current) || 0;
+        const looksLikeEpochMs = payloadTs >= 1000 * 1000 * 1000 * 1000;
+        const isRestoredFromHistory = looksLikeEpochMs && sessionStartTs > 0 && payloadTs < sessionStartTs;
+
+        if (isRestoredFromHistory) {
+            autoPlayStartupSuppressedRef.current = true;
+            speechLastSpokenPayloadIdRef.current = payload.id;
+            setSpeechLastSpokenPayloadId(payload.id);
+            const nextBaselineTs = Math.max(baselineTs, payloadTs, sessionStartTs);
+            if (nextBaselineTs > 0 && nextBaselineTs !== baselineTs) {
+                speechAutoPlayBaselineTsRef.current = nextBaselineTs;
+                setSpeechAutoPlayBaselineTs(nextBaselineTs);
+            }
+            return;
+        }
+
+        // First payload arrived during this session; do not suppress it (autoplay effect will handle).
+        autoPlayStartupSuppressedRef.current = true;
+    }, [
+        isTerminalBlock,
+        setSpeechAutoPlayBaselineTs,
+        setSpeechLastSpokenPayloadId,
+        speechFormalReplyPayload,
+        speechSettings.autoPlay,
+        speechSettings.enabled,
+    ]);
     React.useEffect(() => {
         const prevAutoPlay = prevAutoPlayRef.current;
         prevAutoPlayRef.current = speechSettings.autoPlay;
@@ -638,6 +669,10 @@ const HeaderEndIcons = React.memo(
                 prevAutoPlay &&
                 (!speechSettings.autoPlay || !speechSettings.enabled);
             cancelAutoSpeech(shouldStopActivePlayback);
+            if (isTerminalBlock && !speechSettings.enabled) {
+                speechAutoPlayBaselineTsRef.current = 0;
+                setSpeechAutoPlayBaselineTs(0);
+            }
             return;
         }
         const payload = speechFormalReplyPayload;
@@ -682,48 +717,7 @@ const HeaderEndIcons = React.memo(
         };
     }, [cancelAutoSpeech]);
 
-    const speechModeDecl: IconButtonDecl = {
-        elemtype: "iconbutton",
-        icon: (
-            <span className="speech-mode-chip">
-                <span className="speech-mode-dot" />
-                {speechSettings.autoPlay ? "自动" : "手动"}
-            </span>
-        ),
-        title: speechSettings.autoPlay ? "自动播报：开（点击切到手动）" : "自动播报：关（点击切到自动）",
-        click: () => {
-            const nextAutoPlay = !speechSettings.autoPlay;
-            if (!nextAutoPlay) {
-                cancelAutoSpeech(true);
-                speechAutoPlayBaselineTsRef.current = 0;
-                setSpeechAutoPlayBaselineTs(0);
-            } else {
-                const currentOutputTs = Number(lastOutputTsRef.current);
-                const commandDoneTs = Number(lastCommandDoneTsRef.current);
-                const outputTs = Number.isFinite(currentOutputTs) && currentOutputTs > 0 ? currentOutputTs : 0;
-                const doneTs = Number.isFinite(commandDoneTs) && commandDoneTs > 0 ? commandDoneTs : 0;
-                const baselineTs = doneTs > 0 ? Math.max(doneTs, outputTs) : outputTs;
-                speechAutoPlayBaselineTsRef.current = baselineTs;
-                setSpeechAutoPlayBaselineTs(baselineTs);
-                if (baselineTs > 0) {
-                    scheduleTerminalPayloadRefresh(120, baselineTs);
-                }
-            }
-            setSpeechAutoPlay(nextAutoPlay);
-        },
-        disabled: !speechSettings.enabled || !isTerminalBlock,
-    };
-
     const showSpeechButton = isTerminalBlock ? true : speechSettings.showManualButton;
-    if (isTerminalBlock) {
-        endIconsElem.push(
-            <IconButton
-                key="speech-mode"
-                decl={speechModeDecl}
-                className={cn("block-frame-speech-mode", speechSettings.autoPlay ? "is-auto-on" : "is-auto-off")}
-            />
-        );
-    }
     if (showSpeechButton) {
         endIconsElem.push(<IconButton key="speech" decl={speechDecl} className="block-frame-speech" />);
     }

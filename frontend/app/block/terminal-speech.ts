@@ -25,6 +25,10 @@ const CodexInferenceFooterPattern =
     /^\s*[─━—–-]*\s*(?:inference|推理)[:：]\s*\d+.*(?:call(?:s)?|次(?:调用)?|调用).*(?:streams?|流)[:：]\s*\d+.*(?:events?|事件)\b.*$/i;
 const CodexBottomStatusLinePattern =
     /^\s*(?:gpt-[\w.-]+|o\d(?:-[\w.-]+)?|claude[\w.-]*|gemini[\w.-]*|qwen[\w.-]*|deepseek[\w.-]*)\b.*[•·]\s*\d+%\s+left\b.*$/i;
+const CodexConversationInterruptedLinePattern = /^\s*conversation interrupted\b/i;
+const CodexSomethingWentWrongLinePattern = /^\s*something went wrong\?\s*$/i;
+const CodexFeedbackReportIssueLinePattern =
+    /^\s*(?:something went wrong\?\s*)?hit\s+`?\/feedback`?\s+to\s+report\s+the\s+issue\.?\s*$/i;
 const CodexEscInterruptHintPattern = /\besc\b.*(?:interrupt|中断|打断)\b/i;
 const CodexElapsedEscInterruptLinePattern =
     /^\s*[（(]?\s*(?:(?:\d+\s*[hms]\s*){1,4}|\d+\s*[:：]\s*\d+(?:\s*[:：]\s*\d+)?)\s*\besc\b.*(?:interrupt|中断|打断)\s*[）)]?\s*$/i;
@@ -104,6 +108,14 @@ function isTerminalStatusNoiseLine(line: string): boolean {
     }
     // Codex bottom status row: "model • 95% left • cwd" is not assistant content.
     if (CodexBottomStatusLinePattern.test(stripped)) {
+        return true;
+    }
+    // Codex CLI transient errors/hints should never be spoken.
+    if (
+        CodexConversationInterruptedLinePattern.test(stripped) ||
+        CodexSomethingWentWrongLinePattern.test(stripped) ||
+        CodexFeedbackReportIssueLinePattern.test(stripped)
+    ) {
         return true;
     }
     // Codex progress/status lines often include interrupt hints and should never be spoken.

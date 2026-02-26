@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
-    DefaultOpenAICompatibleSpeechModel,
-    DefaultOpenAICompatibleSpeechVoice,
     resolveOpenAICompatibleSpeechEndpoint,
     SpeechFilterOptions,
 } from "./aispeech";
@@ -12,6 +10,9 @@ export type SpeechProvider = "local" | "api";
 export type SpeechTransport = "browser" | "api";
 export type SpeechLocalEngine = "browser" | "edge" | "melo";
 export type SpeechRole = "assistant" | "user" | "system";
+
+const BuiltinEdgeSpeechEndpoint = "wave://edge-tts/v1/audio/speech";
+const DefaultEdgeVoice = "zh-CN-XiaoxiaoNeural";
 
 export type ResolvedSpeechSettings = {
     enabled: boolean;
@@ -34,19 +35,14 @@ export type ResolvedSpeechSettings = {
 };
 
 function normalizeProvider(rawValue: unknown): SpeechProvider {
-    if (rawValue === "api") {
-        return "api";
-    }
+    // Edge-only: force local provider. We keep the config key for backward
+    // compatibility, but Wave should never silently switch to API TTS.
     return "local";
 }
 
 function normalizeLocalEngine(rawValue: unknown): SpeechLocalEngine {
-    // We only support Edge TTS for local speech in production.
-    // Treat legacy/experimental engines (browser, melo) as Edge to avoid silently using
-    // the browser SpeechSynthesis voice.
-    if (rawValue === "edge") {
-        return "edge";
-    }
+    // Edge-only: always use Edge TTS. This avoids low-quality Windows/browser speech synthesis
+    // and eliminates port-based local sidecars that can be hijacked by other Wave instances.
     return "edge";
 }
 
@@ -71,6 +67,22 @@ function normalizeSpeechRate(rawValue: unknown, defaultValue = 1): number {
     return Math.max(0.5, Math.min(2, rawValue));
 }
 
+function normalizeEdgeVoice(rawValue: unknown, fallback = DefaultEdgeVoice): string {
+    const value = normalizeString(rawValue);
+    if (!value) {
+        return fallback;
+    }
+    const lowered = value.toLowerCase();
+    if (lowered === "system-default") {
+        return fallback;
+    }
+    // Typical Edge voice names look like: zh-CN-XiaoxiaoNeural / en-US-JennyNeural
+    if (!value.includes("-") || !/neural$/i.test(value)) {
+        return fallback;
+    }
+    return value;
+}
+
 export function resolveSpeechSettings(
     globalSettings: SettingsType | null | undefined,
     currentModeConfig: MetaType | null | undefined
@@ -78,33 +90,20 @@ export function resolveSpeechSettings(
     const enabled = normalizeBool(globalSettings?.["speech:enabled"], true);
     const provider = normalizeProvider(globalSettings?.["speech:provider"]);
     const localEngine = normalizeLocalEngine(globalSettings?.["speech:localengine"]);
-    const transport: SpeechTransport = provider === "api" || localEngine !== "browser" ? "api" : "browser";
-    const token = normalizeString(currentModeConfig?.["ai:apitoken"]);
-    const configuredEndpoint = normalizeString(globalSettings?.["speech:endpoint"]);
-    const localEndpointFallback =
-        provider === "local"
-            ? localEngine === "edge"
-                ? "http://127.0.0.1:5050/v1/audio/speech"
-                : localEngine === "melo"
-                  ? "http://127.0.0.1:5051/v1/audio/speech"
-                  : ""
-            : "";
-    const fallbackEndpoint = normalizeString(currentModeConfig?.["ai:endpoint"]);
-    const endpoint = resolveOpenAICompatibleSpeechEndpoint(
-        provider === "local" ? localEndpointFallback : configuredEndpoint || fallbackEndpoint,
-        token
-    );
-    const configuredModel =
-        normalizeString(globalSettings?.["speech:model"], normalizeString(currentModeConfig?.["ai:model"])) ||
-        DefaultOpenAICompatibleSpeechModel;
-    const model = provider === "local" && localEngine === "edge" ? "edge-tts" : configuredModel;
-    const voice =
-        normalizeString(globalSettings?.["speech:voice"], DefaultOpenAICompatibleSpeechVoice) ||
-        DefaultOpenAICompatibleSpeechVoice;
-    const voiceAssistant =
-        normalizeString(globalSettings?.["speech:voiceassistant"], voice) || DefaultOpenAICompatibleSpeechVoice;
-    const voiceUser = normalizeString(globalSettings?.["speech:voiceuser"], voiceAssistant) || voiceAssistant;
-    const voiceSystem = normalizeString(globalSettings?.["speech:voicesystem"], voiceAssistant) || voiceAssistant;
+
+    // Edge-only: always run through the built-in Edge TTS handler in the main process.
+    // Do NOT respect user-configured endpoints here; older configs often point at 127.0.0.1:5050
+    // which can be hijacked by other Wave instances and causes the "UI says Edge but I hear Windows TTS" failure mode.
+    const transport: SpeechTransport = "api";
+    const token = "";
+    const endpoint = resolveOpenAICompatibleSpeechEndpoint(BuiltinEdgeSpeechEndpoint, token);
+    const model = "edge-tts";
+
+    // Voice selection: ensure we always have a valid Edge voice to avoid implicit OS fallbacks.
+    const voice = normalizeEdgeVoice(globalSettings?.["speech:voice"], DefaultEdgeVoice);
+    const voiceAssistant = normalizeEdgeVoice(globalSettings?.["speech:voiceassistant"], voice);
+    const voiceUser = normalizeEdgeVoice(globalSettings?.["speech:voiceuser"], voiceAssistant);
+    const voiceSystem = normalizeEdgeVoice(globalSettings?.["speech:voicesystem"], voiceAssistant);
     return {
         enabled,
         provider,

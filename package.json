@@ -20,11 +20,14 @@
     ],
     "scripts": {
         "dev": "electron-vite dev",
+        "dev:fresh": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-dev-fresh.ps1",
         "start": "electron-vite preview",
         "build:dev": "electron-vite build --mode development",
         "build:backend:windows": "task build:backend:quickdev:windows",
-        "prebuild:prod": "task build:backend",
+        "prebuild:prod": "node scripts/prebuild-prod.mjs",
         "build:prod": "electron-vite build --mode production",
+        "package:win": "electron-builder --config electron-builder.config.cjs --win --x64",
+        "package:win:allow-dirty": "set WAVETERM_ALLOW_DIRTY_PACKAGE=1&& electron-builder --config electron-builder.config.cjs --win --x64",
         "coverage": "vitest run --coverage",
         "test": "vitest",
         "postinstall": "electron-builder install-app-deps"
@@ -111,6 +114,7 @@
         "mermaid": "^11.12.1",
         "monaco-editor": "^0.55.1",
         "monaco-yaml": "^5.4.0",
+        "msedge-tts": "^2.0.4",
         "overlayscrollbars": "^2.12.0",
         "overlayscrollbars-react": "^0.5.6",
         "papaparse": "^5.5.3",

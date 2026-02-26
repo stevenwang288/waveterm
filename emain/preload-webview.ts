@@ -368,6 +368,37 @@ function isPveVmPage(): boolean {
     return hashText.includes("qemu%2f");
 }
 
+function patchPveWindowOpen(host: string) {
+    try {
+        const key = "__wavePveWindowOpenPatched__";
+        if ((window as any)[key]) {
+            return;
+        }
+        (window as any)[key] = true;
+
+        const originalOpen = window.open;
+        window.open = ((url?: string | URL, ...args: any[]) => {
+            try {
+                const raw = typeof url === "string" ? url : url instanceof URL ? url.toString() : "";
+                if (raw) {
+                    const nextUrl = new URL(raw, window.location.href);
+                    const nextHost = normalizeHostToken(nextUrl.host);
+                    // Keep PVE console popups inside the same webview/tab (screen wall wants in-tile consoles).
+                    if (nextHost === host && nextUrl.searchParams.has("console")) {
+                        window.location.href = nextUrl.toString();
+                        return null;
+                    }
+                }
+            } catch {
+                // ignore parse errors
+            }
+            return originalOpen.call(window, url as any, ...args);
+        }) as any;
+    } catch {
+        // ignore patch errors
+    }
+}
+
 function findPveConsoleTrigger(): HTMLElement | null {
     const candidates = Array.from(document.querySelectorAll("button, a, div, span")) as HTMLElement[];
     for (const elem of candidates) {
@@ -407,6 +438,8 @@ function setupPveAutoLogin() {
     if (!host || !PVE_AUTOLOGIN_HOSTS.has(host)) {
         return;
     }
+
+    patchPveWindowOpen(host);
 
     const tryPersistCurrentForm = () => {
         const handles = findPveLoginFormHandles();

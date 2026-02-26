@@ -282,6 +282,7 @@ async function initWave(initOpts: WaveInitOpts) {
     await loadMonaco();
     const fullConfig = await RpcApi.GetFullConfigCommand(TabRpcClient);
     console.log("fullconfig", fullConfig);
+    await migrateSpeechAutoplayDefault(fullConfig);
     globalStore.set(atoms.fullConfigAtom, fullConfig);
     const waveaiModeConfig = await RpcApi.GetWaveAIModeConfigCommand(TabRpcClient);
     globalStore.set(atoms.waveaiModeConfigAtom, waveaiModeConfig.configs);
@@ -297,6 +298,31 @@ async function initWave(initOpts: WaveInitOpts) {
     await firstRenderPromise;
     console.log("Wave First Render Done");
     getApi().setWindowInitStatus("wave-ready");
+}
+
+async function migrateSpeechAutoplayDefault(fullConfig: FullConfigType): Promise<void> {
+    const settings = fullConfig?.settings as any;
+    if (!settings) {
+        return;
+    }
+    if (settings["speech:autoplay-migrated"] === true) {
+        return;
+    }
+    if (settings["speech:autoplay"] !== true) {
+        settings["speech:autoplay-migrated"] = true;
+        return;
+    }
+
+    try {
+        await RpcApi.SetConfigCommand(TabRpcClient, {
+            "speech:autoplay": false,
+            "speech:autoplay-migrated": true,
+        });
+        settings["speech:autoplay"] = false;
+        settings["speech:autoplay-migrated"] = true;
+    } catch (e) {
+        console.log("Failed to migrate speech:autoplay default", e);
+    }
 }
 
 async function initBuilderWrap(initOpts: BuilderInitOpts) {

@@ -16,11 +16,6 @@ interface SpeechSettingsContentProps {
     model: WaveConfigViewModel;
 }
 
-const OpenAICompatibleModelOptions = [
-    "gpt-4o-mini-tts",
-    "gpt-4o-tts",
-];
-const OpenAIVoiceOptions = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"];
 const EdgeVoiceOptions = [
     "zh-CN-XiaoxiaoNeural",
     "zh-CN-YunxiNeural",
@@ -80,16 +75,17 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
     const aiModeConfigs = useAtomValue(aiModel.aiModeConfigs);
     const currentModeConfig = aiModeConfigs?.[currentMode];
 
-    const speechProvider = useAtomValue(getSettingsKeyAtom("speech:provider")) ?? "local";
+    const speechEnabledRaw = useAtomValue(getSettingsKeyAtom("speech:enabled"));
+    const speechAutoPlayRaw = useAtomValue(getSettingsKeyAtom("speech:autoplay"));
+    const speechManualButtonRaw = useAtomValue(getSettingsKeyAtom("speech:manualbutton"));
+    const speechProviderRaw = useAtomValue(getSettingsKeyAtom("speech:provider")) ?? "local";
+    const speechProvider = "local";
     const speechRate = useAtomValue(getSettingsKeyAtom("speech:rate")) ?? 1;
     const speechLocalEngineRaw = useAtomValue(getSettingsKeyAtom("speech:localengine")) ?? "edge";
     const speechLocalEngine = speechLocalEngineRaw;
     const speechLocalModel = useAtomValue(getSettingsKeyAtom("speech:localmodel")) ?? "";
     const speechLocalModelPath = useAtomValue(getSettingsKeyAtom("speech:localmodelpath")) ?? "";
-    const speechEndpoint = useAtomValue(getSettingsKeyAtom("speech:endpoint")) ?? "";
-    const speechModel =
-        useAtomValue(getSettingsKeyAtom("speech:model")) ??
-        (speechProvider === "local" ? "edge-tts" : "gpt-4o-mini-tts");
+    const speechModel = useAtomValue(getSettingsKeyAtom("speech:model")) ?? "edge-tts";
     const speechVoice = useAtomValue(getSettingsKeyAtom("speech:voice")) ?? "";
     const speechVoiceAssistant = useAtomValue(getSettingsKeyAtom("speech:voiceassistant")) ?? "zh-CN-XiaoxiaoNeural";
     const speechVoiceUser = useAtomValue(getSettingsKeyAtom("speech:voiceuser")) ?? speechVoiceAssistant;
@@ -99,12 +95,35 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
     const speechFilterCode = useAtomValue(getSettingsKeyAtom("speech:filtercode")) ?? true;
     const speechRateValue = useMemo(() => Math.max(0.5, Math.min(2, speechRate)), [speechRate]);
 
-    const [endpointDraft, setEndpointDraft] = useState(speechEndpoint);
-    const [modelDraft, setModelDraft] = useState(speechModel);
-    const [browserVoiceOptions, setBrowserVoiceOptions] = useState<string[]>([]);
+    const speechEnabled = typeof speechEnabledRaw === "boolean" ? speechEnabledRaw : false;
+    const speechAutoPlay = typeof speechAutoPlayRaw === "boolean" ? speechAutoPlayRaw : false;
+    const speechManualButton = typeof speechManualButtonRaw === "boolean" ? speechManualButtonRaw : true;
 
-    useEffect(() => setEndpointDraft(speechEndpoint), [speechEndpoint]);
-    useEffect(() => setModelDraft(speechModel), [speechModel]);
+    const speechEndpoint = useAtomValue(getSettingsKeyAtom("speech:endpoint")) ?? "";
+
+    useEffect(() => {
+        const update: SettingsType = {};
+        let changed = false;
+        if (speechProviderRaw !== "local") {
+            update["speech:provider"] = "local";
+            changed = true;
+        }
+        if (speechLocalEngineRaw !== "edge") {
+            update["speech:localengine"] = "edge";
+            changed = true;
+        }
+        if ((speechModel ?? "").trim() !== "edge-tts") {
+            update["speech:model"] = "edge-tts";
+            changed = true;
+        }
+        if ((speechEndpoint ?? "").trim() !== "") {
+            update["speech:endpoint"] = "";
+            changed = true;
+        }
+        if (changed) {
+            void setConfig(update);
+        }
+    }, [speechEndpoint, speechLocalEngineRaw, speechModel, speechProviderRaw]);
 
     useEffect(() => {
         const update: SettingsType = {};
@@ -133,45 +152,20 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
     }, [speechLocalEngineRaw, speechLocalModel, speechLocalModelPath]);
 
     const [speechActive, setSpeechActive] = useState(false);
-    const [showAdvanced, setShowAdvanced] = useState(false);
     useEffect(() => {
         return speechRuntime.subscribe(setSpeechActive, "speech-settings-preview");
     }, []);
 
-    useEffect(() => {
-        if (typeof window === "undefined" || typeof window.speechSynthesis === "undefined") {
-            return;
-        }
-        const refreshVoices = () => {
-            const voices = window.speechSynthesis.getVoices().map((voice) => voice.name);
-            setBrowserVoiceOptions(normalizeOptions(voices));
-        };
-        refreshVoices();
-        window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
-        return () => {
-            window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
-        };
+    const modelOptions = useMemo(() => {
+        return ["edge-tts"];
     }, []);
 
-    const modelOptions = useMemo(() => {
-        if (speechProvider !== "local") {
-            return normalizeOptions([...OpenAICompatibleModelOptions, speechModel]);
-        }
-        return ["edge-tts"];
-    }, [speechModel, speechProvider]);
-
     const voiceOptions = useMemo(() => {
-        if (speechProvider !== "local") {
-            return OpenAIVoiceOptions;
-        }
         if (speechLocalEngine === "edge") {
             return EdgeVoiceOptions;
         }
-        if (browserVoiceOptions.length > 0) {
-            return normalizeOptions(["system-default", ...browserVoiceOptions]);
-        }
-        return ["system-default"];
-    }, [browserVoiceOptions, speechLocalEngine, speechProvider]);
+        return EdgeVoiceOptions;
+    }, [speechLocalEngine]);
 
     const assistantVoiceValue = voiceOptions.includes(speechVoiceAssistant) ? speechVoiceAssistant : voiceOptions[0];
     const userVoiceValue = voiceOptions.includes(speechVoiceUser) ? speechVoiceUser : assistantVoiceValue;
@@ -215,10 +209,10 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
         () =>
             resolveSpeechSettings(
                 {
+                    "speech:enabled": speechEnabled,
                     "speech:provider": speechProvider,
                     "speech:localengine": speechLocalEngine,
-                    "speech:endpoint": endpointDraft,
-                    "speech:model": modelDraft,
+                    "speech:model": "edge-tts",
                     "speech:voice": speechVoice?.trim() ? speechVoice : assistantVoiceValue,
                     "speech:voiceassistant": assistantVoiceValue,
                     "speech:voiceuser": userVoiceValue,
@@ -229,20 +223,23 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
                     "speech:filterurls": speechFilterUrls,
                     "speech:filterpaths": speechFilterPaths,
                     "speech:filtercode": speechFilterCode,
+                    "speech:autoplay": speechAutoPlay,
+                    "speech:manualbutton": speechManualButton,
                 },
                 currentModeConfig
             ),
         [
             assistantVoiceValue,
             currentModeConfig,
-            endpointDraft,
-            modelDraft,
+            speechAutoPlay,
+            speechEnabled,
             speechFilterCode,
             speechFilterPaths,
             speechFilterUrls,
             speechLocalEngine,
             speechLocalModel,
             speechLocalModelPath,
+            speechManualButton,
             speechRateValue,
             speechProvider,
             speechVoice,
@@ -253,6 +250,7 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
 
     const [testText, setTestText] = useState("一二三四。这是一段语音播报测试。");
     const [testError, setTestError] = useState("");
+    const [endpointDiag, setEndpointDiag] = useState("");
 
     const runTest = async () => {
         setTestError("");
@@ -276,8 +274,37 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
         }
     };
 
-    const showApiSection = speechProvider === "api";
-    const showLocalEndpointSection = speechProvider === "local" && speechLocalEngine !== "browser";
+    useEffect(() => {
+        setEndpointDiag("");
+    }, [speechLocalEngine, speechProvider]);
+
+    const runEndpointDiagnose = async () => {
+        setEndpointDiag("");
+        const endpoint = resolvedSettings.endpoint ?? "unknown";
+        const voice = resolvedSettings.voiceAssistant || resolvedSettings.voice || "unknown";
+        const model = resolvedSettings.model || "unknown";
+
+        let about: AboutModalDetails | null = null;
+        try {
+            const api = (window as any)?.api;
+            if (typeof api?.getAboutModalDetails === "function") {
+                about = api.getAboutModalDetails() as AboutModalDetails;
+            }
+        } catch {
+            about = null;
+        }
+
+        const waveLine = about?.version ? `WAVE: ${about.version} (${about.buildTime || 0})` : "";
+        const uiLine = about?.uiCommit
+            ? `UI: ${about.uiCommit}${about.uiDirty ? " (dirty)" : ""} (${about.uiBuildIso || ""})`
+            : "";
+        const profileLine = about?.profile ? `Profile: ${about.profile}` : "";
+        const extra = [waveLine, uiLine, profileLine].filter(Boolean).join("\n");
+
+        setEndpointDiag(
+            `当前使用内置 Edge TTS（无需端口）。\nendpoint: ${endpoint}\nmodel: ${model}\nvoice: ${voice}${extra ? `\n\n${extra}` : ""}`
+        );
+    };
 
     const setSpeechRate = (nextRate: number) => {
         const clamped = Math.max(0.5, Math.min(2, nextRate));
@@ -288,6 +315,22 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
         <div className="h-full overflow-hidden px-2 py-2">
             <div className="mx-auto max-w-[700px]">
                 <div className="space-y-1.5">
+                    <Card title="总开关与播放方式" desc="建议先打开总开关，然后用“发声测试”验证链路。">
+                        <div className="grid grid-cols-1 gap-1.5">
+                            <Toggle checked={speechEnabled} onChange={(val) => void setConfig({ "speech:enabled": !!val })} label="启用语音播报（总开关）" />
+                            <Toggle
+                                checked={speechAutoPlay}
+                                onChange={(val) => void setConfig({ "speech:autoplay": !!val })}
+                                label="自动朗读 Wave AI 新回复（全局）"
+                            />
+                            <Toggle
+                                checked={speechManualButton}
+                                onChange={(val) => void setConfig({ "speech:manualbutton": !!val })}
+                                label="显示 Wave AI 的手动朗读按钮"
+                            />
+                        </div>
+                    </Card>
+
                     <Card title="播报速度">
                         <div className="rounded border border-border/70 px-2 py-1.5">
                             <div className="text-xs text-muted-foreground mb-1">0.5x - 2.0x，手动和自动都生效。</div>
@@ -319,58 +362,29 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
                         </div>
                     </Card>
 
-                    <Card title="语音来源与模型" desc="默认推荐本地 Edge TTS。">
+                    <Card title="语音来源与模型" desc="仅支持内置 Edge TTS（不会自动降级到 Windows 兜底 TTS）。">
                         <div className="space-y-1.5">
-                            <div className="flex gap-4 flex-wrap">
-                                <label className="flex items-center gap-2">
-                                    <input
-                                        type="radio"
-                                        checked={speechProvider === "local"}
-                                        onChange={() => void setConfig({ "speech:provider": "local" })}
-                                    />
-                                    <span>本地</span>
-                                </label>
-                                <label className="flex items-center gap-2">
-                                    <input
-                                        type="radio"
-                                        checked={speechProvider === "api"}
-                                        onChange={() => void setConfig({ "speech:provider": "api" })}
-                                    />
-                                    <span>OpenAI 兼容 API</span>
-                                </label>
-                            </div>
-
-                            {speechProvider === "local" && (
-                                <select
-                                    className="w-[240px] max-w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5"
-                                    value={speechLocalEngine}
-                                    onChange={(e) => {
-                                        const localEngine = e.target.value;
-                                        const update: SettingsType = { "speech:localengine": localEngine, "speech:model": "edge-tts" };
-                                        void setConfig(update);
-                                    }}
+                            <select
+                                className="w-[240px] max-w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5"
+                                value="edge"
+                                disabled
+                            >
+                                <option value="edge">Edge TTS（内置）</option>
+                            </select>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded cursor-pointer"
+                                    onClick={() => void runEndpointDiagnose()}
+                                    title="显示当前实际使用的内置 Edge TTS 参数（endpoint/model/voice）"
                                 >
-                                    <option value="edge">Edge TTS（本地服务）</option>
-                                </select>
-                            )}
-
-                            {showApiSection && (
-                                <div className="space-y-1.5">
-                                    <input
-                                        list="speech-model-options"
-                                        className="w-[260px] max-w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5"
-                                        value={modelDraft}
-                                        onChange={(e) => setModelDraft(e.target.value)}
-                                        onBlur={() => void setConfig({ "speech:model": modelDraft.trim() })}
-                                        placeholder="例如：gpt-4o-mini-tts"
-                                    />
-                                    <datalist id="speech-model-options">
-                                        {modelOptions.map((opt) => (
-                                            <option key={opt} value={opt} />
-                                        ))}
-                                    </datalist>
-                                </div>
-                            )}
+                                    诊断
+                                </button>
+                                {endpointDiag && (
+                                    <div className="text-xs text-muted-foreground whitespace-pre-wrap break-words">
+                                        {endpointDiag}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </Card>
 
@@ -418,48 +432,6 @@ export const SpeechSettingsContent = memo(({ model: _model }: SpeechSettingsCont
                         {testError && <div className="text-xs text-yellow-400 mt-1">{testError}</div>}
                     </Card>
 
-                    <div className="flex items-center justify-between px-1">
-                        <span className="text-xs text-muted-foreground">高级选项</span>
-                        <Toggle checked={showAdvanced} onChange={(val) => setShowAdvanced(!!val)} label="显示高级项" />
-                    </div>
-
-                    {showAdvanced && showApiSection && (
-                        <Card title="API Endpoint" desc="支持 /v1、/responses、/chat/completions，会自动归一化到 /audio/speech。">
-                            <input
-                                className="w-[420px] max-w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5"
-                                value={endpointDraft}
-                                onChange={(e) => setEndpointDraft(e.target.value)}
-                                onBlur={() => void setConfig({ "speech:endpoint": endpointDraft.trim() })}
-                                placeholder="https://api.openai.com/v1/audio/speech"
-                            />
-                        </Card>
-                    )}
-
-                    {showAdvanced && showLocalEndpointSection && (
-                        <Card
-                            title="本地服务 Endpoint"
-                            desc="留空时自动使用默认端口（Edge=5050）。Wave 会在 Windows 上自动提供内置本地 TTS；若该端口已有兼容服务则优先使用。"
-                        >
-                            <div className="flex flex-wrap items-center gap-2">
-                                <input
-                                    className="w-[380px] max-w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5"
-                                    value={endpointDraft}
-                                    onChange={(e) => setEndpointDraft(e.target.value)}
-                                    onBlur={() => void setConfig({ "speech:endpoint": endpointDraft.trim() })}
-                                    placeholder="http://127.0.0.1:5050/v1/audio/speech"
-                                />
-                                <button
-                                    className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded cursor-pointer"
-                                    onClick={() => {
-                                        setEndpointDraft("");
-                                        void setConfig({ "speech:endpoint": "" });
-                                    }}
-                                >
-                                    默认
-                                </button>
-                            </div>
-                        </Card>
-                    )}
                 </div>
             </div>
         </div>

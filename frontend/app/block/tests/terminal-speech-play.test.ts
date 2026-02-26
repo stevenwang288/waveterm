@@ -33,7 +33,7 @@ function makeSettings(): ResolvedSpeechSettings {
         autoPlay: false,
         showManualButton: true,
         rate: 1.25,
-        endpoint: "http://127.0.0.1:5050/v1/audio/speech",
+        endpoint: "wave://edge-tts/v1/audio/speech",
         model: "edge-tts",
         token: "",
         voice: "zh-CN-XiaoxiaoNeural",
@@ -215,6 +215,37 @@ describe("speakLatestTerminalFormalReply", () => {
         expect(speechPlay).toHaveBeenCalledTimes(1);
         expect(speechPlay).toHaveBeenCalledWith(
             "这是最终正式回复",
+            settings,
+            "assistant",
+            expect.any(Function),
+            expect.objectContaining({ ownerId: undefined })
+        );
+    });
+
+    it("does not include Codex interruption / feedback hint lines in the spoken assistant reply segment", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: [
+                "› q1",
+                "• 最终回复",
+                "Conversation interrupted - tell the model what to do differently.",
+                "Something went wrong? Hit `/feedback` to report the issue.",
+                "› ",
+            ],
+            lastupdated: 211,
+        } as CommandTermGetScrollbackLinesRtnData);
+        speechPlay.mockResolvedValueOnce(true);
+
+        const settings = makeSettings();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-interrupted",
+            speechSettings: settings,
+            requirePromptAfterCodexReply: true,
+        });
+
+        expect(ok).toBe(true);
+        expect(speechPlay).toHaveBeenCalledTimes(1);
+        expect(speechPlay).toHaveBeenCalledWith(
+            "最终回复",
             settings,
             "assistant",
             expect.any(Function),

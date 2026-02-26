@@ -138,85 +138,6 @@ export function chunkSpeechInput(text: string, filterOptions?: SpeechFilterOptio
     return chunks;
 }
 
-export function canUseLocalSpeechSynthesis(): boolean {
-    return (
-        typeof window !== "undefined" &&
-        typeof window.speechSynthesis !== "undefined" &&
-        typeof window.SpeechSynthesisUtterance !== "undefined"
-    );
-}
-
-export function stopLocalSpeechSynthesis(): void {
-    if (!canUseLocalSpeechSynthesis()) {
-        return;
-    }
-    window.speechSynthesis.cancel();
-}
-
-export function speakLocally(
-    text: string,
-    voiceName: string | undefined,
-    rate: number | undefined,
-    handlers?: {
-        onDone?: () => void;
-        onError?: (message: string) => void;
-    },
-    filterOptions?: SpeechFilterOptions
-): boolean {
-    if (!canUseLocalSpeechSynthesis()) {
-        handlers?.onError?.("Speech synthesis is not available.");
-        return false;
-    }
-    const chunks = chunkSpeechInput(text, filterOptions);
-    if (chunks.length === 0) {
-        handlers?.onError?.("No text content to read.");
-        return false;
-    }
-
-    let finished = false;
-    const finalize = () => {
-        if (finished) {
-            return;
-        }
-        finished = true;
-        handlers?.onDone?.();
-    };
-
-    const availableVoices = window.speechSynthesis.getVoices();
-    const normalizedVoiceName = voiceName?.trim().toLowerCase();
-    let selectedVoice: SpeechSynthesisVoice | undefined;
-    if (normalizedVoiceName) {
-        selectedVoice = availableVoices.find((voice) => voice.name.toLowerCase() === normalizedVoiceName);
-        if (!selectedVoice) {
-            selectedVoice = availableVoices.find((voice) => voice.name.toLowerCase().includes(normalizedVoiceName));
-        }
-    }
-    window.speechSynthesis.cancel();
-    const playbackRate = normalizeSpeechRate(rate, 1);
-    for (let idx = 0; idx < chunks.length; idx++) {
-        const utterance = new SpeechSynthesisUtterance(chunks[idx]);
-        if (selectedVoice) {
-            utterance.voice = selectedVoice;
-            utterance.lang = selectedVoice.lang || navigator.language || "en-US";
-        } else {
-            utterance.lang = navigator.language || "en-US";
-        }
-        utterance.rate = playbackRate;
-        utterance.onend = () => {
-            if (idx === chunks.length - 1) {
-                finalize();
-            }
-        };
-        utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
-            handlers?.onError?.(event.error || "Speech synthesis failed.");
-            window.speechSynthesis.cancel();
-            finalize();
-        };
-        window.speechSynthesis.speak(utterance);
-    }
-    return true;
-}
-
 export function resolveOpenAICompatibleSpeechEndpoint(rawEndpoint?: string, token?: string): string | null {
     const endpoint = rawEndpoint?.trim();
     if (!endpoint) {
@@ -322,6 +243,22 @@ export async function requestOpenAICompatibleSpeechAudio(
     if (!config.endpoint) {
         throw new Error("Speech endpoint is not configured.");
     }
+    let endpointUrl: URL | null = null;
+    try {
+        endpointUrl = new URL(config.endpoint);
+    } catch {
+        endpointUrl = null;
+    }
+
+    if (!endpointUrl) {
+        throw new Error("Invalid speech endpoint url.");
+    }
+
+    // Edge-only build: do not allow external endpoints. This prevents accidental downgrade to
+    // low-quality OS/browser TTS or misconfigured API providers.
+    if (endpointUrl.protocol !== "wave:" || endpointUrl.hostname.toLowerCase() !== "edge-tts") {
+        throw new Error("仅支持内置 Edge TTS（wave://edge-tts/v1/audio/speech）。");
+    }
 
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -341,7 +278,7 @@ export async function requestOpenAICompatibleSpeechAudio(
     };
 
     if (signal?.aborted) {
-        throw new Error("Speech API request aborted.");
+        throw new Error("Speech request aborted.");
     }
 
     if (hasMainProcessSpeechRequestApi()) {
@@ -352,7 +289,7 @@ export async function requestOpenAICompatibleSpeechAudio(
             body: JSON.stringify(payload),
         })) as MainProcessSpeechResponse;
         if (signal?.aborted) {
-            throw new Error("Speech API request aborted.");
+            throw new Error("Speech request aborted.");
         }
 
         const responseBytes = decodeBase64ToBytes(response?.bodyBase64 || "");
@@ -360,12 +297,12 @@ export async function requestOpenAICompatibleSpeechAudio(
         const status = Number(response?.status ?? 0);
         const statusText = response?.statusText ?? "";
         if (!(status >= 200 && status < 300)) {
-            throw new Error(`Speech API request failed (${status}): ${details || statusText}`);
+            throw new Error(`Speech request failed (${status}): ${details || statusText}`);
         }
         const contentType = getHeaderCaseInsensitive(response?.headers, "content-type");
         const normalizedContentType = contentType.toLowerCase();
         if (normalizedContentType.includes("application/json")) {
-            throw new Error(details || "Speech API returned JSON instead of audio.");
+            throw new Error(details || "Speech request returned JSON instead of audio.");
         }
         if (
             normalizedContentType &&
@@ -374,50 +311,15 @@ export async function requestOpenAICompatibleSpeechAudio(
         ) {
             throw new Error(
                 details ||
-                    `Speech API returned non-audio content type: ${contentType}. Check endpoint/model/token configuration.`
+                    `Speech request returned non-audio content type: ${contentType}.`
             );
         }
         if (responseBytes.byteLength === 0) {
-            throw new Error("Speech API returned empty audio.");
+            throw new Error("Speech request returned empty audio.");
         }
         const mimeType = contentType && !normalizedContentType.includes("json") ? contentType : "audio/mpeg";
         return new Blob([responseBytes.buffer as ArrayBuffer], { type: mimeType });
     }
 
-    const response = await fetch(config.endpoint, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-        signal,
-    });
-    if (!response.ok) {
-        const details = await safeReadText(response);
-        throw new Error(`Speech API request failed (${response.status}): ${details || response.statusText}`);
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-    const normalizedContentType = contentType.toLowerCase();
-    if (normalizedContentType.includes("application/json")) {
-        const details = await safeReadText(response);
-        throw new Error(details || "Speech API returned JSON instead of audio.");
-    }
-    if (
-        normalizedContentType &&
-        !normalizedContentType.includes("audio/") &&
-        !normalizedContentType.includes("application/octet-stream")
-    ) {
-        const details = await safeReadText(response);
-        throw new Error(
-            details ||
-                `Speech API returned non-audio content type: ${contentType}. Check endpoint/model/token configuration.`
-        );
-    }
-
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength === 0) {
-        throw new Error("Speech API returned empty audio.");
-    }
-
-    const mimeType = contentType && !normalizedContentType.includes("json") ? contentType : "audio/mpeg";
-    return new Blob([bytes], { type: mimeType });
+    throw new Error("内置语音需要桌面版（main-process speechRequest）。");
 }

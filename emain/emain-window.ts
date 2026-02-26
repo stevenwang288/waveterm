@@ -4,7 +4,7 @@
 import { ClientService, ObjectService, WindowService, WorkspaceService } from "@/app/store/services";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { fireAndForget } from "@/util/util";
-import { BaseWindow, BaseWindowConstructorOptions, dialog, globalShortcut, ipcMain, screen } from "electron";
+import { app, BaseWindow, BaseWindowConstructorOptions, dialog, globalShortcut, ipcMain, screen } from "electron";
 import { globalEvents } from "emain/emain-events";
 import path from "path";
 import { debounce } from "throttle-debounce";
@@ -31,6 +31,21 @@ export type WindowOpts = {
 
 export const MinWindowWidth = 800;
 export const MinWindowHeight = 500;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<{ ok: boolean; value?: T }> {
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    try {
+        const timeoutPromise = new Promise<{ ok: boolean }>((resolve) => {
+            timeoutHandle = setTimeout(() => resolve({ ok: false }), timeoutMs);
+        });
+        const resultPromise = promise.then((value) => ({ ok: true as const, value }));
+        return (await Promise.race([timeoutPromise, resultPromise])) as any;
+    } finally {
+        if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+        }
+    }
+}
 
 export function calculateWindowBounds(
     winSize?: { width?: number; height?: number },
@@ -174,6 +189,10 @@ export class WaveBrowserWindow extends BaseWindow {
 
         const isTransparent = settings?.["window:transparent"] ?? false;
         const isBlur = !isTransparent && (settings?.["window:blur"] ?? false);
+
+        // Ensure the window title reflects the current app identity (e.g. "WAVE (Dev)"),
+        // making it easier to locate the correct instance via Alt-Tab / Task View.
+        winOpts.title = app.getName();
 
         if (opts.unamePlatform === "darwin") {
             winOpts.titleBarStyle = "hiddenInset";
@@ -403,7 +422,6 @@ export class WaveBrowserWindow extends BaseWindow {
 
     private async initializeTab(tabView: WaveTabView, primaryStartupTab: boolean) {
         const clientId = await getClientId();
-        await tabView.initPromise;
         this.contentView.addChildView(tabView);
         const initOpts: WaveInitOpts = {
             tabId: tabView.waveTabId,
@@ -424,7 +442,17 @@ export class WaveBrowserWindow extends BaseWindow {
             primaryStartupTab ? "(primary startup)" : ""
         );
         tabView.webContents.send("wave-init", initOpts);
-        await tabView.waveReadyPromise;
+
+        const initWait = await withTimeout(tabView.initPromise, 6000);
+        if (!initWait.ok) {
+            console.log("tab init timeout (continuing)", tabView.waveTabId);
+        }
+
+        const readyWait = await withTimeout(tabView.waveReadyPromise, 15000);
+        if (!readyWait.ok) {
+            console.log("wave-ready timeout (continuing)", tabView.waveTabId);
+            return;
+        }
         console.log("wave-ready init time", Date.now() - startTime + "ms");
     }
 

@@ -7,7 +7,7 @@
     "speech:provider": "local",
     "speech:endpoint": "",
     "speech:model": "edge-tts",
-    "speech:voice": "alloy",
+    "speech:voice": "zh-CN-XiaoxiaoNeural",
     "speech:voiceassistant": "zh-CN-XiaoxiaoNeural",
     "speech:voiceuser": "zh-CN-XiaoxiaoNeural",
     "speech:voicesystem": "zh-CN-XiaoxiaoNeural",

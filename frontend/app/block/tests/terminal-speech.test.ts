@@ -34,6 +34,17 @@ describe("extractLatestTerminalFormalReply", () => {
         expect(extractLatestTerminalFormalReply(lines)).toBe("正式回复第一行");
     });
 
+    it("filters Codex interruption / feedback hint lines as non-reply noise", () => {
+        const lines = [
+            "› question",
+            "• 正式回复第一行",
+            "Conversation interrupted - tell the model what to do differently.",
+            "Something went wrong? Hit `/feedback` to report the issue.",
+            "›",
+        ];
+        expect(extractLatestTerminalFormalReply(lines, { requirePromptAfterCodexReply: true })).toBe("正式回复第一行");
+    });
+
     it("selects the newest assistant reply when there are multiple turns", () => {
         const lines = [
             "› Q1",
