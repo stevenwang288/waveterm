@@ -678,6 +678,13 @@ const HeaderEndIcons = React.memo(
         if (!payload || !payload.text.trim()) {
             return;
         }
+        // Startup guard: never auto-play a restored formal reply payload until we've observed
+        // at least one command completion in this session (shell integration sets lastCommandDoneTs).
+        const sessionStartTs = Number(sessionStartTsRef.current) || 0;
+        const commandDoneTs = Number(lastCommandDoneTsRef.current) || 0;
+        if (sessionStartTs > 0 && commandDoneTs <= sessionStartTs) {
+            return;
+        }
         const baselineTs = Number(speechAutoPlayBaselineTsRef.current) || 0;
         if (baselineTs > 0 && payload.outputTs <= baselineTs) {
             return;

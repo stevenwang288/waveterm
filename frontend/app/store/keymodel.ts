@@ -700,26 +700,11 @@ function registerGlobalKeys() {
         globalKeyMap.set("Cmd:q", toggleMagnifyFocusedNode);
         globalKeyMap.set("Cmd:c{KeyQ}", toggleMagnifyFocusedNode);
     }
-    globalKeyMap.set("Ctrl:Tab", () => {
-        switchBlockByCycle(1);
-        return true;
-    });
-    globalKeyMap.set("Ctrl:Shift:Tab", () => {
-        switchBlockByCycle(-1);
-        return true;
-    });
     globalKeyMap.set("Tab", (waveEvent) => {
         if (!shouldHandleTabPaneSwitch(waveEvent)) {
             return false;
         }
         switchBlockByCycle(1);
-        return true;
-    });
-    globalKeyMap.set("Shift:Tab", (waveEvent) => {
-        if (!shouldHandleTabPaneSwitch(waveEvent)) {
-            return false;
-        }
-        switchBlockByCycle(-1);
         return true;
     });
     globalKeyMap.set("Ctrl:Shift:ArrowUp", () => {

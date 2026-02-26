@@ -562,6 +562,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
             rtInfo["shell:state"] = "ready";
             globalStore.set(termWrap.shellIntegrationStatusAtom, "ready");
             globalStore.set(termWrap.virtualCwdAtom, "");
+            termWrap.pendingInferredCwd = "";
             termWrap.registerPromptMarker();
             if (prevShellState === "running-command") {
                 const completedTs = Date.now();
@@ -573,6 +574,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
             rtInfo["shell:state"] = "running-command";
             globalStore.set(termWrap.shellIntegrationStatusAtom, "running-command");
             globalStore.set(termWrap.virtualCwdAtom, "");
+            termWrap.pendingInferredCwd = "";
             getApi().incrementTermCommands();
             if (cmd.data.cmd64) {
                 const decodedLen = Math.ceil(cmd.data.cmd64.length * 0.75);
@@ -595,19 +597,11 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                         }
                         const inferredCwd = inferNextCwdFromCommand(decodedCmd, currentCwd);
                         if (!isBlank(inferredCwd) && inferredCwd !== currentCwd) {
-                            console.log("Inferred cwd update from command", {
+                            termWrap.pendingInferredCwd = inferredCwd;
+                            console.log("Inferred cwd pending from command", {
                                 blockId,
                                 from: currentCwd || "-",
                                 to: inferredCwd,
-                            });
-                            fireAndForget(async () => {
-                                try {
-                                    await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
-                                        "cmd:cwd": inferredCwd,
-                                    });
-                                } catch (e) {
-                                    console.log("Inferred cwd update failed", { blockId, cmd: decodedCmd, error: e });
-                                }
                             });
                         }
                     } catch (e) {
@@ -615,12 +609,14 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                         rtInfo["shell:lastcmd"] = null;
                         globalStore.set(termWrap.lastCommandAtom, null);
                         globalStore.set(termWrap.virtualCwdAtom, "");
+                        termWrap.pendingInferredCwd = "";
                     }
                 }
             } else {
                 rtInfo["shell:lastcmd"] = null;
                 globalStore.set(termWrap.lastCommandAtom, null);
                 globalStore.set(termWrap.virtualCwdAtom, "");
+                termWrap.pendingInferredCwd = "";
             }
             // also clear lastcmdexitcode (since we've now started a new command)
             rtInfo["shell:lastcmdexitcode"] = null;
@@ -642,8 +638,35 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
         case "D":
             if (cmd.data.exitcode != null) {
                 rtInfo["shell:lastcmdexitcode"] = cmd.data.exitcode;
+                if (cmd.data.exitcode === 0 && !isBlank(termWrap.pendingInferredCwd)) {
+                    const inferredCwd = termWrap.pendingInferredCwd;
+                    termWrap.pendingInferredCwd = "";
+                    const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+                    const blockData = globalStore.get(blockAtom);
+                    const currentCwd =
+                        typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]).trim() : "";
+                    if (inferredCwd !== currentCwd) {
+                        console.log("Inferred cwd apply on success", {
+                            blockId,
+                            from: currentCwd || "-",
+                            to: inferredCwd,
+                        });
+                        fireAndForget(async () => {
+                            try {
+                                await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
+                                    "cmd:cwd": inferredCwd,
+                                });
+                            } catch (e) {
+                                console.log("Inferred cwd apply failed", { blockId, cwd: inferredCwd, error: e });
+                            }
+                        });
+                    }
+                } else {
+                    termWrap.pendingInferredCwd = "";
+                }
             } else {
                 rtInfo["shell:lastcmdexitcode"] = null;
+                termWrap.pendingInferredCwd = "";
             }
             break;
         case "I":
@@ -654,6 +677,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
         case "R":
             globalStore.set(termWrap.shellIntegrationStatusAtom, null);
             globalStore.set(termWrap.virtualCwdAtom, "");
+            termWrap.pendingInferredCwd = "";
             if (terminal.buffer.active.type === "alternate") {
                 const lastCommand = globalStore.get(termWrap.lastCommandAtom) ?? "";
                 if (!isAITermCommand(lastCommand)) {
@@ -730,6 +754,7 @@ export class TermWrap {
     private lastAltBufAtomUpdateTs: number = 0;
     private lastTerminalStateSaveTs: number = 0;
     hasSeenOsc7Cwd: boolean = false;
+    pendingInferredCwd: string = "";
     // IME composition state tracking
     // Prevents duplicate input when switching input methods during composition (e.g., using Capslock)
     // xterm.js sends data during compositionupdate AND after compositionend, causing duplicates
