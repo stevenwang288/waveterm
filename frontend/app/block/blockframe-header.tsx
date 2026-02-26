@@ -218,9 +218,8 @@ const HeaderEndIcons = React.memo(
     const speechFilterUrls = jotai.useAtomValue(getSettingsKeyAtom("speech:filterurls"));
     const speechFilterPaths = jotai.useAtomValue(getSettingsKeyAtom("speech:filterpaths"));
     const speechFilterCode = jotai.useAtomValue(getSettingsKeyAtom("speech:filtercode"));
-    // Terminal AI speech should default to auto-play. The header toggle created confusion,
-    // so we keep it always-on here and expose controls in Settings.
-    const speechAutoPlay = true;
+    const speechAutoPlayRaw = jotai.useAtomValue(getSettingsKeyAtom("speech:autoplay"));
+    const speechAutoPlay = typeof speechAutoPlayRaw === "boolean" ? speechAutoPlayRaw : true;
     const speechAutoPlayBaselineTsAtom = React.useMemo(() => {
         return useBlockAtom(blockId, "speech:autoplay-baseline-ts", () => {
             return jotai.atom(0) as jotai.PrimitiveAtom<number>;
@@ -717,6 +716,20 @@ const HeaderEndIcons = React.memo(
         };
     }, [cancelAutoSpeech]);
 
+    if (isTerminalBlock) {
+        const autoPlayDecl: IconButtonDecl = {
+            elemtype: "iconbutton",
+            icon: "arrows-rotate",
+            iconColor: speechAutoPlay ? "var(--success-color)" : "var(--secondary-text-color)",
+            title: (t("aipanel.speech.autoPlay", { defaultValue: "Auto-play new replies" }) + `: ${speechAutoPlay ? "on" : "off"}`).trim(),
+            click: () => {
+                RpcApi.SetConfigCommand(TabRpcClient, { "speech:autoplay": !speechAutoPlay });
+            },
+            disabled: false,
+        };
+        endIconsElem.push(<IconButton key="speech-autoplay" decl={autoPlayDecl} className="block-frame-speech-autoplay" />);
+    }
+
     const showSpeechButton = isTerminalBlock ? true : speechSettings.showManualButton;
     if (showSpeechButton) {
         endIconsElem.push(<IconButton key="speech" decl={speechDecl} className="block-frame-speech" />);
@@ -895,14 +908,25 @@ const BlockFrame_Header = ({
         }
         return Date.now() - ts < activityWindowMs ? "term-running" : "term-stopped";
     }, [activityTick, activityWindowMs, documentHasFocus, isAltBuf, isTerminalBlock, lastOutputTs, shellState]);
+
+    const virtualCwdAtom = React.useMemo(() => {
+        if (!isTerminalBlock) {
+            return null;
+        }
+        return useBlockAtom(nodeModel.blockId, "term:virtualcwd", () => {
+            return jotai.atom("") as jotai.PrimitiveAtom<string>;
+        }) as jotai.PrimitiveAtom<string>;
+    }, [isTerminalBlock, nodeModel.blockId]);
+    const virtualCwd = util.useAtomValueSafe(virtualCwdAtom as any) as string;
     const terminalPathLabel = React.useMemo(() => {
         if (!isTerminalBlock) {
             return undefined;
         }
         const cwd = typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]) : "";
-        const pathLabel = getPathDisplayLabel(cwd);
+        const effectiveCwd = util.isBlank(virtualCwd) ? cwd : virtualCwd;
+        const pathLabel = getPathDisplayLabel(effectiveCwd);
         return util.isBlank(pathLabel) ? undefined : pathLabel;
-    }, [blockData?.meta, isTerminalBlock]);
+    }, [blockData?.meta, isTerminalBlock, virtualCwd]);
 
     const codexAuthReady = util.useAtomValueSafe(atoms.codexAuthReadyAtom) ?? false;
 

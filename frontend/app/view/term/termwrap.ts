@@ -451,6 +451,49 @@ function extractCwdTargetFromCommand(commandText: string): string {
     return extractLeadingPathArgument(setLocationArgs);
 }
 
+function extractCdFlagTargetFromCommand(commandText: string): string {
+    const trimmedCommand = String(commandText ?? "").trim();
+    if (isBlank(trimmedCommand)) {
+        return "";
+    }
+    const commandWithoutTail = trimmedCommand.replace(/\s*(?:&&|\|\||;).*/i, "").trim();
+    if (isBlank(commandWithoutTail)) {
+        return "";
+    }
+    const cdFlagMatch = commandWithoutTail.match(/(?:^|\s)--cd(?:=|\s+)(.+)$/i);
+    if (!cdFlagMatch) {
+        return "";
+    }
+    return extractLeadingPathArgument(cdFlagMatch[1]);
+}
+
+function resolveVirtualCwdFromCdFlag(commandText: string, currentCwd: string): string {
+    const targetPath = extractCdFlagTargetFromCommand(commandText);
+    if (isBlank(targetPath) || targetPath === "-") {
+        return "";
+    }
+
+    const normalizedCurrent = normalizeCwdPath(currentCwd);
+    const normalizedTarget = normalizeCwdPath(targetPath);
+    if (isBlank(normalizedTarget)) {
+        return "";
+    }
+
+    if (
+        normalizedTarget.startsWith("/") ||
+        normalizedTarget.startsWith("//") ||
+        normalizedTarget.startsWith("~") ||
+        /^[a-zA-Z]:\//.test(normalizedTarget)
+    ) {
+        return normalizedTarget;
+    }
+
+    if (isBlank(normalizedCurrent)) {
+        return "";
+    }
+    return resolveRelativePath(normalizedCurrent, normalizedTarget);
+}
+
 function inferNextCwdFromCommand(commandText: string, currentCwd: string): string {
     let targetPath = extractCwdTargetFromCommand(commandText);
     if (isBlank(targetPath) || targetPath === "-") {
@@ -518,6 +561,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
         case "A":
             rtInfo["shell:state"] = "ready";
             globalStore.set(termWrap.shellIntegrationStatusAtom, "ready");
+            globalStore.set(termWrap.virtualCwdAtom, "");
             termWrap.registerPromptMarker();
             if (prevShellState === "running-command") {
                 const completedTs = Date.now();
@@ -528,6 +572,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
         case "C":
             rtInfo["shell:state"] = "running-command";
             globalStore.set(termWrap.shellIntegrationStatusAtom, "running-command");
+            globalStore.set(termWrap.virtualCwdAtom, "");
             getApi().incrementTermCommands();
             if (cmd.data.cmd64) {
                 const decodedLen = Math.ceil(cmd.data.cmd64.length * 0.75);
@@ -540,42 +585,42 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                         rtInfo["shell:lastcmd"] = decodedCmd;
                         globalStore.set(termWrap.lastCommandAtom, decodedCmd);
                         checkCommandForTelemetry(decodedCmd);
-                        // If the shell already emits OSC 7 cwd updates, treat them as authoritative and avoid
-                        // speculative cwd inference (which can cause the header path to "jump back").
-                        if (!termWrap.hasSeenOsc7Cwd) {
-                            const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
-                            const blockData = globalStore.get(blockAtom);
-                            const currentCwd =
-                                typeof blockData?.meta?.["cmd:cwd"] === "string"
-                                    ? String(blockData.meta["cmd:cwd"]).trim()
-                                    : "";
-                            const inferredCwd = inferNextCwdFromCommand(decodedCmd, currentCwd);
-                            if (!isBlank(inferredCwd) && inferredCwd !== currentCwd) {
-                                console.log("Inferred cwd update from command", {
-                                    blockId,
-                                    from: currentCwd || "-",
-                                    to: inferredCwd,
-                                });
-                                fireAndForget(async () => {
-                                    try {
-                                        await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
-                                            "cmd:cwd": inferredCwd,
-                                        });
-                                    } catch (e) {
-                                        console.log("Inferred cwd update failed", { blockId, cmd: decodedCmd, error: e });
-                                    }
-                                });
-                            }
+                        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+                        const blockData = globalStore.get(blockAtom);
+                        const currentCwd =
+                            typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]).trim() : "";
+                        if (isAITermCommand(decodedCmd)) {
+                            const virtualCwd = resolveVirtualCwdFromCdFlag(decodedCmd, currentCwd);
+                            globalStore.set(termWrap.virtualCwdAtom, virtualCwd);
+                        }
+                        const inferredCwd = inferNextCwdFromCommand(decodedCmd, currentCwd);
+                        if (!isBlank(inferredCwd) && inferredCwd !== currentCwd) {
+                            console.log("Inferred cwd update from command", {
+                                blockId,
+                                from: currentCwd || "-",
+                                to: inferredCwd,
+                            });
+                            fireAndForget(async () => {
+                                try {
+                                    await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
+                                        "cmd:cwd": inferredCwd,
+                                    });
+                                } catch (e) {
+                                    console.log("Inferred cwd update failed", { blockId, cmd: decodedCmd, error: e });
+                                }
+                            });
                         }
                     } catch (e) {
                         console.error("Error decoding cmd64:", e);
                         rtInfo["shell:lastcmd"] = null;
                         globalStore.set(termWrap.lastCommandAtom, null);
+                        globalStore.set(termWrap.virtualCwdAtom, "");
                     }
                 }
             } else {
                 rtInfo["shell:lastcmd"] = null;
                 globalStore.set(termWrap.lastCommandAtom, null);
+                globalStore.set(termWrap.virtualCwdAtom, "");
             }
             // also clear lastcmdexitcode (since we've now started a new command)
             rtInfo["shell:lastcmdexitcode"] = null;
@@ -608,6 +653,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
             break;
         case "R":
             globalStore.set(termWrap.shellIntegrationStatusAtom, null);
+            globalStore.set(termWrap.virtualCwdAtom, "");
             if (terminal.buffer.active.type === "alternate") {
                 const lastCommand = globalStore.get(termWrap.lastCommandAtom) ?? "";
                 if (!isAITermCommand(lastCommand)) {
@@ -666,6 +712,7 @@ export class TermWrap {
     promptMarkers: TermTypes.IMarker[] = [];
     shellIntegrationStatusAtom: jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
+    virtualCwdAtom: jotai.PrimitiveAtom<string>;
     nodeModel: BlockNodeModel; // this can be null
     unreadAtom: jotai.PrimitiveAtom<boolean>;
     lastOutputTsAtom: jotai.PrimitiveAtom<number>;
@@ -730,6 +777,9 @@ export class TermWrap {
             return jotai.atom(null) as jotai.PrimitiveAtom<"ready" | "running-command" | null>;
         }) as jotai.PrimitiveAtom<"ready" | "running-command" | null>;
         this.lastCommandAtom = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
+        this.virtualCwdAtom = useBlockAtom(this.blockId, "term:virtualcwd", () => {
+            return jotai.atom("") as jotai.PrimitiveAtom<string>;
+        }) as jotai.PrimitiveAtom<string>;
         this.terminal = new Terminal(options);
         this.fitAddon = new FitAddon();
         this.fitAddon.noScrollbar = PLATFORM === PlatformMacOS;

@@ -45,7 +45,7 @@ interface TabBarProps {
     workspace: Workspace;
 }
 
-const DefaultSidePanelButtonOrder: SidePanelView[] = ["ai", "favorites", "servers", "layouts", "git"];
+const DefaultSidePanelButtonOrder: SidePanelView[] = ["ai", "servers", "layouts", "git"];
 
 function normalizeSidePanelButtonOrder(raw: unknown): SidePanelView[] {
     const normalized: SidePanelView[] = [];
