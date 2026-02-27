@@ -239,6 +239,36 @@ export function runWaveSrv(handleWSEvent: (evtMsg: WSEventType) => void): Promis
             process.env[WebServerEndpointVarName] = startParams[2];
             WaveVersion = startParams[3];
             WaveBuildTime = parseInt(startParams[4]);
+
+            // Guardrail: in dev mode, fail fast if `dist/bin/wavesrv.*` belongs to a different version.
+            // This prevents the "multiple versions" confusion where UI code and backend binaries are out of sync.
+            if (!electron.app.isPackaged) {
+                const appVersion = (electron.app.getVersion?.() ?? "").trim();
+                if (appVersion && WaveVersion && appVersion !== WaveVersion) {
+                    const message = [
+                        "Detected WAVE dev backend/UI version mismatch.",
+                        "",
+                        `UI version:     ${appVersion}`,
+                        `wavesrv version: ${WaveVersion} (buildtime ${WaveBuildTime})`,
+                        "",
+                        "This usually means `dist/bin` is stale or came from another branch/version.",
+                        "",
+                        "Fix:",
+                        "- Run: npm run dev:fresh (now auto-rebuilds backend bins when stale)",
+                        "- Or run: powershell -File scripts/build-backend-windows.ps1",
+                    ].join("\n");
+                    console.log(message);
+                    try {
+                        electron.dialog.showErrorBox("WAVE dev backend mismatch", message);
+                    } catch {}
+                    try {
+                        setUserConfirmedQuit(true);
+                        proc.kill();
+                    } catch {}
+                    electron.app.quit();
+                    return;
+                }
+            }
             waveSrvReadyResolve(true);
             return;
         }
