@@ -12,7 +12,11 @@ function Get-PackageVersion {
 }
 
 function Get-NodeArchTag {
-  $arch = ($env:PROCESSOR_ARCHITECTURE ?? "").ToUpperInvariant()
+  $arch = $env:PROCESSOR_ARCHITECTURE
+  if ($arch -eq $null) {
+    $arch = ""
+  }
+  $arch = $arch.ToUpperInvariant()
   if ($arch -eq "ARM64") {
     return "arm64"
   }
@@ -49,11 +53,12 @@ function Get-WaveVersionFromLdflags {
   if (-not $LdflagsLine) {
     return ""
   }
-  $m = [regex]::Match($LdflagsLine, "main\\.WaveVersion=([^\\s\\\"']+)")
+  $m = [regex]::Match($LdflagsLine, 'main\.WaveVersion=([^\s]+)')
   if (-not $m.Success) {
     return ""
   }
-  return [string]$m.Groups[1].Value
+  $raw = [string]$m.Groups[1].Value
+  return $raw.Trim('"').Trim("'")
 }
 
 function Ensure-BackendBins {
