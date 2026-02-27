@@ -188,19 +188,11 @@ const QuickTips = () => {
 
                     <div className="flex flex-col gap-1.5">
                         <div className="text-sm text-accent-400 font-semibold uppercase tracking-wide mb-1">
-                            {t("tips.keybindings.blockNavigation.titleWithKeys", { keys: "Ctrl-Shift" })}
+                            {t("tips.keybindings.blockNavigation.titleWithKeys", { keys: "Tab" })}
                         </div>
                         <div className="flex flex-col gap-0.5 p-2 rounded-md hover:bg-white/5 transition-colors">
                             <span className="text-[15px]">{t("tips.keybindings.blockNavigation.navigateBetweenBlocks")}</span>
-                            <KeyBinding keyDecl="Ctrl:Shift:Arrows" />
-                        </div>
-                        <div className="flex flex-col gap-0.5 p-2 rounded-md hover:bg-white/5 transition-colors">
-                            <span className="text-[15px]">{t("tips.keybindings.blockNavigation.focusNthBlock")}</span>
-                            <KeyBinding keyDecl="Ctrl:Shift:Digit" />
-                        </div>
-                        <div className="flex flex-col gap-0.5 p-2 rounded-md hover:bg-white/5 transition-colors">
-                            <span className="text-[15px]">{t("tips.keybindings.blockNavigation.focusWaveAi")}</span>
-                            <KeyBinding keyDecl="Ctrl:Shift:0" />
+                            <KeyBinding keyDecl="Tab" />
                         </div>
                     </div>
 

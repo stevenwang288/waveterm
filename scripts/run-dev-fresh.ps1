@@ -127,7 +127,14 @@ try {
   Write-Host "[dev:fresh] log=$logPath"
 
   # Stream output to screen and log file.
-  npm run dev 2>&1 | Tee-Object -FilePath $logPath
+  # NOTE: Electron may write warnings to stderr; do not treat those as fatal in dev:fresh.
+  $prevEap = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    npm run dev 2>&1 | Tee-Object -FilePath $logPath
+  } finally {
+    $ErrorActionPreference = $prevEap
+  }
 } finally {
   Pop-Location
 }

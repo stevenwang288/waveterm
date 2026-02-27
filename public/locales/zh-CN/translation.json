@@ -120,8 +120,8 @@
     "addOnly": "仅加入预设",
     "addAndOpen": "加入并打开",
     "pveWallName": "PVE",
-    "pveWallDesc": "一键打开 PVE 屏幕墙（2×5）",
-    "pveWallTitle": "打开 PVE 屏幕墙布局",
+    "pveWallDesc": "打开 PVE（VU 模块）",
+    "pveWallTitle": "打开 PVE（保持登录 / 简体中文）",
     "saveToSlot": "保存到 {{slot}}",
     "loadSlot": "加载 {{slot}}",
     "presets": {

@@ -11,7 +11,7 @@ import {
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getLayoutModelForStaticTab } from "@/layout/index";
-import { openCliLayoutInNewTab, openPveDashboardWallInNewTab } from "@/util/clilayout";
+import { openCliLayoutInNewTab, openPveInNewTab } from "@/util/clilayout";
 import { base64ToString, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -340,9 +340,9 @@ const LayoutsPanel = memo(() => {
         [getFallbackFromFocus, openLayoutStateInNewTab, presetStates, t]
     );
 
-    const openPveWall = useCallback(() => {
+    const openPve = useCallback(() => {
         fireAndForget(async () => {
-            await openPveDashboardWallInNewTab();
+            await openPveInNewTab();
         });
     }, []);
 
@@ -467,10 +467,10 @@ const LayoutsPanel = memo(() => {
                 })}
                 <div
                     className="mt-1 flex items-center px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer border border-cyan-500/20"
-                    onClick={openPveWall}
+                    onClick={openPve}
                     title={t("clilayout.pveWallTitle")}
                 >
-                    <i className="fa fa-display mr-2 text-cyan-300" />
+                    <i className="fa fa-desktop mr-2 text-cyan-300" />
                     <div className="flex-1 overflow-hidden">
                         <div className="flex items-center">
                             <span className="truncate font-medium">{t("clilayout.pveWallName")}</span>

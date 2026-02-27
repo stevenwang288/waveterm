@@ -39,8 +39,8 @@ type PendingCliLayout = {
 const PENDING_KEY_PREFIX = "waveterm:pending-cli-layout:";
 const PENDING_VERSION = 1 as const;
 const DEFAULT_PVE_TAB_NAME = "PVE";
-const DEFAULT_PVE_HOST = "192.168.1.250:8006";
-const DEFAULT_PVE_VMIDS = [100, 101, 110, 111, 112, 120, 130, 140, 160, 161];
+const DEFAULT_PVE_ORIGIN = "https://192.168.1.250:8006";
+const DEFAULT_PVE_URL = "https://192.168.1.250:8006/#v1:0:=node%2FVUModule:4:::::8::";
 const DEFAULT_PVE_WEB_PARTITION = "persist:pve-wall";
 
 function makePendingKey(tabId: string): string {
@@ -347,31 +347,38 @@ export async function openCliLayoutInNewTab(state: CliLayoutState, tabName: stri
     getApi().setActiveTab(newTabId);
 }
 
-function makePveVmConsoleUrl(vmid: number, autoOpenConsole = false): string {
-    const query = autoOpenConsole ? "?wave_pve_auto_console=1" : "";
-    return `https://${DEFAULT_PVE_HOST}/${query}#v1:0:=qemu%2F${vmid}:4:5::::8::`;
-}
+export async function openPveInNewTab(): Promise<void> {
+    try {
+        await getApi().pveEnsureAuth({
+            partition: DEFAULT_PVE_WEB_PARTITION,
+            origin: DEFAULT_PVE_ORIGIN,
+            lang: "zh_CN",
+        });
+    } catch {
+        // ignore auth prime errors, fall back to normal login page
+    }
 
-export async function openPveDashboardWallInNewTab(): Promise<void> {
-    const slots: CliLayoutSlot[] = DEFAULT_PVE_VMIDS.map((vmid) => ({
+    const slots: CliLayoutSlot[] = [
+        {
         type: "web",
-        title: `VM ${vmid}`,
-        url: makePveVmConsoleUrl(vmid, vmid === 112),
+        title: DEFAULT_PVE_TAB_NAME,
+        url: DEFAULT_PVE_URL,
         hideNav: true,
         zoom: 0.9,
         partition: DEFAULT_PVE_WEB_PARTITION,
-    }));
+        },
+    ];
     await openCliLayoutInNewTab(
         {
-            rows: 2,
-            cols: 5,
+            rows: 1,
+            cols: 1,
             paths: [],
             commands: [],
             slots,
             updatedTs: Date.now(),
         },
         DEFAULT_PVE_TAB_NAME,
-        "pve-wall"
+        "pve"
     );
 }
 

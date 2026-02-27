@@ -169,6 +169,12 @@ declare global {
             error?: string;
             ts?: number;
         }) => Promise<boolean>; // speech-log
+        pveEnsureAuth: (req: { partition: string; origin: string; lang?: string; timeoutMs?: number }) => Promise<{
+            ok: boolean;
+            cached?: boolean;
+            skipped?: boolean;
+            error?: string;
+        }>; // pve-ensure-auth
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh

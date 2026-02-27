@@ -5,6 +5,40 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Stop-ProcessesUsingExe {
+  param([string]$ExePath)
+
+  if (-not $ExePath) {
+    return
+  }
+
+  $fullPath = $ExePath
+  try {
+    $fullPath = (Resolve-Path $ExePath).Path
+  } catch {
+    # ignore
+  }
+
+  try {
+    $matches = Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $fullPath }
+  } catch {
+    $matches = @()
+  }
+
+  foreach ($proc in ($matches ?? @())) {
+    try {
+      Write-Host "[backend] stopping locked process pid=$($proc.ProcessId) path=$fullPath" -ForegroundColor Yellow
+      Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+    } catch {
+      # ignore
+    }
+  }
+
+  if (($matches ?? @()).Count -gt 0) {
+    Start-Sleep -Milliseconds 250
+  }
+}
+
 function Ensure-Zig {
   param([string]$Version)
 
@@ -61,7 +95,13 @@ try {
   New-Item -ItemType Directory -Force "dist\\bin" | Out-Null
 
   if (Test-Path "dist\\bin\\wavesrv.x64.exe") {
-    Remove-Item -Force "dist\\bin\\wavesrv.x64.exe"
+    try {
+      Remove-Item -Force "dist\\bin\\wavesrv.x64.exe"
+    } catch {
+      # wavesrv may still be running (dev instance). Stop only the process that uses this exact exe path.
+      Stop-ProcessesUsingExe -ExePath (Join-Path $repoRoot "dist\\bin\\wavesrv.x64.exe")
+      Remove-Item -Force "dist\\bin\\wavesrv.x64.exe"
+    }
   }
 
   $env:CGO_ENABLED = "1"

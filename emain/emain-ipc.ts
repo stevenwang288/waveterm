@@ -29,6 +29,7 @@ import { getWaveVersion } from "./emain-wavesrv";
 import { createNewWaveWindow, focusedWaveWindow, getWaveWindowByWebContentsId } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
 import { synthesizeEdgeTtsToMp3Base64 } from "./local-tts-edge";
+import { ensurePveAuth, PveEnsureAuthRequest, storePveCredentials } from "./pve-auth";
 
 const electronApp = electron.app;
 
@@ -998,6 +999,17 @@ export function initIpcHandlers() {
         console.log("speech-log", JSON.stringify(normalized));
         return true;
     });
+
+    electron.ipcMain.handle("pve-ensure-auth", async (_event, req: PveEnsureAuthRequest) => {
+        return await ensurePveAuth(req);
+    });
+
+    electron.ipcMain.handle(
+        "pve-store-credentials",
+        async (_event, payload: { host: string; username: string; password: string }) => {
+            return await storePveCredentials(payload?.host, payload?.username, payload?.password);
+        }
+    );
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {
         console.log("open-native-path", filePath);

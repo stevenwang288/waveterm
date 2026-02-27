@@ -707,89 +707,6 @@ function registerGlobalKeys() {
         switchBlockByCycle(1);
         return true;
     });
-    globalKeyMap.set("Ctrl:Shift:ArrowUp", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Up);
-        return true;
-    });
-    globalKeyMap.set("Ctrl:Shift:ArrowDown", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Down);
-        return true;
-    });
-    globalKeyMap.set("Ctrl:Shift:ArrowLeft", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Left);
-        return true;
-    });
-    globalKeyMap.set("Ctrl:Shift:ArrowRight", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Right);
-        return true;
-    });
-    if (isWindows()) {
-        globalKeyMap.set("Ctrl:Alt:Shift:ArrowUp", () => {
-            swapBlockInDirection(NavigateDirection.Up);
-            return true;
-        });
-        globalKeyMap.set("Ctrl:Alt:Shift:ArrowDown", () => {
-            swapBlockInDirection(NavigateDirection.Down);
-            return true;
-        });
-        globalKeyMap.set("Ctrl:Alt:Shift:ArrowLeft", () => {
-            swapBlockInDirection(NavigateDirection.Left);
-            return true;
-        });
-        globalKeyMap.set("Ctrl:Alt:Shift:ArrowRight", () => {
-            swapBlockInDirection(NavigateDirection.Right);
-            return true;
-        });
-    }
-    // Vim-style aliases for block focus navigation.
-    globalKeyMap.set("Ctrl:Shift:h", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Left);
-        return true;
-    });
-    globalKeyMap.set("Ctrl:Shift:j", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Down);
-        return true;
-    });
-    globalKeyMap.set("Ctrl:Shift:k", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Up);
-        return true;
-    });
-    globalKeyMap.set("Ctrl:Shift:l", () => {
-        const disableCtrlShiftArrows = globalStore.get(getSettingsKeyAtom("app:disablectrlshiftarrows"));
-        if (disableCtrlShiftArrows) {
-            return false;
-        }
-        switchBlockInDirection(NavigateDirection.Right);
-        return true;
-    });
     globalKeyMap.set("Ctrl:Shift:x", () => {
         const blockId = getFocusedBlockId();
         if (blockId == null) {
@@ -840,14 +757,6 @@ function registerGlobalKeys() {
         });
         globalKeyMap.set(`Cmd:c{Numpad${idx}}`, () => {
             switchTabAbs(idx);
-            return true;
-        });
-        globalKeyMap.set(`Ctrl:Shift:c{Digit${idx}}`, () => {
-            switchBlockByBlockNum(idx);
-            return true;
-        });
-        globalKeyMap.set(`Ctrl:Shift:c{Numpad${idx}}`, () => {
-            switchBlockByBlockNum(idx);
             return true;
         });
     }
