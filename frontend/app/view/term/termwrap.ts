@@ -745,7 +745,7 @@ export class TermWrap {
     private isReflowReloading: boolean = false;
     private lastReflowReloadTermSize: TermSize | null = null;
     private lastBellNotifyTs: number = 0;
-    private savedScrollPosition: number | null = null; // preserved scroll position for reflow reloads
+    private savedScrollState: { viewportY: number; wasAtBottom: boolean } | null = null; // preserved scroll state for reflow reloads
     private pendingWriteChunks: Uint8Array[] = [];
     private pendingWriteHead: number = 0;
     private pendingWriteBytes: number = 0;
@@ -1384,30 +1384,45 @@ export class TermWrap {
         }
     }
 
-    // Preserve the current scroll position so we can restore it after a reflow reload.
+    // Preserve the current scroll state so we can restore it after a reflow reload.
     saveScrollPosition(): void {
         if (!this.terminal) {
             return;
         }
         const buffer = this.terminal.buffer.active;
         if (buffer) {
-            this.savedScrollPosition = buffer.viewportY;
+            const maxScroll = Math.max(0, buffer.baseY);
+            this.savedScrollState = {
+                viewportY: Math.min(Math.max(buffer.viewportY, 0), maxScroll),
+                wasAtBottom: buffer.type !== "alternate" && buffer.baseY - buffer.viewportY <= 1,
+            };
         }
     }
 
     // Restore the previously preserved scroll position (best-effort).
     restoreScrollPosition(): void {
-        if (!this.terminal || this.savedScrollPosition == null) {
+        if (!this.terminal || this.savedScrollState == null) {
+            return;
+        }
+        const saved = this.savedScrollState;
+        this.savedScrollState = null;
+        if (saved.wasAtBottom) {
+            this.terminal.scrollToBottom();
+            window.requestAnimationFrame(() => {
+                this.terminal.scrollToBottom();
+            });
             return;
         }
         const buffer = this.terminal.buffer.active;
         if (buffer) {
-            // 确保目标位置在有效范围内
             const maxScroll = Math.max(0, buffer.baseY);
-            const targetY = Math.min(Math.max(this.savedScrollPosition, 0), maxScroll);
+            const targetY = Math.min(Math.max(saved.viewportY, 0), maxScroll);
             this.terminal.scrollToLine(targetY);
         }
-        this.savedScrollPosition = null;
+    }
+
+    private clearSavedScrollPosition(): void {
+        this.savedScrollState = null;
     }
 
     // Scroll to the bottom (latest output).
@@ -1432,8 +1447,6 @@ export class TermWrap {
             return;
         }
 
-        // Preserve scroll position across reloads so the viewport doesn't jump.
-        this.saveScrollPosition();
         // Avoid downloading/replaying huge histories on the UI thread.
         if (this.ptyOffset > ReflowReloadMaxBytes) {
             console.warn("term reflow reload skipped (history too large)", this.blockId, {
@@ -1453,6 +1466,8 @@ export class TermWrap {
             return;
         }
 
+        // Preserve scroll position across reloads so the viewport doesn't jump.
+        this.saveScrollPosition();
         this.isReflowReloading = true;
         try {
             // Cancel pending append queue writes; we'll restore from authoritative file content.
@@ -1506,6 +1521,7 @@ export class TermWrap {
             console.error("term reflow reload failed", this.blockId, reason, e);
         } finally {
             this.isReflowReloading = false;
+            this.clearSavedScrollPosition();
         }
     }
 
