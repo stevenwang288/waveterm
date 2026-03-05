@@ -5,6 +5,7 @@ import * as electron from "electron";
 import { FastAverageColor } from "fast-average-color";
 import fs from "fs";
 import * as child_process from "node:child_process";
+import { randomUUID } from "node:crypto";
 import * as os from "node:os";
 import * as path from "path";
 import { promisify } from "node:util";
@@ -36,6 +37,7 @@ const electronApp = electron.app;
 let webviewFocusId: number = null;
 let webviewKeys: string[] = [];
 const execFileAsync = promisify(child_process.execFile);
+const appRunId = randomUUID();
 
 const allowedGitSubcommands = new Set([
     "status",
@@ -772,6 +774,9 @@ async function runCodexTranslate(text: string): Promise<string> {
 
 export function initIpcHandlers() {
     const debugOpenExternal = process.env.WAVETERM_DEBUG_OPEN_EXTERNAL === "1";
+    electron.ipcMain.on("get-app-run-id", (event) => {
+        event.returnValue = appRunId;
+    });
     electron.ipcMain.on("open-external", (event, url) => {
         if (url && typeof url === "string") {
             if (debugOpenExternal) {
@@ -843,6 +848,95 @@ export function initIpcHandlers() {
         const image = await tabView.webContents.capturePage(rect);
         const base64String = image.toPNG().toString("base64");
         return `data:image/png;base64,${base64String}`;
+    });
+
+    electron.ipcMain.handle("dev-capture-page", async (event, name?: string) => {
+        if (electronApp.isPackaged) {
+            throw new Error("dev-capture-page is only available in dev mode");
+        }
+        const tabView = getWaveTabViewByWebContentsId(event.sender.id);
+        const win = electron.BrowserWindow.fromWebContents(event.sender);
+        if (!tabView && !win) {
+            throw new Error("No tab view or browser window found for the given webContents id");
+        }
+        const ts = new Date().toISOString().replace(/[:.]/g, "-");
+        const safeName = (name ?? "capture")
+            .toString()
+            .trim()
+            .replace(/[^a-zA-Z0-9._-]+/g, "_")
+            .slice(0, 60);
+        const captureDir = path.join(process.cwd(), ".tmp", "dev-captures");
+        try {
+            fs.mkdirSync(captureDir, { recursive: true });
+        } catch {
+            // ignore
+        }
+        const filePath = path.join(captureDir, `${ts}-${safeName || "capture"}.png`);
+        let pngBytes: Buffer = null;
+        let lastTabBounds: Electron.Rectangle = null;
+        let lastWinBounds: Electron.Rectangle = null;
+        // Views can exist before they're attached/sized; keep retrying until we get a real capture.
+        for (let attempt = 0; attempt < 240; attempt++) {
+            if (tabView) {
+                try {
+                    lastTabBounds = tabView.getBounds();
+                } catch {
+                    lastTabBounds = null;
+                }
+            }
+            if (win) {
+                try {
+                    lastWinBounds = win.getBounds();
+                } catch {
+                    lastWinBounds = null;
+                }
+            }
+
+            if (tabView && lastTabBounds?.width > 0 && lastTabBounds?.height > 0) {
+                try {
+                    const image = await tabView.webContents.capturePage();
+                    const png = image.toPNG();
+                    if (png && png.length > 0) {
+                        pngBytes = png;
+                        break;
+                    }
+                } catch {
+                    // ignore transient capture failures and retry
+                }
+            }
+
+            if (win && lastWinBounds?.width > 0 && lastWinBounds?.height > 0) {
+                try {
+                    const image = await win.capturePage();
+                    const png = image.toPNG();
+                    if (png && png.length > 0) {
+                        pngBytes = png;
+                        break;
+                    }
+                } catch {
+                    // ignore transient capture failures and retry
+                }
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        if (pngBytes == null || pngBytes.length == 0) {
+            const tabDesc = lastTabBounds ? `${lastTabBounds.width}x${lastTabBounds.height}` : "unknown";
+            const winDesc = lastWinBounds ? `${lastWinBounds.width}x${lastWinBounds.height}` : "unknown";
+            try {
+                const pdfBytes = await event.sender.printToPDF({
+                    printBackground: true,
+                    landscape: true,
+                });
+                const pdfPath = filePath.replace(/\.png$/i, ".pdf");
+                fs.writeFileSync(pdfPath, pdfBytes);
+                return pdfPath;
+            } catch (e) {
+                throw new Error(`capturePage returned empty image (tabBounds=${tabDesc}, winBounds=${winDesc}): ${e}`);
+            }
+        }
+        fs.writeFileSync(filePath, pngBytes);
+        return filePath;
     });
 
     electron.ipcMain.on("get-env", (event, varName) => {

@@ -12,7 +12,7 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import type { TermViewModel } from "@/app/view/term/term-model";
 import { atoms, getOverrideConfigAtom, getSettingsPrefixAtom, globalStore, WOS } from "@/store/global";
 import { PLATFORM, PlatformWindows } from "@/util/platformutil";
-import { fireAndForget, useAtomValueSafe } from "@/util/util";
+import { fireAndForget, isBlank, useAtomValueSafe } from "@/util/util";
 import { computeBgStyleFromMeta } from "@/util/waveutil";
 import { ISearchOptions } from "@xterm/addon-search";
 import clsx from "clsx";
@@ -185,6 +185,10 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     const isMagnified = jotai.useAtomValue(model.nodeModel.isMagnified);
     const isMI = jotai.useAtomValue(tabModel.isTermMultiInput);
     const isBasicTerm = termMode != "vdom" && blockData?.meta?.controller != "cmd"; // needs to match isBasicTerm
+    const sidePanelMode = String(blockData?.meta?.["term:sidepanelmode"] ?? "");
+    const sidePanelBlockId = String(blockData?.meta?.["term:sidepanelblockid"] ?? "");
+    const sidePanelActive =
+        termMode === "term" && (sidePanelMode === "gui" || sidePanelMode === "wall") && !isBlank(sidePanelBlockId);
 
     // search
     const searchProps = useSearch({
@@ -408,21 +412,81 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         [model]
     );
 
+    React.useEffect(() => {
+        if (!sidePanelActive) {
+            return;
+        }
+        const unsub = waveEventSubscribeSingle({
+            eventType: "blockclose",
+            scope: WOS.makeORef("block", sidePanelBlockId),
+            handler: () => {
+                RpcApi.SetMetaCommand(TabRpcClient, {
+                    oref: WOS.makeORef("block", blockId),
+                    meta: {
+                        "term:sidepanelmode": null,
+                        "term:sidepanelblockid": null,
+                    },
+                });
+            },
+        });
+        return () => {
+            unsub();
+        };
+    }, [blockId, sidePanelActive, sidePanelBlockId]);
+
+    const sidePanelNodeModel: BlockNodeModel | null = React.useMemo(() => {
+        if (!sidePanelActive) {
+            return null;
+        }
+        return {
+            blockId: sidePanelBlockId,
+            isFocused: jotai.atom(false),
+            isMagnified: jotai.atom(false),
+            focusNode: () => {
+                model.nodeModel.focusNode();
+            },
+            toggleMagnify: () => {},
+            onClose: () => {
+                RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: sidePanelBlockId });
+                RpcApi.SetMetaCommand(TabRpcClient, {
+                    oref: WOS.makeORef("block", blockId),
+                    meta: {
+                        "term:sidepanelmode": null,
+                        "term:sidepanelblockid": null,
+                    },
+                });
+            },
+        };
+    }, [blockId, model.nodeModel, sidePanelActive, sidePanelBlockId]);
+
     return (
-        <div className={clsx("view-term", "term-mode-" + termMode)} ref={viewRef} onContextMenu={handleContextMenu}>
+        <div
+            className={clsx("view-term", "term-mode-" + termMode, sidePanelActive && "term-with-sidepanel")}
+            ref={viewRef}
+            onContextMenu={handleContextMenu}
+        >
             {termBg && <div className="absolute inset-0 z-0 pointer-events-none" style={termBg} />}
             <TermResyncHandler blockId={blockId} model={model} />
             <TermThemeUpdater blockId={blockId} model={model} termRef={model.termRef} />
             <TermStickers config={stickerConfig} />
-            <TermToolbarVDomNode key="vdom-toolbar" blockId={blockId} model={model} />
-            <TermVDomNode key="vdom" blockId={blockId} model={model} />
-            <div key="conntectElem" className="term-connectelem" ref={connectElemRef}>
-                <div className="term-scrollbar-show-observer" onPointerOver={onScrollbarShowObserver} />
-                <div
-                    ref={scrollbarHideObserverRef}
-                    className="term-scrollbar-hide-observer"
-                    onPointerOver={onScrollbarHideObserver}
-                />
+            <div className="term-split">
+                <div className="term-split-left">
+                    <TermToolbarVDomNode key="vdom-toolbar" blockId={blockId} model={model} />
+                    <TermVDomNode key="vdom" blockId={blockId} model={model} />
+                    <div key="conntectElem" className="term-connectelem" ref={connectElemRef}>
+                        <div className="term-scrollbar-show-observer" onPointerOver={onScrollbarShowObserver} />
+                        <div
+                            ref={scrollbarHideObserverRef}
+                            className="term-scrollbar-hide-observer"
+                            onPointerOver={onScrollbarHideObserver}
+                        />
+                    </div>
+                </div>
+                {sidePanelActive && sidePanelNodeModel && (
+                    <div className="term-split-right">
+                        <SubBlock nodeModel={sidePanelNodeModel} />
+                    </div>
+                )}
             </div>
             <Search {...searchProps} />
         </div>

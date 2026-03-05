@@ -390,6 +390,18 @@
         },
         "tsunami:gopath": {
           "type": "string"
+        },
+        "wall:*": {
+          "type": "boolean"
+        },
+        "wall:url": {
+          "type": "string"
+        },
+        "wall:tabname": {
+          "type": "string"
+        },
+        "wall:webpartition": {
+          "type": "string"
         }
       },
       "additionalProperties": false,

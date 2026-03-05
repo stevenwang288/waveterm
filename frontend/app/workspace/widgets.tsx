@@ -10,7 +10,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { shouldIncludeWidgetForWorkspace } from "@/app/workspace/widgetfilter";
 import { GitPanel } from "@/app/workspace/git-panel";
-import { openPveInNewTab } from "@/util/clilayout";
+import { openPveUiInNewTab, openWallInNewTab } from "@/util/clilayout";
 import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
@@ -528,9 +528,15 @@ const Widgets = memo(() => {
         WorkspaceLayoutModel.getInstance().toggleSidePanelView("git");
     }, []);
 
+    const openScreenwall = useCallback(() => {
+        fireAndForget(async () => {
+            await openWallInNewTab();
+        });
+    }, []);
+
     const openPve = useCallback(() => {
         fireAndForget(async () => {
-            await openPveInNewTab();
+            await openPveUiInNewTab();
         });
     }, []);
 
@@ -558,7 +564,10 @@ const Widgets = memo(() => {
             newMode = "compact";
 
             // Calculate total widget count for supercompact check
-            const utilityWidgets = (isDev() || featureWaveAppBuilder) ? 7 : 6;
+            const baseUtilityWidgets = 6; // ExplorerConn, Git, Screenwall, PVE, AI, Settings
+            const appsWidgetCount = (isDev() || featureWaveAppBuilder) ? 1 : 0;
+            const devIndicatorCount = isDev() ? 1 : 0;
+            const utilityWidgets = baseUtilityWidgets + appsWidgetCount + devIndicatorCount;
             const totalWidgets = (widgets?.length || 0) + utilityWidgets;
             const minHeightPerWidget = 32;
             const requiredHeight = totalWidgets * minHeightPerWidget;
@@ -664,16 +673,34 @@ const Widgets = memo(() => {
                             <div
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={() => {
+                                    openScreenwall();
+                                    setIsAppsOpen(false);
+                                }}
+                            >
+                                <Tooltip content={t("clilayout.screenWallTitle")} placement="right" disable={false}>
+                                    <div>
+                                        <div className="flex flex-col items-center">
+                                            <i className={makeIconClass("table-cells", true)}></i>
+                                            <div className="text-[9px] leading-none mt-0.5 font-semibold text-emerald-200/90">
+                                                {t("clilayout.screenWallName")}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Tooltip>
+                            </div>
+                            <div
+                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                                onClick={() => {
                                     openPve();
                                     setIsAppsOpen(false);
                                 }}
                             >
-                                <Tooltip content={t("clilayout.pveWallTitle")} placement="right" disable={false}>
+                                <Tooltip content={t("workspace.pveTooltip")} placement="right" disable={false}>
                                     <div>
                                         <div className="flex flex-col items-center">
                                             <i className={makeIconClass("globe", true)}></i>
                                             <div className="text-[9px] leading-none mt-0.5 font-semibold text-cyan-200/90">
-                                                {t("clilayout.pveWallName")}
+                                                {t("workspace.pve")}
                                             </div>
                                         </div>
                                     </div>
@@ -760,17 +787,35 @@ const Widgets = memo(() => {
                         <div
                             className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                             onClick={() => {
+                                openScreenwall();
+                                setIsAppsOpen(false);
+                            }}
+                        >
+                            <Tooltip content={t("clilayout.screenWallTitle")} placement="right" disable={false}>
+                                <div className="flex flex-col items-center w-full">
+                                    <div>
+                                        <i className={makeIconClass("table-cells", true)}></i>
+                                    </div>
+                                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                                        {t("clilayout.screenWallName")}
+                                    </div>
+                                </div>
+                            </Tooltip>
+                        </div>
+                        <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={() => {
                                 openPve();
                                 setIsAppsOpen(false);
                             }}
                         >
-                            <Tooltip content={t("clilayout.pveWallTitle")} placement="right" disable={false}>
+                            <Tooltip content={t("workspace.pveTooltip")} placement="right" disable={false}>
                                 <div className="flex flex-col items-center w-full">
                                     <div>
                                         <i className={makeIconClass("globe", true)}></i>
                                     </div>
                                     <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                                        {t("clilayout.pveWallName")}
+                                        {t("workspace.pve")}
                                     </div>
                                 </div>
                             </Tooltip>
@@ -844,6 +889,14 @@ const Widgets = memo(() => {
                         <i className={makeIconClass("robot", true)}></i>
                     </div>
                     <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.ai")}</div>
+                </div>
+                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                    <div>
+                        <i className={makeIconClass("table-cells", true)}></i>
+                    </div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">
+                        {t("clilayout.screenWallName")}
+                    </div>
                 </div>
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>

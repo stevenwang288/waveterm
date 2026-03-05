@@ -194,6 +194,11 @@ type SettingsType struct {
 	TsunamiSdkReplacePath string `json:"tsunami:sdkreplacepath,omitempty"`
 	TsunamiSdkVersion     string `json:"tsunami:sdkversion,omitempty"`
 	TsunamiGoPath         string `json:"tsunami:gopath,omitempty"`
+
+	WallClear        bool   `json:"wall:*,omitempty"`
+	WallUrl          string `json:"wall:url,omitempty"`
+	WallTabName      string `json:"wall:tabname,omitempty"`
+	WallWebPartition string `json:"wall:webpartition,omitempty"`
 }
 
 func (s *SettingsType) GetAiSettings() *AiSettingsType {

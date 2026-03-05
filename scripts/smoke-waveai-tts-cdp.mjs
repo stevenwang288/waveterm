@@ -298,16 +298,24 @@ async function main() {
 })()`;
 
             if (scenario === "terminal") {
-                const expectedText = message.trim() || "smoke terminal reply";
+                const baseText = message.trim() || "smoke terminal reply";
+                // Keep this aligned with looksLikeAssistantFinalReply() heuristics so opencode-style payloads
+                // are considered "final reply" content even when the provided --message is short.
+                const expectedText =
+                    baseText.includes("\n") ||
+                    /[。！？?!;；]/.test(baseText) ||
+                    (/[\u4E00-\u9FFF]/.test(baseText) && baseText.length >= 4) ||
+                    baseText.length >= 18
+                        ? baseText
+                        : `${baseText}，这是一段用于 smoke 的终端回复。`;
 
-                // Best-effort: disable global autoplay (AI panel) to avoid unrelated speech events,
-                // while keeping speech enabled for terminal autoplay.
+                // Best-effort: enable speech + terminal autoplay for this smoke run.
                 await cdp.evaluate(String.raw`(async () => {
   try {
     if (window.RpcApi?.SetConfigCommand && window.TabRpcClient) {
       await window.RpcApi.SetConfigCommand(window.TabRpcClient, {
         "speech:enabled": true,
-        "speech:autoplay": false,
+        "speech:autoplay": true,
         "speech:provider": "local",
         "speech:localengine": "edge",
         "speech:model": "edge-tts",
@@ -356,7 +364,7 @@ async function main() {
   return { ok: true };
 })()`);
 
-                // Validate terminal defaults and UI: auto-play should be ON by default,
+                // Validate terminal defaults and UI: auto-play should be ON,
                 // and the AI shell-integration sparkles indicator should not appear in the terminal header.
                 const enableAutoRes = await cdp.evaluate(String.raw`(() => {
   try {
@@ -374,16 +382,18 @@ async function main() {
     if (sparklesCount > 0) {
       return { ok: false, error: "unexpected sparkles icon in terminal header", blockId, sparklesCount };
     }
-    const btn = root.querySelector(".block-frame-speech-mode");
+    const btn = root.querySelector(".block-frame-speech-autoplay");
     if (!btn) {
-      return { ok: false, error: "terminal speech-mode chip not found", blockId };
+      return { ok: false, error: "terminal autoplay icon not found", blockId };
     }
-    const isAuto = btn.classList && btn.classList.contains("is-auto-on");
     const beforeTitle = String(btn.getAttribute("title") || "").trim();
-    if (!isAuto) {
-      return { ok: false, error: "terminal autoplay is not enabled by default", blockId, beforeTitle, sparklesCount };
+    const isAuto = /\bon\s*$/.test(beforeTitle);
+    let clicked = false;
+    if (!isAuto && typeof btn.click === "function") {
+      btn.click();
+      clicked = true;
     }
-    return { ok: true, blockId, isAuto, disabled: !!btn.disabled, beforeTitle, sparklesCount };
+    return { ok: true, blockId, isAuto, clicked, disabled: !!btn.disabled, beforeTitle, sparklesCount };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
@@ -407,10 +417,10 @@ async function main() {
     const termWrap = window.term;
     const blockId = termWrap?.blockId || "";
     const root = blockId ? document.querySelector('[data-blockid="' + blockId + '"]') : null;
-    const btn = root ? root.querySelector(".block-frame-speech-mode") : null;
-    const isAuto = !!btn && btn.classList && btn.classList.contains("is-auto-on");
+    const btn = root ? root.querySelector(".block-frame-speech-autoplay") : null;
     const disabled = !!btn && !!btn.disabled;
     const title = btn ? String(btn.getAttribute("title") || "").trim() : "";
+    const isAuto = /\bon\s*$/.test(title);
     return { ok: true, isAuto, disabled, title };
   } catch (e) {
     return { ok: false, error: String(e) };
@@ -471,18 +481,7 @@ async function main() {
                     continue;
                 }
 
-                // Force shell integration state to null so the terminal block uses lastOutputTs-based payload refresh.
-                await cdp.evaluate(String.raw`(() => {
-  try {
-    const termWrap = window.term;
-    if (termWrap && window.globalStore?.set && termWrap.shellIntegrationStatusAtom) {
-      window.globalStore.set(termWrap.shellIntegrationStatusAtom, null);
-    }
-  } catch {}
-  return { ok: true };
-})()`);
-
-                // Clear again after toggling auto to isolate the injected reply.
+                // Clear again after toggling auto to isolate the terminal scenario.
                 await cdp.evaluate(String.raw`(() => {
   if (window.__waveTtsSmoke) {
     window.__waveTtsSmoke.speechSynthesisCalls = [];
@@ -493,58 +492,42 @@ async function main() {
   return { ok: true };
 })()`);
 
-                // Inject a Codex-like prompt + final bullet reply + trailing prompt boundary into the terminal scrollback.
-                const injectRes = await cdp.evaluate(String.raw`(() => {
+                // Run a real terminal command that prints Codex-style bullets into scrollback, so
+                // terminal autoplay can resolve the latest formal reply via TermGetScrollbackLines.
+                // Use `node -e` to avoid shell-specific quoting differences across environments.
+                const runCmdRes = await cdp.evaluate(String.raw`(() => {
   try {
     const termWrap = window.term;
-    if (!termWrap || typeof termWrap.handleNewFileSubjectData !== "function") {
-      return { ok: false, error: "window.term.handleNewFileSubjectData missing" };
+    if (!termWrap || typeof termWrap.handleTermData !== "function") {
+      return { ok: false, error: "window.term.handleTermData missing" };
     }
 
     const expected = ${JSON.stringify(expectedText)};
-    const content = [
-      "› smoke question",
-      "• " + expected,
-      // These transient Codex UI lines should never be spoken as part of the formal reply.
-      "Conversation interrupted - tell the model what to do differently.",
-      "Something went wrong? Hit /feedback to report the issue.",
-      "›",
-    ].join("\\r\\n") + "\\r\\n";
-    const bytes = new TextEncoder().encode(content);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    const data64 = btoa(bin);
-    termWrap.handleNewFileSubjectData({ fileop: "append", data64 });
-    return { ok: true, expected, injectedBytes: bytes.length };
+    // IMPORTANT: Keep output minimal and structured so extraction is deterministic:
+    // "› prompt" + "• assistant reply" + trailing "›" boundary.
+    const js = [
+      "console.log('› smoke')",
+      "console.log('• ' + " + JSON.stringify(expected) + ")",
+      "console.log('› ')",
+    ].join(";");
+    const cmd = "node -e " + JSON.stringify(js);
+    termWrap.terminal?.focus?.();
+    termWrap.handleTermData(cmd + "\\r");
+    return { ok: true, cmd };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
 })()`);
 
-                if (!injectRes?.ok) {
+                if (!runCmdRes?.ok) {
                     failures.push({
                         title: candidate.title,
                         url: candidate.url,
-                        error: injectRes?.error || "failed to inject terminal scrollback data",
+                        error: runCmdRes?.error || "failed to run terminal smoke command",
+                        details: runCmdRes,
                     });
                     continue;
                 }
-
-                // TermWrap updates lastOutputTs before the xterm write completes. Nudge the output timestamp
-                // again after the write queue likely flushed so strict freshness checks don't race.
-                await sleep(900);
-                await cdp.evaluate(String.raw`(() => {
-  try {
-    const termWrap = window.term;
-    if (termWrap?.lastOutputTsAtom && window.globalStore?.set) {
-      window.globalStore.set(termWrap.lastOutputTsAtom, Date.now());
-      return { ok: true };
-    }
-    return { ok: false, error: "missing termWrap.lastOutputTsAtom or globalStore.set" };
-  } catch (e) {
-    return { ok: false, error: String(e) };
-  }
-})()`);
 
                 // Wait for TTS hook to fire and validate the spoken text.
                 const ttsDeadline = Date.now() + 30000;

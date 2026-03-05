@@ -221,6 +221,10 @@ function getElectronAppResourcesPath(): string {
 const wavesrvBinName = `wavesrv.${unameArch}`;
 
 function getWaveSrvPath(): string {
+    const override = (process.env.WAVETERM_WAVESRV_PATH ?? "").trim();
+    if (override && existsSync(override)) {
+        return override;
+    }
     if (process.platform === "win32") {
         const winBinName = `${wavesrvBinName}.exe`;
         const appPath = path.join(getElectronAppUnpackedBasePath(), "bin", winBinName);

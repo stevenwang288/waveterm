@@ -12,6 +12,8 @@ import {
 import { AiFileDiffViewModel } from "@/app/view/aifilediff/aifilediff";
 import { ClawXViewModel } from "@/app/view/clawx/clawx";
 import { LauncherViewModel } from "@/app/view/launcher/launcher";
+import { PveConsoleViewModel } from "@/app/view/pve/pveconsole";
+import { PveScreenwallViewModel } from "@/app/view/pve/pvescreenwall";
 import { PreviewModel } from "@/app/view/preview/preview-model";
 import { SysinfoViewModel } from "@/app/view/sysinfo/sysinfo";
 import { TsunamiViewModel } from "@/app/view/tsunami/tsunami";
@@ -62,6 +64,8 @@ BlockRegistry.set("launcher", LauncherViewModel);
 BlockRegistry.set("tsunami", TsunamiViewModel);
 BlockRegistry.set("aifilediff", AiFileDiffViewModel);
 BlockRegistry.set("waveconfig", WaveConfigViewModel);
+BlockRegistry.set("pvescreenwall", PveScreenwallViewModel);
+BlockRegistry.set("pveconsole", PveConsoleViewModel);
 
 function makeViewModel(blockId: string, blockView: string, nodeModel: BlockNodeModel, tabModel: TabModel): ViewModel {
     const ctor = BlockRegistry.get(blockView);

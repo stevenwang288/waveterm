@@ -156,6 +156,29 @@ describe("speakLatestTerminalFormalReply", () => {
         expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
     });
 
+    it("never speaks Codex status bullets that include esc-interrupt hints", async () => {
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["› 再查一下", "• Verifying skill details (41s • esc 中断 )", "› "],
+            lastupdated: 216,
+        } as CommandTermGetScrollbackLinesRtnData);
+        termGetScrollback.mockResolvedValueOnce({
+            lines: ["› 再查一下", "• Verifying skill details (41s • esc 中断 )", "› "],
+            lastupdated: 216,
+        } as CommandTermGetScrollbackLinesRtnData);
+
+        const onError = vi.fn();
+        const ok = await speakLatestTerminalFormalReply({
+            blockId: "test-block-esc-interrupt-status",
+            speechSettings: makeSettings(),
+            requirePromptAfterCodexReply: true,
+            onError,
+        });
+
+        expect(ok).toBe(false);
+        expect(speechPlay).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledWith("没有检测到可播报的 AI 正式回复。");
+    });
+
     it("never speaks Codex MCP server startup status lines", async () => {
         termGetScrollback.mockResolvedValueOnce({
             lines: ["Starting MCP servers (1/3): mcp-deepwiki, sequential-thinking"],

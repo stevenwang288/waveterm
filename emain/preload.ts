@@ -6,6 +6,7 @@ import { contextBridge, ipcRenderer, Rectangle, WebviewTag } from "electron";
 // update type in custom.d.ts (ElectronApi type)
 contextBridge.exposeInMainWorld("api", {
     getAuthKey: () => ipcRenderer.sendSync("get-auth-key"),
+    getAppRunId: () => ipcRenderer.sendSync("get-app-run-id"),
     getIsDev: () => ipcRenderer.sendSync("get-is-dev"),
     getPlatform: () => ipcRenderer.sendSync("get-platform"),
     getCursorPoint: () => ipcRenderer.sendSync("get-cursor-point"),
@@ -61,6 +62,7 @@ contextBridge.exposeInMainWorld("api", {
     onQuicklook: (filePath: string) => ipcRenderer.send("quicklook", filePath),
     openNativePath: (filePath: string) => ipcRenderer.send("open-native-path", filePath),
     captureScreenshot: (rect: Rectangle) => ipcRenderer.invoke("capture-screenshot", rect),
+    devCapturePageToFile: (name?: string) => ipcRenderer.invoke("dev-capture-page", name),
     setKeyboardChordMode: () => ipcRenderer.send("set-keyboard-chord-mode"),
     clearWebviewStorage: (webContentsId: number) => ipcRenderer.invoke("clear-webview-storage", webContentsId),
     setWaveAIOpen: (isOpen: boolean) => ipcRenderer.send("set-waveai-open", isOpen),
@@ -94,6 +96,8 @@ contextBridge.exposeInMainWorld("api", {
     }) => ipcRenderer.invoke("speech-log", entry),
     pveEnsureAuth: (req: { partition: string; origin: string; lang?: string; timeoutMs?: number }) =>
         ipcRenderer.invoke("pve-ensure-auth", req),
+    pveStoreCredentials: (payload: { host: string; username: string; password: string }) =>
+        ipcRenderer.invoke("pve-store-credentials", payload),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),

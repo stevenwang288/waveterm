@@ -694,7 +694,10 @@ function registerGlobalKeys() {
         }
         return true;
     };
-    globalKeyMap.set("Cmd:m", toggleMagnifyFocusedNode);
+    // On Windows, "Cmd" is mapped to Alt. Reserve Alt+M (used by Codex/other tools) and do not bind it here.
+    if (!isWindows()) {
+        globalKeyMap.set("Cmd:m", toggleMagnifyFocusedNode);
+    }
     if (isWindows()) {
         globalKeyMap.set("Ctrl:q", toggleMagnifyFocusedNode);
         globalKeyMap.set("Cmd:q", toggleMagnifyFocusedNode);

@@ -51,12 +51,7 @@ if (Test-Path -LiteralPath $settingsPath) {
     try {
         $json = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
         $json | Add-Member -NotePropertyName "speech:enabled" -NotePropertyValue $true -Force
-        $auto = $true
-        if ($Scenario -eq "terminal") {
-            # Terminal autoplay is controlled by a per-block toggle; keep global autoplay off.
-            $auto = $false
-        }
-        $json | Add-Member -NotePropertyName "speech:autoplay" -NotePropertyValue $auto -Force
+        $json | Add-Member -NotePropertyName "speech:autoplay" -NotePropertyValue $true -Force
         if ($Scenario -eq "terminal") {
             # Terminal autoplay is validated via the Edge TTS request payload (not browser SpeechSynthesis).
             $json | Add-Member -NotePropertyName "speech:provider" -NotePropertyValue "local" -Force

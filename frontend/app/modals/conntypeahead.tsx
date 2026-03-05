@@ -50,7 +50,16 @@ function sortConnSuggestionItems(
         const connNameB = itemB.value;
         const valueA = connectionsConfig?.[connNameA]?.["display:order"] ?? 0;
         const valueB = connectionsConfig?.[connNameB]?.["display:order"] ?? 0;
-        return valueA - valueB;
+        if (valueA !== valueB) {
+            return valueA - valueB;
+        }
+        const labelA = itemA.label ?? connNameA;
+        const labelB = itemB.label ?? connNameB;
+        const labelCmp = labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: "base" });
+        if (labelCmp !== 0) {
+            return labelCmp;
+        }
+        return connNameA.localeCompare(connNameB, undefined, { numeric: true, sensitivity: "base" });
     });
 }
 

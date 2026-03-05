@@ -456,6 +456,11 @@ func RunWebServer(listener net.Listener) {
 	waveRouter.HandleFunc("/wave/file", WebFnWrap(WebFnOpts{AllowCaching: false}, handleWaveFile))
 	waveRouter.HandleFunc("/wave/service", WebFnWrap(WebFnOpts{JsonErrors: true}, handleService))
 	waveRouter.HandleFunc("/wave/aichat", WebFnWrap(WebFnOpts{JsonErrors: true, AllowCaching: false}, aiusechat.WaveAIGetChatHandler))
+	waveRouter.HandleFunc("/wave/conn/check", WebFnWrap(WebFnOpts{JsonErrors: true, AllowCaching: false}, handleConnCheck))
+	waveRouter.HandleFunc("/wave/pve/vms", WebFnWrap(WebFnOpts{JsonErrors: true, AllowCaching: false}, handlePveListVMs))
+	waveRouter.HandleFunc("/wave/pve/console-session", WebFnWrap(WebFnOpts{JsonErrors: true, AllowCaching: false}, handlePveCreateConsoleSession))
+	waveRouter.HandleFunc("/wave/pve/screenwall-enabled", WebFnWrap(WebFnOpts{JsonErrors: true, AllowCaching: false}, handlePveSetScreenwallEnabled))
+	waveRouter.HandleFunc("/wave/pve/vm-action", WebFnWrap(WebFnOpts{JsonErrors: true, AllowCaching: false}, handlePveVmAction))
 
 	vdomRouter := mux.NewRouter()
 	vdomRouter.HandleFunc("/vdom/{uuid}/{path:.*}", WebFnWrap(WebFnOpts{AllowCaching: true}, handleVDom))

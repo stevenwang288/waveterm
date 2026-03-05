@@ -23,15 +23,18 @@ interface ConnectionButtonProps {
 
 export const ConnectionButton = React.memo(
     React.forwardRef<HTMLDivElement, ConnectionButtonProps>(
-        ({
-            connection,
-            changeConnModalAtom,
-            isTerminalBlock,
-            compact,
-            terminalLabel,
-            unread,
-            onTerminalLabelDoubleClick,
-        }: ConnectionButtonProps, ref) => {
+        (
+            {
+                connection,
+                changeConnModalAtom,
+                isTerminalBlock,
+                compact,
+                terminalLabel,
+                unread,
+                onTerminalLabelDoubleClick,
+            }: ConnectionButtonProps,
+            ref
+        ) => {
             const { t } = useTranslation();
             const [, setConnModalOpen] = jotai.useAtom(changeConnModalAtom);
             const clickTimeoutRef = React.useRef<number | null>(null);
@@ -39,7 +42,8 @@ export const ConnectionButton = React.memo(
             const connStatusAtom = getConnStatusAtom(connection);
             const connStatus = jotai.useAtomValue(connStatusAtom);
             const localName = jotai.useAtomValue(getLocalHostDisplayNameAtom());
-            const terminalLabelTrimmed = isTerminalBlock && typeof terminalLabel === "string" ? terminalLabel.trim() : "";
+            const terminalLabelTrimmed =
+                isTerminalBlock && typeof terminalLabel === "string" ? terminalLabel.trim() : "";
             let showDisconnectedSlash = false;
             let connIconElem: React.ReactNode = null;
             const connColorNum = computeConnColorNum(connStatus);
@@ -159,7 +163,6 @@ export const ConnectionButton = React.memo(
                         />
                     );
                 }
-
             }
 
             const wshProblem = connection && !connStatus?.wshenabled && connStatus?.status == "connected";
@@ -237,7 +240,11 @@ export const ConnectionButton = React.memo(
                                     }
                                     onContextMenu={handleTerminalLabelContextMenu}
                                 >
-                                    {connDisplayName}
+                                    {isTerminalBlock && !util.isBlank(terminalLabelTrimmed) ? (
+                                        <span className="connection-terminal-pill">{connDisplayName}</span>
+                                    ) : (
+                                        connDisplayName
+                                    )}
                                 </div>
                             ) : isLocal ? null : (
                                 <div
@@ -262,7 +269,11 @@ export const ConnectionButton = React.memo(
                                             : undefined
                                     }
                                 >
-                                    {connection}
+                                    {isTerminalBlock && !util.isBlank(terminalLabelTrimmed) ? (
+                                        <span className="connection-terminal-pill">{connection}</span>
+                                    ) : (
+                                        connection
+                                    )}
                                 </div>
                             ))}
                     </div>

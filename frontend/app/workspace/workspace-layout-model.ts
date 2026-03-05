@@ -173,6 +173,13 @@ class WorkspaceLayoutModel {
             return;
         }
         const newWindowWidth = window.innerWidth;
+        if (!this.getAIPanelVisible()) {
+            this.inResize = true;
+            this.aiPanelRef?.collapse();
+            this.inResize = false;
+            this.updateWrapperWidth();
+            return;
+        }
         const aiPanelPercentage = this.getAIPanelPercentage(newWindowWidth);
         const mainContentPercentage = this.getMainContentPercentage(newWindowWidth);
         this.inResize = true;
@@ -188,6 +195,9 @@ class WorkspaceLayoutModel {
             return;
         }
         if (!this.panelGroupRef) {
+            return;
+        }
+        if (!this.getAIPanelVisible()) {
             return;
         }
 
@@ -208,13 +218,19 @@ class WorkspaceLayoutModel {
         }
 
         const currentWindowWidth = window.innerWidth;
+        const isVisible = this.getAIPanelVisible();
         const aiPanelPercentage = this.getAIPanelPercentage(currentWindowWidth);
         const mainContentPercentage = this.getMainContentPercentage(currentWindowWidth);
 
-        if (this.getAIPanelVisible()) {
+        if (isVisible) {
             this.aiPanelRef.expand();
         } else {
             this.aiPanelRef.collapse();
+        }
+
+        if (!isVisible) {
+            this.updateWrapperWidth();
+            return;
         }
 
         this.inResize = true;

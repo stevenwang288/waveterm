@@ -10,6 +10,9 @@ import { URL } from "node:url";
 import { getWaveConfigDir } from "./emain-platform";
 
 const DEFAULT_PVE_AUTOLOGIN_HOSTS = new Set(["192.168.1.250", "192.168.1.250:8006"]);
+const PVE_ALLOWED_HOSTS_ENV = "WAVETERM_PVE_HOSTS";
+const PVE_ORIGIN_ENV = "WAVETERM_PVE_ORIGIN";
+const PVE_URL_ENV = "WAVETERM_PVE_URL";
 const PVE_LANG_COOKIE_NAME = "PVELangCookie";
 const PVE_AUTH_COOKIE_NAME = "PVEAuthCookie";
 const PVE_DEFAULT_REALM = "pam";
@@ -50,6 +53,31 @@ function normalizeHostToken(value: string): string {
     return String(value ?? "").trim().toLowerCase();
 }
 
+function parseHostFromEnvValue(value: string): string {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) {
+        return "";
+    }
+    try {
+        return normalizeHostToken(new URL(trimmed).host);
+    } catch {
+        return normalizeHostToken(trimmed);
+    }
+}
+
+function getImplicitAllowedHostsFromEnv(): Set<string> {
+    const implicit = new Set<string>();
+    const originHost = parseHostFromEnvValue(process.env[PVE_ORIGIN_ENV] ?? "");
+    if (originHost) {
+        implicit.add(originHost);
+    }
+    const urlHost = parseHostFromEnvValue(process.env[PVE_URL_ENV] ?? "");
+    if (urlHost) {
+        implicit.add(urlHost);
+    }
+    return implicit;
+}
+
 function normalizeOrigin(value: string): string {
     const trimmed = String(value ?? "").trim();
     if (!trimmed) {
@@ -65,7 +93,26 @@ function normalizeOrigin(value: string): string {
 
 function isAllowedPveHost(host: string): boolean {
     const normalized = normalizeHostToken(host);
-    return normalized ? DEFAULT_PVE_AUTOLOGIN_HOSTS.has(normalized) : false;
+    if (!normalized) {
+        return false;
+    }
+    if (DEFAULT_PVE_AUTOLOGIN_HOSTS.has(normalized)) {
+        return true;
+    }
+    if (getImplicitAllowedHostsFromEnv().has(normalized)) {
+        return true;
+    }
+    const envHosts = String(process.env[PVE_ALLOWED_HOSTS_ENV] ?? "").trim();
+    if (!envHosts) {
+        return false;
+    }
+    for (const rawHost of envHosts.split(",")) {
+        const candidate = normalizeHostToken(rawHost);
+        if (candidate && candidate == normalized) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function getCredentialsFilePath(): string {

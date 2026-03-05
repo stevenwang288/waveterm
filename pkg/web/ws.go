@@ -43,6 +43,7 @@ var RouteToConnMap = map[string]*StableConnInfo{} // stableid => StableConnInfo
 func RunWebSocketServer(listener net.Listener) {
 	gr := mux.NewRouter()
 	gr.HandleFunc("/ws", HandleWs)
+	gr.HandleFunc("/pve/console/{sessionid}", HandlePveConsoleWS)
 	server := &http.Server{
 		ReadTimeout:    HttpReadTimeout,
 		WriteTimeout:   HttpWriteTimeout,

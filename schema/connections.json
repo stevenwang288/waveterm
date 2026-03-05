@@ -125,6 +125,36 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "pve:vmid": {
+          "type": "number"
+        },
+        "pve:node": {
+          "type": "string"
+        },
+        "remote:hasgui": {
+          "type": "boolean"
+        },
+        "remote:clientos": {
+          "type": "string"
+        },
+        "remote:clientarch": {
+          "type": "string"
+        },
+        "remote:homedir": {
+          "type": "string"
+        },
+        "remote:initts": {
+          "type": "number"
+        },
+        "wall:sshurl": {
+          "type": "string"
+        },
+        "wall:vncurl": {
+          "type": "string"
+        },
+        "wall:rdpurl": {
+          "type": "string"
         }
       },
       "additionalProperties": false,

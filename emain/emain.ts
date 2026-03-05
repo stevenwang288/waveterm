@@ -483,7 +483,8 @@ async function appMain() {
         electronApp.disableHardwareAcceleration();
     }
     const startTs = Date.now();
-    const instanceLock = electronApp.requestSingleInstanceLock();
+    const isSidecarUserData = Boolean((process.env.WAVETERM_ELECTRON_USER_DATA_HOME ?? "").trim());
+    const instanceLock = isSidecarUserData ? true : electronApp.requestSingleInstanceLock();
     if (!instanceLock) {
         console.log("waveterm-app could not get single-instance-lock, shutting down");
         setUserConfirmedQuit(true);
@@ -493,6 +494,9 @@ async function appMain() {
     // When a user tries to launch WAVE again, bring the existing window to the foreground
     // instead of silently doing nothing (which looks like a crash).
     electronApp.on("second-instance", () => {
+        if (isSidecarUserData) {
+            return;
+        }
         const bringToFront = (win: WaveBrowserWindow) => {
             try {
                 win.show();

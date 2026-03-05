@@ -1,6 +1,11 @@
 param(
   [Parameter(Mandatory = $false)]
-  [string]$ZigVersion = "0.14.0"
+  [string]$ZigVersion = "0.14.0",
+
+  # Output directory for built binaries. Defaults to dist/bin for normal development builds.
+  # dev:fresh may pass a temp directory to avoid disrupting a running Wave instance.
+  [Parameter(Mandatory = $false)]
+  [string]$OutDir = "dist\\bin"
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,12 +25,12 @@ function Stop-ProcessesUsingExe {
   }
 
   try {
-    $matches = Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $fullPath }
+    $lockedProcesses = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $fullPath })
   } catch {
-    $matches = @()
+    $lockedProcesses = @()
   }
 
-  foreach ($proc in ($matches ?? @())) {
+  foreach ($proc in $lockedProcesses) {
     try {
       Write-Host "[backend] stopping locked process pid=$($proc.ProcessId) path=$fullPath" -ForegroundColor Yellow
       Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
@@ -34,7 +39,7 @@ function Stop-ProcessesUsingExe {
     }
   }
 
-  if (($matches ?? @()).Count -gt 0) {
+  if ($lockedProcesses.Count -gt 0) {
     Start-Sleep -Milliseconds 250
   }
 }
@@ -89,18 +94,26 @@ Write-Host "  zig:     $zigExe"
 Write-Host "  version: $version"
 Write-Host "  time:    $buildTime"
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-Push-Location $repoRoot
-try {
-  New-Item -ItemType Directory -Force "dist\\bin" | Out-Null
+  $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+  Push-Location $repoRoot
+  try {
+  $outDirPath = $OutDir
+  if (-not [System.IO.Path]::IsPathRooted($outDirPath)) {
+    $outDirPath = Join-Path $repoRoot $outDirPath
+  }
+  New-Item -ItemType Directory -Force $outDirPath | Out-Null
 
-  if (Test-Path "dist\\bin\\wavesrv.x64.exe") {
+  $wavesrvOut = Join-Path $outDirPath "wavesrv.x64.exe"
+  $wshOut = Join-Path $outDirPath "wsh-$version-windows.x64.exe"
+  $wshLinuxOut = Join-Path $outDirPath "wsh-$version-linux.x64"
+
+  if (Test-Path $wavesrvOut) {
     try {
-      Remove-Item -Force "dist\\bin\\wavesrv.x64.exe"
+      Remove-Item -Force $wavesrvOut
     } catch {
       # wavesrv may still be running (dev instance). Stop only the process that uses this exact exe path.
-      Stop-ProcessesUsingExe -ExePath (Join-Path $repoRoot "dist\\bin\\wavesrv.x64.exe")
-      Remove-Item -Force "dist\\bin\\wavesrv.x64.exe"
+      Stop-ProcessesUsingExe -ExePath $wavesrvOut
+      Remove-Item -Force $wavesrvOut
     }
   }
 
@@ -111,7 +124,7 @@ try {
   go build `
     -tags "osusergo,sqlite_omit_load_extension" `
     -ldflags " -X main.BuildTime=$buildTime -X main.WaveVersion=$version" `
-    -o "dist\\bin\\wavesrv.x64.exe" `
+    -o $wavesrvOut `
     "cmd\\server\\main-server.go"
 
   $env:CGO_ENABLED = "0"
@@ -119,7 +132,17 @@ try {
 
   go build `
     -ldflags "-s -w -X main.BuildTime=$buildTime -X main.WaveVersion=$version" `
-    -o "dist\\bin\\wsh-$version-windows.x64.exe" `
+    -o $wshOut `
+    "cmd\\wsh\\main-wsh.go"
+
+  # Dev builds on Windows frequently connect to Linux remotes. We need the Linux wsh
+  # binary locally so Wave can install/upgrade wsh on the remote host.
+  $env:GOOS = "linux"
+  $env:GOARCH = "amd64"
+
+  go build `
+    -ldflags "-s -w -X main.BuildTime=$buildTime -X main.WaveVersion=$version" `
+    -o $wshLinuxOut `
     "cmd\\wsh\\main-wsh.go"
 
   Write-Host "[backend] done." -ForegroundColor Green

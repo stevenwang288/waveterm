@@ -165,6 +165,18 @@
                     unicode-bidi: isolate;
                 }
 
+                & .connection-terminal-label .connection-terminal-pill {
+                    display: inline-block;
+                    max-width: 100%;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    padding: 1px 8px;
+                    border-radius: 7px;
+                    background-color: rgb(from var(--error-color) r g b / 18%);
+                    border: 1px solid rgb(from var(--error-color) r g b / 28%);
+                }
+
                 &.term-running .connection-terminal-label {
                     color: var(--term-green);
                 }
@@ -301,6 +313,30 @@
                         width: 24px;
                         padding: 4px 6px;
                         align-items: center;
+                    }
+
+                    .wave-iconbutton.term-wall-toggle {
+                        border-radius: 6px;
+                        margin-right: 2px;
+                        background-color: rgb(from var(--border-color) r g b / 25%);
+                    }
+
+                    .wave-iconbutton.term-wall-toggle.active {
+                        background-color: rgb(from var(--success-color) r g b / 45%);
+                    }
+
+                    .wave-iconbutton.term-gui-toggle {
+                        border-radius: 6px;
+                        margin-right: 2px;
+                        background-color: rgb(from var(--border-color) r g b / 25%);
+                    }
+
+                    .wave-iconbutton.term-gui-toggle.gui-available {
+                        background-color: rgb(from var(--success-color) r g b / 18%);
+                    }
+
+                    .wave-iconbutton.term-gui-toggle.gui-available.active {
+                        background-color: rgb(from var(--success-color) r g b / 45%);
                     }
 
                     .block-frame-magnify {

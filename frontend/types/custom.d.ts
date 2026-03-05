@@ -82,6 +82,7 @@ declare global {
 
     type ElectronApi = {
         getAuthKey(): string; // get-auth-key
+        getAppRunId(): string; // get-app-run-id
         getIsDev(): boolean; // get-is-dev
         getCursorPoint: () => Electron.Point; // get-cursor-point
         getPlatform: () => NodeJS.Platform; // get-platform
@@ -129,6 +130,7 @@ declare global {
         onQuicklook: (filePath: string) => void; // quicklook
         openNativePath(filePath: string): void; // open-native-path
         captureScreenshot(rect: Electron.Rectangle): Promise<string>; // capture-screenshot
+        devCapturePageToFile(name?: string): Promise<string>; // dev-capture-page
         setKeyboardChordMode: () => void; // set-keyboard-chord-mode
         clearWebviewStorage: (webContentsId: number) => Promise<void>; // clear-webview-storage
         setWaveAIOpen: (isOpen: boolean) => void; // set-waveai-open
@@ -175,6 +177,10 @@ declare global {
             skipped?: boolean;
             error?: string;
         }>; // pve-ensure-auth
+        pveStoreCredentials: (payload: { host: string; username: string; password: string }) => Promise<{
+            ok: boolean;
+            error?: string;
+        }>; // pve-store-credentials
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh

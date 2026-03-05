@@ -30,8 +30,11 @@ import {
 } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { uxCloseBlock } from "@/app/store/keymodel";
+import { splitORef } from "@/app/store/wos";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import type { PveVmInfo } from "@/util/pveutil";
+import { resolvePveVmForConnection } from "@/util/pveutil";
 import { IconButton } from "@/element/iconbutton";
 import { NodeModel } from "@/layout/index";
 import * as util from "@/util/util";
@@ -191,14 +194,16 @@ type HeaderEndIconsProps = {
     viewModel: ViewModel;
     nodeModel: NodeModel;
     blockId: string;
+    blockData?: Block;
     isTerminalBlock: boolean;
     shellState: "ready" | "running-command" | null;
     lastOutputTs: number;
     lastCommandDoneTs: number;
+    connName?: string;
 };
 
 const HeaderEndIcons = React.memo(
-    ({ viewModel, nodeModel, blockId, isTerminalBlock, shellState, lastOutputTs, lastCommandDoneTs }: HeaderEndIconsProps) => {
+    ({ viewModel, nodeModel, blockId, blockData, isTerminalBlock, shellState, lastOutputTs, lastCommandDoneTs, connName }: HeaderEndIconsProps) => {
     const { t } = useTranslation();
     const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
     const aiModel = React.useMemo(() => WaveAIModel.getInstance(), []);
@@ -306,6 +311,277 @@ const HeaderEndIcons = React.memo(
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
     const numLeafs = jotai.useAtomValue(nodeModel.numLeafs);
     const magnifyDisabled = numLeafs <= 1;
+
+    const fullConfig = jotai.useAtomValue(atoms.fullConfigAtom);
+    const connKeywords = !util.isBlank(connName) ? fullConfig?.connections?.[connName] : null;
+    const sshHostName = (connKeywords as any)?.["ssh:hostname"] as string | undefined;
+
+    const sidePanelMode = String(blockData?.meta?.["term:sidepanelmode"] ?? "");
+    const sidePanelBlockId = String(blockData?.meta?.["term:sidepanelblockid"] ?? "");
+
+    const guiPaneBlockIdAtom = React.useMemo(() => {
+        return useBlockAtom(blockId, "term:gui-pane-blockid", () => {
+            return jotai.atom("") as jotai.PrimitiveAtom<string>;
+        }) as jotai.PrimitiveAtom<string>;
+    }, [blockId]);
+    const [guiPaneBlockId, setGuiPaneBlockId] = jotai.useAtom(guiPaneBlockIdAtom);
+    const guiActive = sidePanelMode === "gui";
+    const [guiTogglePending, setGuiTogglePending] = React.useState(false);
+
+    const wallPaneBlockIdAtom = React.useMemo(() => {
+        return useBlockAtom(blockId, "term:wall-pane-blockid", () => {
+            return jotai.atom("") as jotai.PrimitiveAtom<string>;
+        }) as jotai.PrimitiveAtom<string>;
+    }, [blockId]);
+    const [wallPaneBlockId, setWallPaneBlockId] = jotai.useAtom(wallPaneBlockIdAtom);
+    const wallActive = sidePanelMode === "wall";
+    const [wallTogglePending, setWallTogglePending] = React.useState(false);
+
+    const [pveVm, setPveVm] = React.useState<PveVmInfo | null>(null);
+    const [pveVmResolved, setPveVmResolved] = React.useState(false);
+    React.useEffect(() => {
+        let cancelled = false;
+        setPveVm(null);
+        setPveVmResolved(false);
+        if (!isTerminalBlock) {
+            return () => {
+                cancelled = true;
+            };
+        }
+        if (util.isBlank(connName)) {
+            setPveVmResolved(true);
+            return () => {
+                cancelled = true;
+            };
+        }
+        void (async () => {
+            try {
+                const resolved = await resolvePveVmForConnection(connName ?? "", sshHostName);
+                if (cancelled) {
+                    return;
+                }
+                setPveVm(resolved);
+                setPveVmResolved(true);
+            } catch {
+                if (cancelled) {
+                    return;
+                }
+                setPveVm(null);
+                setPveVmResolved(true);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [connName, isTerminalBlock, sshHostName]);
+
+    const toggleGui = React.useCallback(async () => {
+        if (guiTogglePending) {
+            return;
+        }
+        if (!pveVm || pveVm.hasGui === false) {
+            return;
+        }
+        setGuiTogglePending(true);
+        try {
+            if (!util.isBlank(guiPaneBlockId)) {
+                try {
+                    uxCloseBlock(guiPaneBlockId);
+                } finally {
+                    setGuiPaneBlockId("");
+                }
+            }
+            if (!util.isBlank(wallPaneBlockId)) {
+                try {
+                    uxCloseBlock(wallPaneBlockId);
+                } finally {
+                    setWallPaneBlockId("");
+                }
+            }
+
+            if (sidePanelMode === "gui") {
+                if (!util.isBlank(sidePanelBlockId)) {
+                    try {
+                        await RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: sidePanelBlockId });
+                    } catch {
+                        // ignore
+                    }
+                }
+                await RpcApi.SetMetaCommand(TabRpcClient, {
+                    oref: WOS.makeORef("block", blockId),
+                    meta: {
+                        "term:sidepanelmode": null,
+                        "term:sidepanelblockid": null,
+                    },
+                });
+                return;
+            }
+
+            if (!util.isBlank(sidePanelBlockId)) {
+                try {
+                    await RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: sidePanelBlockId });
+                } catch {
+                    // ignore
+                }
+            }
+
+            const oref = await RpcApi.CreateSubBlockCommand(TabRpcClient, {
+                parentblockid: blockId,
+                blockdef: {
+                    meta: {
+                        view: "pveconsole",
+                        "pve:node": pveVm.node,
+                        "pve:vmid": pveVm.vmid,
+                    },
+                },
+            });
+            const [_orefType, newSubBlockId] = splitORef(oref);
+            await RpcApi.SetMetaCommand(TabRpcClient, {
+                oref: WOS.makeORef("block", blockId),
+                meta: {
+                    "term:sidepanelmode": "gui",
+                    "term:sidepanelblockid": newSubBlockId,
+                },
+            });
+        } catch (e) {
+            pushFlashError({
+                id: "",
+                icon: "triangle-exclamation",
+                title: "GUI",
+                message: e instanceof Error ? e.message : String(e),
+                expiration: Date.now() + 7000,
+            } as any);
+        } finally {
+            setGuiTogglePending(false);
+        }
+    }, [
+        blockId,
+        guiPaneBlockId,
+        guiTogglePending,
+        pveVm,
+        setGuiPaneBlockId,
+        setWallPaneBlockId,
+        sidePanelBlockId,
+        sidePanelMode,
+        wallPaneBlockId,
+    ]);
+
+    const toggleWall = React.useCallback(async () => {
+        if (wallTogglePending) {
+            return;
+        }
+        setWallTogglePending(true);
+        try {
+            if (!util.isBlank(wallPaneBlockId)) {
+                try {
+                    uxCloseBlock(wallPaneBlockId);
+                } finally {
+                    setWallPaneBlockId("");
+                }
+            }
+            if (!util.isBlank(guiPaneBlockId)) {
+                try {
+                    uxCloseBlock(guiPaneBlockId);
+                } finally {
+                    setGuiPaneBlockId("");
+                }
+            }
+
+            if (sidePanelMode === "wall") {
+                if (!util.isBlank(sidePanelBlockId)) {
+                    try {
+                        await RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: sidePanelBlockId });
+                    } catch {
+                        // ignore
+                    }
+                }
+                await RpcApi.SetMetaCommand(TabRpcClient, {
+                    oref: WOS.makeORef("block", blockId),
+                    meta: {
+                        "term:sidepanelmode": null,
+                        "term:sidepanelblockid": null,
+                    },
+                });
+                return;
+            }
+
+            if (!util.isBlank(sidePanelBlockId)) {
+                try {
+                    await RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: sidePanelBlockId });
+                } catch {
+                    // ignore
+                }
+            }
+
+            const oref = await RpcApi.CreateSubBlockCommand(TabRpcClient, {
+                parentblockid: blockId,
+                blockdef: {
+                    meta: {
+                        view: "pvescreenwall",
+                    },
+                },
+            });
+            const [_orefType, newSubBlockId] = splitORef(oref);
+            await RpcApi.SetMetaCommand(TabRpcClient, {
+                oref: WOS.makeORef("block", blockId),
+                meta: {
+                    "term:sidepanelmode": "wall",
+                    "term:sidepanelblockid": newSubBlockId,
+                },
+            });
+        } catch (e) {
+            pushFlashError({
+                id: "",
+                icon: "triangle-exclamation",
+                title: "Screenwall",
+                message: e instanceof Error ? e.message : String(e),
+                expiration: Date.now() + 7000,
+            } as any);
+        } finally {
+            setWallTogglePending(false);
+        }
+    }, [
+        blockId,
+        guiPaneBlockId,
+        setGuiPaneBlockId,
+        setWallPaneBlockId,
+        sidePanelBlockId,
+        sidePanelMode,
+        wallPaneBlockId,
+        wallTogglePending,
+    ]);
+
+    React.useEffect(() => {
+        const api = (window as any)?.api;
+        if (!api?.getIsDev?.()) {
+            return;
+        }
+        const raw = api?.getEnv?.("WAVETERM_DEV_AUTO_GUI");
+        const enabled = String(raw ?? "")
+            .trim()
+            .toLowerCase();
+        if (!enabled || (enabled !== "1" && enabled !== "true" && enabled !== "yes" && enabled !== "on")) {
+            return;
+        }
+        if (!isTerminalBlock) {
+            return;
+        }
+        const guiAvailable = pveVmResolved && pveVm != null && pveVm.hasGui !== false;
+        if (!guiAvailable) {
+            return;
+        }
+        if (guiActive) {
+            return;
+        }
+        const key = `__waveDevAutoGui:${blockId}`;
+        if ((window as any)[key]) {
+            return;
+        }
+        (window as any)[key] = true;
+        setTimeout(() => {
+            void toggleGui();
+        }, 1200);
+    }, [blockId, guiActive, isTerminalBlock, pveVm, pveVmResolved, toggleGui]);
 
     const endIconsElem: React.ReactElement[] = [];
     const payloadBuildTimerRef = React.useRef<number | null>(null);
@@ -478,7 +754,30 @@ const HeaderEndIcons = React.memo(
                     if (lastOutputTsRef.current > targetOutputTs) {
                         return;
                     }
-                    await resolveTerminalFormalReplyPayload(targetOutputTs);
+                    const payload = await resolveTerminalFormalReplyPayload(targetOutputTs);
+                    if (payload) {
+                        return;
+                    }
+
+                    // When the terminal output timestamp advances before the scrollback snapshot is updated,
+                    // strict freshness can briefly fail and prevent auto-play from ever triggering.
+                    // Retry a few times (bounded) while the output timestamp remains unchanged.
+                    for (let attempt = 1; attempt <= 4; attempt++) {
+                        if (runId !== payloadBuildRunIdRef.current) {
+                            return;
+                        }
+                        if (!isTerminalBlockRef.current) {
+                            return;
+                        }
+                        if (lastOutputTsRef.current !== targetOutputTs) {
+                            return;
+                        }
+                        await new Promise((resolve) => window.setTimeout(resolve, 250 * attempt));
+                        const retryPayload = await resolveTerminalFormalReplyPayload(targetOutputTs);
+                        if (retryPayload) {
+                            return;
+                        }
+                    }
                 })();
             }, Math.max(0, Math.floor(delayMs)));
         },
@@ -562,9 +861,6 @@ const HeaderEndIcons = React.memo(
         if (!isTerminalBlock) {
             return;
         }
-        if (shellState !== null) {
-            return;
-        }
         const ts = Number(lastOutputTs);
         if (!Number.isFinite(ts) || ts <= 0) {
             return;
@@ -634,6 +930,22 @@ const HeaderEndIcons = React.memo(
         const payloadTs = Number(payload.outputTs) || 0;
         const baselineTs = Number(speechAutoPlayBaselineTsRef.current) || 0;
         const sessionStartTs = Number(sessionStartTsRef.current) || 0;
+
+        // If the terminal has no shell integration, we cannot reliably distinguish restored scrollback
+        // from new output. Suppress the very first payload of the session to avoid speaking startup noise,
+        // then allow subsequent payloads as normal.
+        if (shellStateRef.current === null) {
+            autoPlayStartupSuppressedRef.current = true;
+            speechLastSpokenPayloadIdRef.current = payload.id;
+            setSpeechLastSpokenPayloadId(payload.id);
+            const nextBaselineTs = Math.max(baselineTs, payloadTs, sessionStartTs);
+            if (nextBaselineTs > 0 && nextBaselineTs !== baselineTs) {
+                speechAutoPlayBaselineTsRef.current = nextBaselineTs;
+                setSpeechAutoPlayBaselineTs(nextBaselineTs);
+            }
+            return;
+        }
+
         const looksLikeEpochMs = payloadTs >= 1000 * 1000 * 1000 * 1000;
         const isRestoredFromHistory = looksLikeEpochMs && sessionStartTs > 0 && payloadTs < sessionStartTs;
 
@@ -678,12 +990,18 @@ const HeaderEndIcons = React.memo(
         if (!payload || !payload.text.trim()) {
             return;
         }
-        // Startup guard: never auto-play a restored formal reply payload until we've observed
-        // at least one command completion in this session (shell integration sets lastCommandDoneTs).
-        const sessionStartTs = Number(sessionStartTsRef.current) || 0;
-        const commandDoneTs = Number(lastCommandDoneTsRef.current) || 0;
-        if (sessionStartTs > 0 && commandDoneTs <= sessionStartTs) {
-            return;
+        // Startup guard: avoid auto-playing restored content while the shell is idle (ready)
+        // before the user has executed any new command this session.
+        // For interactive/long-running commands (e.g. Codex/opencode), allow autoplay while the command is running.
+        const shellState = shellStateRef.current;
+        const hasShellIntegration = shellState !== null;
+        const isCommandRunning = shellState === "running-command";
+        if (hasShellIntegration && !isCommandRunning) {
+            const sessionStartTs = Number(sessionStartTsRef.current) || 0;
+            const commandDoneTs = Number(lastCommandDoneTsRef.current) || 0;
+            if (sessionStartTs > 0 && commandDoneTs <= sessionStartTs) {
+                return;
+            }
         }
         const baselineTs = Number(speechAutoPlayBaselineTsRef.current) || 0;
         if (baselineTs > 0 && payload.outputTs <= baselineTs) {
@@ -722,6 +1040,42 @@ const HeaderEndIcons = React.memo(
             cancelAutoSpeech(false);
         };
     }, [cancelAutoSpeech]);
+
+    if (isTerminalBlock) {
+        const wallDecl: IconButtonDecl = {
+            elemtype: "iconbutton",
+            icon: "table-cells",
+            title: wallActive ? t("term.wallScreenOn") : t("term.wallScreenOff"),
+            click: () => {
+                void toggleWall();
+            },
+            disabled: wallTogglePending || guiTogglePending,
+            className: cn("term-wall-toggle", {
+                active: wallActive,
+            }),
+        };
+        endIconsElem.push(<IconButton key="term-wall" decl={wallDecl} />);
+
+        const guiAvailable = pveVmResolved && pveVm != null && pveVm.hasGui !== false;
+        const guiDecl: IconButtonDecl = {
+            elemtype: "iconbutton",
+            icon: "desktop",
+            title: guiAvailable
+                ? guiActive
+                    ? t("term.guiScreenOn")
+                    : t("term.guiScreenOff")
+                : t("term.guiScreenUnavailable"),
+            click: () => {
+                void toggleGui();
+            },
+            disabled: !guiAvailable || guiTogglePending || wallTogglePending,
+            className: cn("term-gui-toggle", {
+                "gui-available": guiAvailable,
+                active: guiActive,
+            }),
+        };
+        endIconsElem.push(<IconButton key="term-gui" decl={guiDecl} />);
+    }
 
     if (isTerminalBlock) {
         const autoPlayDecl: IconButtonDecl = {
@@ -1035,10 +1389,12 @@ const BlockFrame_Header = ({
                 viewModel={viewModel}
                 nodeModel={nodeModel}
                 blockId={nodeModel.blockId}
+                blockData={blockData}
                 isTerminalBlock={isTerminalBlock}
                 shellState={shellState}
                 lastOutputTs={lastOutputTs}
                 lastCommandDoneTs={lastCommandDoneTs}
+                connName={connName}
             />
         </div>
     );

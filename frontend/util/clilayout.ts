@@ -2,12 +2,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getLayoutModelForStaticTab } from "@/layout/index";
-import { atoms, createBlockSplitHorizontally, createBlockSplitVertically, getApi, getFocusedBlockId, globalStore, replaceBlock, WOS } from "@/store/global";
+import {
+    atoms,
+    createBlockSplitHorizontally,
+    createBlockSplitVertically,
+    getApi,
+    getFocusedBlockId,
+    globalStore,
+    pushFlashError,
+    pushNotification,
+    replaceBlock,
+    WOS,
+} from "@/store/global";
 import { ObjectService, WorkspaceService } from "@/store/services";
+import { getEnv } from "@/util/getenv";
 import { fireAndForget, isBlank } from "@/util/util";
+import { modalsModel } from "@/store/modalmodel";
 
 export type CliLayoutSlot = {
-    type?: "term" | "web";
+    type?: "term" | "web" | "block";
     path?: string;
     command?: string;
     connection?: string;
@@ -16,6 +29,7 @@ export type CliLayoutSlot = {
     zoom?: number;
     title?: string;
     partition?: string;
+    meta?: Record<string, any>;
 };
 
 export type CliLayoutState = {
@@ -38,10 +52,151 @@ type PendingCliLayout = {
 
 const PENDING_KEY_PREFIX = "waveterm:pending-cli-layout:";
 const PENDING_VERSION = 1 as const;
+
 const DEFAULT_PVE_TAB_NAME = "PVE";
 const DEFAULT_PVE_ORIGIN = "https://192.168.1.250:8006";
 const DEFAULT_PVE_URL = "https://192.168.1.250:8006/#v1:0:=node%2FVUModule:4:::::8::";
 const DEFAULT_PVE_WEB_PARTITION = "persist:pve-wall";
+const DEFAULT_PVE_LANG = "zh_CN";
+
+const DEFAULT_WALL_TAB_NAME = "墙";
+const DEFAULT_WALL_URL = "";
+const DEFAULT_WALL_WEB_PARTITION = "persist:screen-wall";
+
+const WAVETERM_PVE_TAB_NAME_ENV = "WAVETERM_PVE_TAB_NAME";
+const WAVETERM_PVE_ORIGIN_ENV = "WAVETERM_PVE_ORIGIN";
+const WAVETERM_PVE_URL_ENV = "WAVETERM_PVE_URL";
+const WAVETERM_PVE_WEB_PARTITION_ENV = "WAVETERM_PVE_WEB_PARTITION";
+const WAVETERM_PVE_LANG_ENV = "WAVETERM_PVE_LANG";
+
+const WAVETERM_WALL_TAB_NAME_ENV = "WAVETERM_WALL_TAB_NAME";
+const WAVETERM_WALL_URL_ENV = "WAVETERM_WALL_URL";
+const WAVETERM_WALL_WEB_PARTITION_ENV = "WAVETERM_WALL_WEB_PARTITION";
+
+const WALL_TAB_NAME_SETTING_KEY = "wall:tabname";
+const WALL_URL_SETTING_KEY = "wall:url";
+const WALL_WEB_PARTITION_SETTING_KEY = "wall:webpartition";
+
+let openPveInNewTabInFlight: Promise<void> | null = null;
+let openPveUiInNewTabInFlight: Promise<void> | null = null;
+let openWallInNewTabInFlight: Promise<void> | null = null;
+
+function normalizeUrlOrigin(value: string): string {
+    const trimmed = String(value ?? "").trim();
+    if (isBlank(trimmed)) {
+        return "";
+    }
+    try {
+        const u = new URL(trimmed);
+        return `${u.protocol}//${u.host}`;
+    } catch {
+        return "";
+    }
+}
+
+function normalizeUrl(value: string): string {
+    const trimmed = String(value ?? "").trim();
+    if (isBlank(trimmed)) {
+        return "";
+    }
+    try {
+        const u = new URL(trimmed);
+        return u.toString();
+    } catch {
+        return "";
+    }
+}
+
+function getConfigSettingString(settingKey: string): string {
+    const fullConfig = globalStore.get(atoms.fullConfigAtom);
+    const raw = (fullConfig?.settings as any)?.[settingKey];
+    if (typeof raw !== "string") {
+        return "";
+    }
+    return raw.trim();
+}
+
+function getPveTabName(): string {
+    const v = String(getEnv(WAVETERM_PVE_TAB_NAME_ENV) ?? "").trim();
+    return isBlank(v) ? DEFAULT_PVE_TAB_NAME : v;
+}
+
+function getPveUrl(): string {
+    const raw = String(getEnv(WAVETERM_PVE_URL_ENV) ?? "").trim();
+    const normalized = normalizeUrl(raw);
+    return isBlank(normalized) ? DEFAULT_PVE_URL : normalized;
+}
+
+function getPveOrigin(pveUrl?: string): string {
+    const rawOrigin = String(getEnv(WAVETERM_PVE_ORIGIN_ENV) ?? "").trim();
+    const normalizedOrigin = normalizeUrlOrigin(rawOrigin);
+    if (!isBlank(normalizedOrigin)) {
+        return normalizedOrigin;
+    }
+    const normalizedFromUrl = normalizeUrlOrigin(pveUrl ?? "");
+    return isBlank(normalizedFromUrl) ? DEFAULT_PVE_ORIGIN : normalizedFromUrl;
+}
+
+function getPveWebPartition(): string {
+    const v = String(getEnv(WAVETERM_PVE_WEB_PARTITION_ENV) ?? "").trim();
+    return isBlank(v) ? DEFAULT_PVE_WEB_PARTITION : v;
+}
+
+function getPveLang(): string {
+    const v = String(getEnv(WAVETERM_PVE_LANG_ENV) ?? "").trim();
+    return isBlank(v) ? DEFAULT_PVE_LANG : v;
+}
+
+async function promptForPveCredentials(opts: {
+    host: string;
+    origin: string;
+    partition: string;
+    lang: string;
+    initialError?: string;
+}): Promise<boolean> {
+    if (modalsModel.isModalOpen("PveCredentialsModal")) {
+        return false;
+    }
+    return await new Promise<boolean>((resolve) => {
+        modalsModel.pushModal("PveCredentialsModal", {
+            host: opts.host,
+            origin: opts.origin,
+            partition: opts.partition,
+            lang: opts.lang,
+            initialError: opts.initialError,
+            onSuccess: () => resolve(true),
+            onCancel: () => resolve(false),
+        });
+    });
+}
+
+function getWallTabName(): string {
+    const fromSettings = getConfigSettingString(WALL_TAB_NAME_SETTING_KEY);
+    if (!isBlank(fromSettings)) {
+        return fromSettings;
+    }
+    const v = String(getEnv(WAVETERM_WALL_TAB_NAME_ENV) ?? "").trim();
+    return isBlank(v) ? DEFAULT_WALL_TAB_NAME : v;
+}
+
+function getWallUrl(): string {
+    const fromSettings = normalizeUrl(getConfigSettingString(WALL_URL_SETTING_KEY));
+    if (!isBlank(fromSettings)) {
+        return fromSettings;
+    }
+    const raw = String(getEnv(WAVETERM_WALL_URL_ENV) ?? "").trim();
+    const normalized = normalizeUrl(raw);
+    return isBlank(normalized) ? DEFAULT_WALL_URL : normalized;
+}
+
+function getWallWebPartition(): string {
+    const fromSettings = getConfigSettingString(WALL_WEB_PARTITION_SETTING_KEY);
+    if (!isBlank(fromSettings)) {
+        return fromSettings;
+    }
+    const v = String(getEnv(WAVETERM_WALL_WEB_PARTITION_ENV) ?? "").trim();
+    return isBlank(v) ? DEFAULT_WALL_WEB_PARTITION : v;
+}
 
 function makePendingKey(tabId: string): string {
     return `${PENDING_KEY_PREFIX}${tabId}`;
@@ -85,6 +240,10 @@ type ResolvedLayoutSlot =
           zoom?: number;
           title?: string;
           partition?: string;
+      }
+    | {
+          type: "block";
+          meta: Record<string, any>;
       }
     | {
           type: "term";
@@ -142,7 +301,12 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
         const url = typeof rawSlot?.url === "string" ? rawSlot.url.trim() : "";
         const rawType = rawSlot?.type;
         const hasExplicitType = typeof rawType === "string" && !isBlank(rawType);
-        const normalizedType = rawType === "web" || (!hasExplicitType && !isBlank(url)) ? "web" : "term";
+        const normalizedType =
+            rawType === "web" || (!hasExplicitType && !isBlank(url))
+                ? "web"
+                : rawType === "block"
+                  ? "block"
+                  : "term";
         if (normalizedType === "web" && !isBlank(url)) {
             const hideNav = rawSlot?.hideNav !== false;
             const zoom = normalizeZoom(rawSlot?.zoom);
@@ -156,6 +320,13 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
                 title: isBlank(title) ? undefined : title,
                 partition: isBlank(partition) ? undefined : partition,
             };
+        }
+        if (normalizedType === "block") {
+            const meta =
+                rawSlot?.meta != null && typeof rawSlot.meta === "object" && !Array.isArray(rawSlot.meta)
+                    ? (rawSlot.meta as Record<string, any>)
+                    : {};
+            return { type: "block", meta };
         }
 
         const slotPath = normalizePath(rawSlot?.path ?? resolvedPaths[index]);
@@ -201,6 +372,13 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
             if (!isBlank(slot.partition)) {
                 meta["web:partition"] = slot.partition;
             }
+            return { meta };
+        }
+        if (slot?.type === "block") {
+            const meta =
+                slot.meta != null && typeof slot.meta === "object" && !Array.isArray(slot.meta)
+                    ? (slot.meta as Record<string, any>)
+                    : {};
             return { meta };
         }
 
@@ -303,39 +481,42 @@ export async function openCliLayoutInNewTab(state: CliLayoutState, tabName: stri
             commands: Array.isArray(state?.commands) ? state.commands : [],
             slots: Array.isArray(state?.slots)
                 ? state.slots.map((slot) => {
-                      if (slot == null || typeof slot !== "object") {
-                          return {};
-                      }
-                      const nextSlot: CliLayoutSlot = {
-                          type: slot.type === "web" ? "web" : "term",
-                      };
-                      if (typeof slot.path === "string") {
-                          nextSlot.path = slot.path;
-                      }
-                      if (typeof slot.command === "string") {
-                          nextSlot.command = slot.command;
-                      }
-                      if (typeof slot.connection === "string") {
-                          nextSlot.connection = slot.connection;
-                      }
-                      if (typeof slot.url === "string") {
-                          nextSlot.url = slot.url;
-                      }
-                      if (typeof slot.hideNav === "boolean") {
-                          nextSlot.hideNav = slot.hideNav;
-                      }
-                      if (slot.zoom != null) {
-                          nextSlot.zoom = normalizeZoom(slot.zoom);
-                      }
-                      if (typeof slot.title === "string") {
-                          nextSlot.title = slot.title;
-                      }
-                      if (typeof slot.partition === "string") {
-                          nextSlot.partition = slot.partition;
-                      }
-                      return nextSlot;
-                  })
-                : [],
+                  if (slot == null || typeof slot !== "object") {
+                      return {};
+                  }
+                  const nextSlot: CliLayoutSlot = {
+                          type: slot.type === "web" ? "web" : slot.type === "block" ? "block" : "term",
+                  };
+                  if (typeof slot.path === "string") {
+                      nextSlot.path = slot.path;
+                  }
+                  if (typeof slot.command === "string") {
+                      nextSlot.command = slot.command;
+                  }
+                  if (typeof slot.connection === "string") {
+                      nextSlot.connection = slot.connection;
+                  }
+                  if (typeof slot.url === "string") {
+                      nextSlot.url = slot.url;
+                  }
+                  if (typeof slot.hideNav === "boolean") {
+                      nextSlot.hideNav = slot.hideNav;
+                  }
+                  if (slot.zoom != null) {
+                      nextSlot.zoom = normalizeZoom(slot.zoom);
+                  }
+                  if (typeof slot.title === "string") {
+                      nextSlot.title = slot.title;
+                  }
+                  if (typeof slot.partition === "string") {
+                      nextSlot.partition = slot.partition;
+                  }
+                  if (slot.meta != null && typeof slot.meta === "object" && !Array.isArray(slot.meta)) {
+                      nextSlot.meta = slot.meta as Record<string, any>;
+                  }
+                  return nextSlot;
+              })
+            : [],
         },
     };
     try {
@@ -348,38 +529,189 @@ export async function openCliLayoutInNewTab(state: CliLayoutState, tabName: stri
 }
 
 export async function openPveInNewTab(): Promise<void> {
-    try {
-        await getApi().pveEnsureAuth({
-            partition: DEFAULT_PVE_WEB_PARTITION,
-            origin: DEFAULT_PVE_ORIGIN,
-            lang: "zh_CN",
-        });
-    } catch {
-        // ignore auth prime errors, fall back to normal login page
+    if (openPveInNewTabInFlight) {
+        return openPveInNewTabInFlight;
     }
+    openPveInNewTabInFlight = (async () => {
+        const ws = globalStore.get(atoms.workspace);
+        if (ws?.tabids?.length) {
+            for (const tabId of ws.tabids) {
+                // Avoid creating duplicate PVE tabs while a pending PVE layout is still applying.
+                const pending = readPendingCliLayout(tabId);
+                const hasPendingPveWall =
+                    pending?.presetKey === "pve" ||
+                    (pending?.state?.slots || []).some((slot) => (slot as any)?.meta?.view === "pvescreenwall");
+                if (hasPendingPveWall) {
+                    getApi().setActiveTab(tabId);
+                    return;
+                }
 
-    const slots: CliLayoutSlot[] = [
-        {
-        type: "web",
-        title: DEFAULT_PVE_TAB_NAME,
-        url: DEFAULT_PVE_URL,
-        hideNav: true,
-        zoom: 0.9,
-        partition: DEFAULT_PVE_WEB_PARTITION,
-        },
-    ];
-    await openCliLayoutInNewTab(
-        {
-            rows: 1,
-            cols: 1,
-            paths: [],
-            commands: [],
-            slots,
-            updatedTs: Date.now(),
-        },
-        DEFAULT_PVE_TAB_NAME,
-        "pve"
-    );
+                const tab = WOS.getObjectValue<Tab>(WOS.makeORef("tab", tabId));
+                if (!tab?.blockids?.length) {
+                    continue;
+                }
+                for (const blockId of tab.blockids) {
+                    const block = WOS.getObjectValue<Block>(WOS.makeORef("block", blockId));
+                    if (block?.meta?.view === "pvescreenwall") {
+                        getApi().setActiveTab(tabId);
+                        return;
+                    }
+                }
+            }
+        }
+
+        const tabName = getPveTabName();
+        const slots: CliLayoutSlot[] = [
+            {
+                type: "block",
+                meta: {
+                    view: "pvescreenwall",
+                },
+            },
+        ];
+        await openCliLayoutInNewTab(
+            {
+                rows: 1,
+                cols: 1,
+                paths: [],
+                commands: [],
+                slots,
+                updatedTs: Date.now(),
+            },
+            tabName,
+            "pve"
+        );
+    })();
+    try {
+        await openPveInNewTabInFlight;
+    } finally {
+        openPveInNewTabInFlight = null;
+    }
+}
+
+export async function openPveUiInNewTab(): Promise<void> {
+    if (openPveUiInNewTabInFlight) {
+        return openPveUiInNewTabInFlight;
+    }
+    openPveUiInNewTabInFlight = (async () => {
+        const tabName = `${getPveTabName()} 管理`;
+        const url = getPveUrl();
+        const origin = getPveOrigin(url);
+        const partition = getPveWebPartition();
+        const lang = getPveLang();
+
+        let ensureRes: { ok: boolean; cached?: boolean; skipped?: boolean; error?: string } | null = null;
+        try {
+            ensureRes = await getApi().pveEnsureAuth({
+                partition,
+                origin,
+                lang,
+            });
+        } catch {
+            ensureRes = null;
+        }
+        if (ensureRes?.ok && ensureRes?.skipped && ensureRes?.error === "missing credentials") {
+            let host = "";
+            try {
+                host = new URL(origin).host;
+            } catch {
+                host = "";
+            }
+            if (!isBlank(host)) {
+                await promptForPveCredentials({ host, origin, partition, lang });
+            }
+        }
+
+        const slots: CliLayoutSlot[] = [
+            {
+                type: "web",
+                title: tabName,
+                url,
+                hideNav: true,
+                zoom: 0.9,
+                partition,
+            },
+        ];
+        await openCliLayoutInNewTab(
+            {
+                rows: 1,
+                cols: 1,
+                paths: [],
+                commands: [],
+                slots,
+                updatedTs: Date.now(),
+            },
+            tabName,
+            "pve-ui"
+        );
+    })();
+    try {
+        await openPveUiInNewTabInFlight;
+    } finally {
+        openPveUiInNewTabInFlight = null;
+    }
+}
+
+export async function openWallInNewTab(): Promise<void> {
+    if (openWallInNewTabInFlight) {
+        return openWallInNewTabInFlight;
+    }
+    openWallInNewTabInFlight = (async () => {
+        const tabName = getWallTabName();
+
+        const ws = globalStore.get(atoms.workspace);
+        if (ws?.tabids?.length) {
+            for (const tabId of ws.tabids) {
+                // Avoid creating duplicate Wall tabs while a pending layout is still applying.
+                const pending = readPendingCliLayout(tabId);
+                const hasPendingWall =
+                    pending?.presetKey === "wall" ||
+                    (pending?.state?.slots || []).some((slot) => (slot as any)?.meta?.view === "pvescreenwall");
+                if (hasPendingWall) {
+                    getApi().setActiveTab(tabId);
+                    return;
+                }
+
+                const tab = WOS.getObjectValue<Tab>(WOS.makeORef("tab", tabId));
+                if (!tab?.blockids?.length) {
+                    continue;
+                }
+                for (const blockId of tab.blockids) {
+                    const block = WOS.getObjectValue<Block>(WOS.makeORef("block", blockId));
+                    if (block?.meta?.view === "pvescreenwall") {
+                        getApi().setActiveTab(tabId);
+                        return;
+                    }
+                }
+            }
+        }
+
+        const slots: CliLayoutSlot[] = [
+            {
+                type: "block",
+                meta: {
+                    view: "pvescreenwall",
+                },
+            },
+        ];
+        await openCliLayoutInNewTab(
+            {
+                rows: 1,
+                cols: 1,
+                paths: [],
+                commands: [],
+                slots,
+                updatedTs: Date.now(),
+            },
+            tabName,
+            "wall"
+        );
+    })();
+    try {
+        await openWallInNewTabInFlight;
+    } finally {
+        openWallInNewTabInFlight = null;
+    }
 }
 
 export function maybeApplyPendingCliLayout(tabId: string): void {

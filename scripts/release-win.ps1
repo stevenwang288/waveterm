@@ -35,6 +35,39 @@ function Assert-CleanGit {
   }
 }
 
+function Get-Sha256 {
+  param([string]$Path)
+
+  if (-not $Path -or -not (Test-Path $Path)) {
+    return ""
+  }
+
+  $cmd = Get-Command Get-FileHash -ErrorAction SilentlyContinue
+  if ($cmd) {
+    try {
+      return (Get-FileHash -Algorithm SHA256 $Path).Hash
+    } catch {
+      # fall through
+    }
+  }
+
+  # Fallback for older PowerShell environments without Get-FileHash.
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+      $hashBytes = $sha.ComputeHash($stream)
+    } finally {
+      $stream.Dispose()
+      $sha.Dispose()
+    }
+    $hex = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ""
+    return $hex.ToUpperInvariant()
+  } catch {
+    return ""
+  }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Push-Location $repoRoot
 try {
@@ -52,6 +85,12 @@ try {
   & npm run build:prod
   if ($LASTEXITCODE -ne 0) {
     throw "npm run build:prod failed"
+  }
+
+  Write-Host "[release:win] build:backend:windows"
+  & npm run build:backend:windows
+  if ($LASTEXITCODE -ne 0) {
+    throw "npm run build:backend:windows failed"
   }
 
   if ($AllowDirty) {
@@ -74,10 +113,11 @@ try {
   $dst = Join-Path $DeskDir ("WAVE-win32-x64-{0}-fix-{1}.exe" -f $version, $sha)
   Copy-Item -Force $src $dst
 
-  $hash = (Get-FileHash -Algorithm SHA256 $dst).Hash
+  $hash = Get-Sha256 -Path $dst
   Write-Host "[release:win] out=$dst"
-  Write-Host "[release:win] sha256=$hash"
+  if ($hash) {
+    Write-Host "[release:win] sha256=$hash"
+  }
 } finally {
   Pop-Location
 }
-

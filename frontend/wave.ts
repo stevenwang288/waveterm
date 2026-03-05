@@ -308,17 +308,20 @@ async function migrateSpeechAutoplayDefault(fullConfig: FullConfigType): Promise
     if (settings["speech:autoplay-migrated"] === true) {
         return;
     }
-    if (settings["speech:autoplay"] !== true) {
+    // Default behavior: terminal auto-play should be ON unless a user explicitly disabled it.
+    // Only migrate when the key is missing (older configs).
+    const autoplay = settings["speech:autoplay"];
+    if (typeof autoplay === "boolean") {
         settings["speech:autoplay-migrated"] = true;
         return;
     }
 
     try {
         await RpcApi.SetConfigCommand(TabRpcClient, {
-            "speech:autoplay": false,
+            "speech:autoplay": true,
             "speech:autoplay-migrated": true,
         });
-        settings["speech:autoplay"] = false;
+        settings["speech:autoplay"] = true;
         settings["speech:autoplay-migrated"] = true;
     } catch (e) {
         console.log("Failed to migrate speech:autoplay default", e);

@@ -1366,6 +1366,10 @@ declare global {
         "tsunami:sdkreplacepath"?: string;
         "tsunami:sdkversion"?: string;
         "tsunami:gopath"?: string;
+        "wall:*"?: boolean;
+        "wall:url"?: string;
+        "wall:tabname"?: string;
+        "wall:webpartition"?: string;
     };
 
     // waveobj.StickerClickOptsType

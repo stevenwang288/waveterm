@@ -5,7 +5,9 @@ import { ClientModel } from "@/app/store/client-model";
 import { GlobalModel } from "@/app/store/global-model";
 import { getTabModelByTabId, TabModelContext } from "@/app/store/tab-model";
 import { Workspace } from "@/app/workspace/workspace";
+import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { ContextMenuModel } from "@/store/contextmenu";
+import { modalsModel } from "@/store/modalmodel";
 import {
     atoms,
     createBlock,
@@ -15,14 +17,17 @@ import {
     isDev,
     removeFlashError,
 } from "@/store/global";
+import { openCliLayoutInNewTab, openWallInNewTab } from "@/util/clilayout";
+import { getEnv } from "@/util/getenv";
 import { appHandleKeyDown, keyboardMouseDownHandler } from "@/store/keymodel";
+import * as services from "@/store/services";
 import { getElemAsStr } from "@/util/focusutil";
 import * as keyutil from "@/util/keyutil";
 import { PLATFORM } from "@/util/platformutil";
 import * as util from "@/util/util";
 import clsx from "clsx";
 import debug from "debug";
-import { Provider, useAtomValue } from "jotai";
+import { Provider, useAtomValue, useSetAtom } from "jotai";
 import "overlayscrollbars/overlayscrollbars.css";
 import { Fragment, useEffect, useState } from "react";
 import { DndProvider } from "react-dnd";
@@ -136,6 +141,31 @@ async function handleContextMenu(e: React.MouseEvent<HTMLDivElement>, t: any) {
         });
     }
     ContextMenuModel.showContextMenu(menu, e);
+}
+
+function shouldRunDevActionOncePerAppRun(actionKey: string): boolean {
+    const winKey = `__waveDevActionOnce__:${actionKey}`;
+    if ((window as any)?.[winKey]) {
+        return false;
+    }
+
+    try {
+        const api = (window as any)?.api as Partial<ElectronApi> | undefined;
+        const runId = typeof (api as any)?.getAppRunId === "function" ? String((api as any).getAppRunId() || "") : "";
+        if (runId) {
+            const storageKey = `waveterm:dev:action-once:${actionKey}`;
+            const prev = localStorage.getItem(storageKey);
+            if (prev === runId) {
+                return false;
+            }
+            localStorage.setItem(storageKey, runId);
+        }
+    } catch {
+        // ignore localStorage errors; fall back to per-tab guard
+    }
+
+    (window as any)[winKey] = true;
+    return true;
 }
 
 function AppSettingsUpdater() {
@@ -362,7 +392,148 @@ const AppInner = () => {
     const client = useAtomValue(ClientModel.getInstance().clientAtom);
     const windowData = useAtomValue(GlobalModel.getInstance().windowDataAtom);
     const isFullScreen = useAtomValue(atoms.isFullScreen);
+    const setNewInstallOnboardingOpen = useSetAtom(modalsModel.newInstallOnboardingOpen);
     const { t } = useTranslation();
+
+    useEffect(() => {
+        if (!isDev()) {
+            return;
+        }
+        const raw = getEnv("WAVETERM_DEV_SKIP_ONBOARDING");
+        const enabled = String(raw ?? "")
+            .trim()
+            .toLowerCase();
+        if (!enabled || (enabled !== "1" && enabled !== "true" && enabled !== "yes" && enabled !== "on")) {
+            return;
+        }
+        if (client == null) {
+            return;
+        }
+        if (!client.tosagreed) {
+            services.ClientService.AgreeTos().catch(() => {});
+        }
+        setNewInstallOnboardingOpen(false);
+    }, [client?.tosagreed]);
+
+    useEffect(() => {
+        if (!isDev()) {
+            return;
+        }
+        if (client == null || windowData == null) {
+            return;
+        }
+        const raw = getEnv("WAVETERM_DEV_OPEN_SERVERS_PANEL");
+        const enabled = String(raw ?? "")
+            .trim()
+            .toLowerCase();
+        if (!enabled || (enabled !== "1" && enabled !== "true" && enabled !== "yes" && enabled !== "on")) {
+            return;
+        }
+        if (!shouldRunDevActionOncePerAppRun("open-servers-panel")) {
+            return;
+        }
+        setTimeout(() => {
+            try {
+                WorkspaceLayoutModel.getInstance().setSidePanelView("servers", { nofocus: true });
+            } catch {
+                // ignore
+            }
+        }, 600);
+    }, [client, windowData]);
+
+    useEffect(() => {
+        if (!isDev()) {
+            return;
+        }
+        if (client == null || windowData == null) {
+            return;
+        }
+        const raw = getEnv("WAVETERM_DEV_AUTO_OPEN_WALL");
+        const enabled = String(raw ?? "")
+            .trim()
+            .toLowerCase();
+        if (!enabled || (enabled !== "1" && enabled !== "true" && enabled !== "yes" && enabled !== "on")) {
+            return;
+        }
+        if (!shouldRunDevActionOncePerAppRun("auto-open-wall")) {
+            return;
+        }
+        const tryOpenWall = async (attempt: number) => {
+            try {
+                await openWallInNewTab();
+            } catch {
+                if (attempt >= 15) {
+                    return;
+                }
+                setTimeout(() => void tryOpenWall(attempt + 1), 1000);
+            }
+        };
+        setTimeout(() => void tryOpenWall(0), 2000);
+    }, [client, windowData]);
+
+    useEffect(() => {
+        if (!isDev()) {
+            return;
+        }
+        if (client == null || windowData == null) {
+            return;
+        }
+        const demoConn = String(getEnv("WAVETERM_DEV_DEMO_GUI_CONN") ?? "").trim();
+        if (!demoConn) {
+            return;
+        }
+        if (!shouldRunDevActionOncePerAppRun(`demo-gui-conn:${demoConn}`)) {
+            return;
+        }
+        setTimeout(() => {
+            openCliLayoutInNewTab(
+                {
+                    rows: 1,
+                    cols: 1,
+                    paths: ["~"],
+                    commands: [""],
+                    connection: demoConn,
+                    slots: [
+                        {
+                            type: "term",
+                            path: "~",
+                            command: "",
+                            connection: demoConn,
+                        },
+                    ],
+                    updatedTs: Date.now(),
+                },
+                `GUI ${demoConn}`,
+                "dev-gui-demo"
+            ).catch(() => {});
+        }, 300);
+    }, [client, windowData]);
+
+    useEffect(() => {
+        if (!isDev()) {
+            return;
+        }
+        if (client == null || windowData == null) {
+            return;
+        }
+        const raw = getEnv("WAVETERM_DEV_CAPTURE_PAGE");
+        const enabled = String(raw ?? "")
+            .trim()
+            .toLowerCase();
+        if (!enabled || (enabled !== "1" && enabled !== "true" && enabled !== "yes" && enabled !== "on")) {
+            return;
+        }
+        if (!shouldRunDevActionOncePerAppRun("capture-page")) {
+            return;
+        }
+        const api = (window as any)?.api;
+        setTimeout(() => {
+            api?.devCapturePageToFile?.("gui-toggle-demo").catch(() => {});
+        }, 5000);
+        setTimeout(() => {
+            api?.devCapturePageToFile?.("gui-toggle-demo-late").catch(() => {});
+        }, 12000);
+    }, [client, windowData]);
 
     if (client == null || windowData == null) {
         return (

@@ -29,7 +29,8 @@ const CodexConversationInterruptedLinePattern = /^\s*conversation interrupted\b/
 const CodexSomethingWentWrongLinePattern = /^\s*something went wrong\?\s*$/i;
 const CodexFeedbackReportIssueLinePattern =
     /^\s*(?:something went wrong\?\s*)?hit\s+`?\/feedback`?\s+to\s+report\s+the\s+issue\.?\s*$/i;
-const CodexEscInterruptHintPattern = /\besc\b.*(?:interrupt|中断|打断)\b/i;
+// Match both English ("interrupt") and Chinese ("中断"/"打断") without relying on word-boundaries for CJK.
+const CodexEscInterruptHintPattern = /\besc\b.*(?:interrupt\b|中断|打断)/i;
 const CodexElapsedEscInterruptLinePattern =
     /^\s*[（(]?\s*(?:(?:\d+\s*[hms]\s*){1,4}|\d+\s*[:：]\s*\d+(?:\s*[:：]\s*\d+)?)\s*\besc\b.*(?:interrupt|中断|打断)\s*[）)]?\s*$/i;
 const LeadingStatusDecorationPattern = /^[\s•●◦∙·\u2800-\u28ff|\/\\]+/u;
@@ -45,6 +46,21 @@ const CtrlQuitRepeatHintPattern =
     /\bagain\b|\bonce\s+more\b|\bone\s+more(?:\s+time)?\b|\bconsecutive(?:ly)?\b|再次|再按|再按一次|再按下|连续/i;
 const CodexFooterHintPattern = /\bagain to (?:quit|edit previous message)\b/i;
 const CodexFooterHintZhPattern = /再次.*(?:退出|编辑上(?:一|1)条)/i;
+
+// Opencode (OpenCode) CLI prints structured-ish TUI/stream output.
+// We treat only "text" parts as the "formal reply" and ignore tool/reasoning/status UI.
+const OpencodeThinkingLinePattern = /^\s*(?:_?thinking_?\s*[:：]\s*|thinking\.\.\.\s*$)/i;
+const OpencodeRunHeaderLinePattern = /^\s*>\s+.+\s+·\s+.+$/;
+const OpencodePermissionRequestedLinePattern = /^\s*permission requested:\s*/i;
+const OpencodeShareLinePattern = /^\s*~\s+\S+/;
+const OpencodeToolHeaderLinePattern = /^\s*(?:⚙|✱|→|←|%|◇|◈|\$|#|✓|✗|•)\s+\S/;
+const OpencodeTuiMessageFooterLinePattern = /^\s*▣\s+.+\s+·\s+.+$/;
+const OpencodeToolCallsSummaryPattern = /\btoolcalls\b/i;
+const OpencodeViewSubagentsPattern = /\bview subagents\b/i;
+const OpencodeQueuedBadgePattern = /排队中|queued/i;
+const OpencodeCompactionPattern = /压缩|compaction/i;
+const OpencodeSqliteMigrationPattern = /^\s*performing one time database migration\b/i;
+const OpencodeDatabaseMigrationCompletePattern = /^\s*database migration complete\b/i;
 
 function normalizeTerminalLine(line: string): string {
     return line.replace(AnsiEscapePattern, "").replace(/\r/g, "").replace(/\s+$/g, "").trimEnd();
@@ -160,10 +176,45 @@ function hasCodexUiCues(lines: string[]): boolean {
         if (CodexToolCallLinePattern.test(line)) {
             return true;
         }
-        if (CodexBrandLinePattern.test(line) || CodexModelLinePattern.test(line) || CodexDirectoryLinePattern.test(line)) {
+        if (
+            CodexBrandLinePattern.test(line) ||
+            CodexModelLinePattern.test(line) ||
+            CodexDirectoryLinePattern.test(line)
+        ) {
             return true;
         }
         if (lowered.includes("openai codex") || lowered.includes("for shortcuts") || lowered.includes("context left")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function hasOpencodeUiCues(lines: string[]): boolean {
+    for (const line of lines) {
+        if (!line) {
+            continue;
+        }
+        const stripped = stripLeadingStatusDecorations(line);
+        if (OpencodeTuiMessageFooterLinePattern.test(stripped)) {
+            return true;
+        }
+        if (OpencodeRunHeaderLinePattern.test(stripped)) {
+            return true;
+        }
+        if (OpencodeThinkingLinePattern.test(stripped)) {
+            return true;
+        }
+        if (OpencodePermissionRequestedLinePattern.test(stripped)) {
+            return true;
+        }
+        if (OpencodeShareLinePattern.test(stripped)) {
+            return true;
+        }
+        if (OpencodeToolHeaderLinePattern.test(stripped)) {
+            return true;
+        }
+        if (OpencodeToolCallsSummaryPattern.test(stripped)) {
             return true;
         }
     }
@@ -210,6 +261,27 @@ function trimLineList(lines: string[]): string[] {
         end--;
     }
     return lines.slice(start, end);
+}
+
+function stripCommonLeadingSpaces(lines: string[], maxSpacesToStrip: number): string[] {
+    let minLeadingSpaces = Infinity;
+    for (const line of lines) {
+        if (!line || line.trim() === "") {
+            continue;
+        }
+        const match = line.match(/^ */);
+        const count = match ? match[0].length : 0;
+        minLeadingSpaces = Math.min(minLeadingSpaces, count);
+    }
+    if (!Number.isFinite(minLeadingSpaces) || minLeadingSpaces <= 0) {
+        return lines;
+    }
+    const toStrip = Math.min(minLeadingSpaces, Math.max(0, Math.floor(maxSpacesToStrip)));
+    if (toStrip <= 0) {
+        return lines;
+    }
+    const prefix = " ".repeat(toStrip);
+    return lines.map((line) => (line.startsWith(prefix) ? line.slice(toStrip) : line));
 }
 
 function buildCodexReplyFromSegment(lines: string[]): string {
@@ -336,14 +408,13 @@ function extractSegmentText(lines: string[], segment: TerminalConversationSegmen
     return buildUserPromptFromSegment(segmentLines);
 }
 
-function collectSegmentIndexesInPriorityOrder(
-    segments: TerminalConversationSegment[],
-    targetLine: number
-): number[] {
+function collectSegmentIndexesInPriorityOrder(segments: TerminalConversationSegment[], targetLine: number): number[] {
     if (segments.length === 0) {
         return [];
     }
-    let activeIdx = segments.findIndex((segment) => targetLine >= segment.startLine && targetLine < segment.endLineExclusive);
+    let activeIdx = segments.findIndex(
+        (segment) => targetLine >= segment.startLine && targetLine < segment.endLineExclusive
+    );
     if (activeIdx < 0) {
         for (let idx = segments.length - 1; idx >= 0; idx--) {
             if (segments[idx].startLine <= targetLine) {
@@ -365,7 +436,10 @@ function collectSegmentIndexesInPriorityOrder(
     return indexes;
 }
 
-export function extractTerminalParagraphByLine(lines: string[], lineIndex: number): TerminalParagraphByLineResult | null {
+export function extractTerminalParagraphByLine(
+    lines: string[],
+    lineIndex: number
+): TerminalParagraphByLineResult | null {
     if (!lines || lines.length === 0) {
         return null;
     }
@@ -392,6 +466,234 @@ export function extractTerminalParagraphByLine(lines: string[], lineIndex: numbe
         };
     }
     return null;
+}
+
+function hasShellBoundaryAfterIndex(lines: string[], boundaryIdx: number): boolean {
+    for (let idx = boundaryIdx + 1; idx < lines.length; idx++) {
+        const line = lines[idx];
+        if (!line || line.trim() === "") {
+            continue;
+        }
+        if (isTerminalStatusNoiseLine(line)) {
+            continue;
+        }
+        const stripped = stripLeadingStatusDecorations(line);
+        if (OpencodeThinkingLinePattern.test(stripped)) {
+            continue;
+        }
+        if (OpencodeToolHeaderLinePattern.test(stripped)) {
+            continue;
+        }
+        if (isCodexUserPromptLine(line) || isLikelyShellPromptLine(line)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isOpencodeTuiFinalFooterLine(line: string): boolean {
+    const stripped = stripLeadingStatusDecorations(line);
+    if (!OpencodeTuiMessageFooterLinePattern.test(stripped)) {
+        return false;
+    }
+    // Opencode shows message duration only when the assistant message is finalized (finish != tool-calls/unknown).
+    // Duration formatting examples: "120ms", "1.2s", "3m 23s", "1h 2m", "2d 3h".
+    const hasDuration =
+        /\b\d+ms\b/.test(stripped) ||
+        /\b\d+(?:\.\d+)?s\b/.test(stripped) ||
+        /\b\d+m\s+\d+s\b/.test(stripped) ||
+        /\b\d+h\s+\d+m\b/.test(stripped) ||
+        /\b\d+d\s+\d+h\b/.test(stripped);
+    if (hasDuration) {
+        return true;
+    }
+    return /\binterrupted\b/i.test(stripped);
+}
+
+function extractLatestOpencodeTuiReply(lines: string[], requireFinalReply: boolean): string {
+    let footerIdx = -1;
+    for (let idx = lines.length - 1; idx >= 0; idx--) {
+        const stripped = stripLeadingStatusDecorations(lines[idx] ?? "");
+        if (OpencodeTuiMessageFooterLinePattern.test(stripped)) {
+            footerIdx = idx;
+            break;
+        }
+    }
+    if (footerIdx === -1) {
+        return "";
+    }
+    if (requireFinalReply && !isOpencodeTuiFinalFooterLine(lines[footerIdx] ?? "")) {
+        return "";
+    }
+
+    let startIdx = 0;
+    for (let idx = footerIdx - 1; idx >= 0; idx--) {
+        const stripped = stripLeadingStatusDecorations(lines[idx] ?? "");
+        if (OpencodeTuiMessageFooterLinePattern.test(stripped)) {
+            startIdx = idx + 1;
+            break;
+        }
+    }
+
+    const segmentLines = lines.slice(startIdx, footerIdx);
+    const cleaned: string[] = [];
+    for (const line of segmentLines) {
+        if (!line || line.trim() === "") {
+            continue;
+        }
+        if (isTerminalStatusNoiseLine(line)) {
+            continue;
+        }
+        if (isCodexUserPromptLine(line) || isLikelyShellPromptLine(line)) {
+            continue;
+        }
+        const stripped = stripLeadingStatusDecorations(line);
+        if (
+            OpencodeThinkingLinePattern.test(stripped) ||
+            OpencodeRunHeaderLinePattern.test(stripped) ||
+            OpencodePermissionRequestedLinePattern.test(stripped) ||
+            OpencodeShareLinePattern.test(stripped) ||
+            OpencodeToolCallsSummaryPattern.test(stripped) ||
+            OpencodeViewSubagentsPattern.test(stripped) ||
+            OpencodeQueuedBadgePattern.test(stripped) ||
+            OpencodeCompactionPattern.test(stripped) ||
+            OpencodeSqliteMigrationPattern.test(stripped) ||
+            OpencodeDatabaseMigrationCompletePattern.test(stripped)
+        ) {
+            continue;
+        }
+        // Ignore obvious opencode tool header rows that may appear in the transcript area.
+        if (OpencodeToolHeaderLinePattern.test(stripped)) {
+            continue;
+        }
+        cleaned.push(line);
+    }
+    const reply = trimLineList(stripCommonLeadingSpaces(cleaned, 6)).join("\n").trim();
+    return looksLikeAssistantFinalReply(reply) ? reply : "";
+}
+
+function extractLatestOpencodeRunReply(lines: string[], requireFinalReply: boolean): string {
+    // Mask opencode tool blocks and reasoning/status lines so we can safely pick the latest text block.
+    const ignored = new Set<number>();
+    const blockIcons = new Set(["$", "←", "#"]);
+
+    for (let idx = 0; idx < lines.length; idx++) {
+        const line = lines[idx] ?? "";
+        const stripped = stripLeadingStatusDecorations(line);
+        if (
+            OpencodeThinkingLinePattern.test(stripped) ||
+            OpencodeRunHeaderLinePattern.test(stripped) ||
+            OpencodePermissionRequestedLinePattern.test(stripped) ||
+            OpencodeShareLinePattern.test(stripped) ||
+            OpencodeSqliteMigrationPattern.test(stripped) ||
+            OpencodeDatabaseMigrationCompletePattern.test(stripped)
+        ) {
+            ignored.add(idx);
+            continue;
+        }
+
+        if (OpencodeToolHeaderLinePattern.test(stripped)) {
+            ignored.add(idx);
+            const icon = stripped.trim().slice(0, 1);
+            const isBlock = blockIcons.has(icon);
+            if (!isBlock) {
+                continue;
+            }
+            // Best-effort: skip the output rows printed by opencode's `block(...)` helper.
+            // It prints: empty line, tool header, output (possibly multiline), empty line.
+            // Tool output may contain blank lines, so we scan until we hit a clear boundary.
+            let blankRun = 0;
+            let sawNonEmptyOutput = false;
+            for (let j = idx + 1; j < lines.length; j++) {
+                const outLine = lines[j] ?? "";
+                const trimmed = outLine.trim();
+                if (isCodexUserPromptLine(outLine) || isLikelyShellPromptLine(outLine)) {
+                    break;
+                }
+                const outStripped = stripLeadingStatusDecorations(outLine);
+                if (
+                    OpencodeToolHeaderLinePattern.test(outStripped) ||
+                    OpencodeThinkingLinePattern.test(outStripped) ||
+                    OpencodeRunHeaderLinePattern.test(outStripped) ||
+                    OpencodePermissionRequestedLinePattern.test(outStripped) ||
+                    OpencodeShareLinePattern.test(outStripped)
+                ) {
+                    break;
+                }
+
+                ignored.add(j);
+
+                if (!trimmed) {
+                    blankRun += 1;
+                    // Some opencode blocks only print a header (no output). In that case the first
+                    // blank line we encounter is very likely the boundary before the assistant text.
+                    if (!sawNonEmptyOutput) {
+                        break;
+                    }
+                    // Between opencode blocks there are often two consecutive blank lines
+                    // (one emitted by the previous block, one by the next). Use that as a boundary.
+                    if (blankRun >= 2) {
+                        break;
+                    }
+                    continue;
+                }
+                blankRun = 0;
+                sawNonEmptyOutput = true;
+            }
+        }
+    }
+
+    // Find the latest non-ignored block of text.
+    let endIdx = -1;
+    for (let idx = lines.length - 1; idx >= 0; idx--) {
+        const line = lines[idx] ?? "";
+        if (ignored.has(idx)) {
+            continue;
+        }
+        if (!line || line.trim() === "") {
+            continue;
+        }
+        if (isTerminalStatusNoiseLine(line) || isCodexUserPromptLine(line) || isLikelyShellPromptLine(line)) {
+            continue;
+        }
+        endIdx = idx;
+        break;
+    }
+    if (endIdx === -1) {
+        return "";
+    }
+    let startIdx = endIdx;
+    for (let idx = endIdx - 1; idx >= 0; idx--) {
+        const line = lines[idx] ?? "";
+        if (ignored.has(idx)) {
+            break;
+        }
+        if (!line || line.trim() === "") {
+            break;
+        }
+        if (isTerminalStatusNoiseLine(line) || isCodexUserPromptLine(line) || isLikelyShellPromptLine(line)) {
+            break;
+        }
+        startIdx = idx;
+    }
+
+    if (requireFinalReply && !hasShellBoundaryAfterIndex(lines, endIdx)) {
+        return "";
+    }
+
+    const segmentLines = lines.slice(startIdx, endIdx + 1);
+    const reply = segmentLines.join("\n").trim();
+    return looksLikeAssistantFinalReply(reply) ? reply : "";
+}
+
+function extractLatestOpencodeReply(lines: string[], requireFinalReply: boolean): string {
+    const hasFooter = lines.some((line) =>
+        OpencodeTuiMessageFooterLinePattern.test(stripLeadingStatusDecorations(line))
+    );
+    if (hasFooter) {
+        return extractLatestOpencodeTuiReply(lines, requireFinalReply);
+    }
+    return extractLatestOpencodeRunReply(lines, requireFinalReply);
 }
 
 function extractLatestCodexBulletReply(lines: string[], requirePromptAfterReply: boolean): string {
@@ -500,7 +802,11 @@ function looksLikeAssistantFinalReply(text: string): boolean {
     return text.length >= 18;
 }
 
-function extractLatestPlainReply(lines: string[], allowLooseFallback: boolean, requirePromptAfterReply: boolean): string {
+function extractLatestPlainReply(
+    lines: string[],
+    allowLooseFallback: boolean,
+    requirePromptAfterReply: boolean
+): string {
     const candidate = extractLatestPlainReplyCandidate(lines);
     if (!candidate) {
         return "";
@@ -528,6 +834,16 @@ export function extractLatestTerminalFormalReply(
     const requirePromptAfterCodexReply = options?.requirePromptAfterCodexReply ?? false;
     const normalized = normalizeTerminalScrollbackLines(lines);
     const { lines: withoutIFlowExecutionInfo } = removeIFlowExecutionInfo(normalized);
+    if (hasOpencodeUiCues(withoutIFlowExecutionInfo)) {
+        const opencodeReply = extractLatestOpencodeReply(withoutIFlowExecutionInfo, requirePromptAfterCodexReply);
+        if (opencodeReply) {
+            return opencodeReply;
+        }
+    }
+
+    // Codex-style bullet transcripts (› prompts + • assistant replies).
+    // Keep this after opencode detection because opencode tools may render bullets (e.g. "•") that should not
+    // be treated as a Codex assistant reply.
     const codexReply = extractLatestCodexBulletReply(withoutIFlowExecutionInfo, requirePromptAfterCodexReply);
     if (codexReply) {
         return codexReply;

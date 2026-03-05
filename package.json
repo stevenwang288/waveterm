@@ -23,11 +23,13 @@
         "dev:fresh": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-dev-fresh.ps1",
         "start": "electron-vite preview",
         "build:dev": "electron-vite build --mode development",
-        "build:backend:windows": "task build:backend:quickdev:windows",
+        "build:backend:windows": "node scripts/build-backend-windows.mjs",
         "prebuild:prod": "node scripts/prebuild-prod.mjs",
         "build:prod": "electron-vite build --mode production",
         "package:win": "electron-builder --config electron-builder.config.cjs --win --x64",
         "package:win:allow-dirty": "set WAVETERM_ALLOW_DIRTY_PACKAGE=1&& electron-builder --config electron-builder.config.cjs --win --x64",
+        "release:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1",
+        "release:win:allow-dirty": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1 -AllowDirty",
         "coverage": "vitest run --coverage",
         "test": "vitest",
         "postinstall": "electron-builder install-app-deps"
@@ -81,6 +83,7 @@
     "dependencies": {
         "@ai-sdk/react": "^2.0.104",
         "@floating-ui/react": "^0.27.16",
+        "@novnc/novnc": "^1.4.0",
         "@observablehq/plot": "^0.6.17",
         "@react-hook/resize-observer": "^2.0.2",
         "@table-nav/core": "^0.0.7",
