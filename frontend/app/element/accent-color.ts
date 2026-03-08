@@ -65,8 +65,6 @@ function setAccentColorVars(baseColor: string): void {
     root.style.setProperty("--tab-green", baseColor);
     root.style.setProperty("--link-color", baseColor);
     root.style.setProperty("--button-green-bg", dark);
-    root.style.setProperty("--term-green", dark);
-    root.style.setProperty("--term-bright-green", baseColor);
     root.style.setProperty("--success-color", dark);
     root.style.setProperty("--sysinfo-cpu-color", baseColor);
     root.style.setProperty("--conn-icon-color-8", baseColor);

@@ -121,29 +121,29 @@
 
     // term colors (16 + 6) form the base terminal theme
     // for consistency these colors should be used by plugins/applications
-    --term-black: #000000;
-    --term-red: #cc0000;
-    --term-green: #4e9a06;
-    --term-yellow: #c4a000;
-    --term-blue: #3465a4;
-    --term-magenta: #bc3fbc;
-    --term-cyan: #06989a;
-    --term-white: #d0d0d0;
-    --term-bright-black: #555753;
-    --term-bright-red: #ef2929;
-    --term-bright-green: #58c142;
-    --term-bright-yellow: #fce94f;
-    --term-bright-blue: #32afff;
-    --term-bright-magenta: #ad7fa8;
-    --term-bright-cyan: #34e2e2;
-    --term-bright-white: #e7e7e7;
+    --term-black: #0c0c0c;
+    --term-red: #c50f1f;
+    --term-green: #13a10e;
+    --term-yellow: #c19c00;
+    --term-blue: #0037da;
+    --term-magenta: #881798;
+    --term-cyan: #3a96dd;
+    --term-white: #cccccc;
+    --term-bright-black: #767676;
+    --term-bright-red: #e74856;
+    --term-bright-green: #16c60c;
+    --term-bright-yellow: #f9f1a5;
+    --term-bright-blue: #3b78ff;
+    --term-bright-magenta: #b4009e;
+    --term-bright-cyan: #61d6d6;
+    --term-bright-white: #f2f2f2;
 
-    --term-gray: #8b918a; // not an official terminal color
-    --term-cmdtext: #ffffff;
-    --term-foreground: #d3d7cf;
-    --term-background: #000000;
-    --term-selection-background: #ffffff60;
-    --term-cursor-accent: #000000;
+    --term-gray: #767676; // not an official terminal color
+    --term-cmdtext: #cccccc;
+    --term-foreground: #cccccc;
+    --term-background: #0c0c0c;
+    --term-selection-background: #ffffff40;
+    --term-cursor-accent: #0c0c0c;
 
     // button colors
     --button-text-color: #000000;
