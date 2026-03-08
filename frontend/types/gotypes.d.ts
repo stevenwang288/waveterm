@@ -1040,6 +1040,7 @@ declare global {
         "cmd:jwt"?: boolean;
         "cmd:env"?: {[key: string]: string};
         "cmd:cwd"?: string;
+        "display:launchcwd"?: string;
         "cmd:initscript"?: string;
         "cmd:initscript.sh"?: string;
         "cmd:initscript.bash"?: string;
@@ -1283,6 +1284,7 @@ declare global {
         "speech:filterpaths"?: boolean;
         "speech:filtercode"?: boolean;
         "speech:autoplay"?: boolean;
+        "speech:autoplay-migrated"?: boolean;
         "speech:manualbutton"?: boolean;
         "speech:rate"?: number;
         "speech:localengine"?: string;

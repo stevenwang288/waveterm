@@ -11,6 +11,11 @@ import { WaveDevVarName, WaveDevViteVarName } from "../frontend/util/isdev";
 import * as keyutil from "../frontend/util/keyutil";
 import i18next from "./i18n-main";
 
+// Capture the launch CWD immediately at module load time, before any code changes it
+const launchCwd = process.cwd();
+const WaveLaunchCwdVarName = "WAVETERM_LAUNCH_CWD";
+process.env[WaveLaunchCwdVarName] = launchCwd;
+
 // This is a little trick to ensure that Electron puts all its runtime data into a subdirectory to avoid conflicts with our own data.
 // On macOS, it will store to ~/Library/Application \Support/waveterm/electron
 // On Linux, it will store to ~/.config/waveterm/electron
@@ -233,6 +238,10 @@ function getWaveSrvCwd(): string {
     return getWaveDataDir();
 }
 
+function getLaunchCwd(): string {
+    return launchCwd;
+}
+
 ipcMain.on("get-is-dev", (event) => {
     event.returnValue = isDev;
 });
@@ -332,6 +341,7 @@ export {
     getElectronAppBasePath,
     getElectronAppResourcesPath,
     getElectronAppUnpackedBasePath,
+    getLaunchCwd,
     getWaveConfigDir,
     getWaveDataDir,
     getWaveSrvCwd,
@@ -343,4 +353,5 @@ export {
     unamePlatform,
     WaveConfigHomeVarName,
     WaveDataHomeVarName,
+    WaveLaunchCwdVarName,
 };

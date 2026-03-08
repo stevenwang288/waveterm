@@ -33,6 +33,8 @@ import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { IconButton } from "@/element/iconbutton";
+import { formatCwdForDisplay } from "@/util/cwdlabel";
+import { getLaunchCwdForDisplay } from "@/util/launchcwd";
 import { NodeModel } from "@/layout/index";
 import * as util from "@/util/util";
 import { cn } from "@/util/util";
@@ -40,27 +42,6 @@ import * as jotai from "jotai";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { BlockFrameProps } from "./blocktypes";
-
-function getPathDisplayLabel(path: string): string {
-    if (!path) {
-        return "";
-    }
-    const trimmed = path.trim();
-    if (!trimmed) {
-        return "";
-    }
-    if (trimmed === "~" || trimmed === "/" || trimmed === "\\") {
-        return trimmed;
-    }
-    const normalized = trimmed.replace(/[\\/]+$/, "");
-    if (!normalized) {
-        return trimmed;
-    }
-    if (/^[A-Za-z]:$/.test(normalized)) {
-        return `${normalized}\\`;
-    }
-    return normalized;
-}
 
 function getDurableIconProps(
     jobStatus: BlockJobStatusData,
@@ -915,25 +896,18 @@ const BlockFrame_Header = ({
         }
         return Date.now() - ts < activityWindowMs ? "term-running" : "term-stopped";
     }, [activityTick, activityWindowMs, documentHasFocus, isAltBuf, isTerminalBlock, lastOutputTs, shellState]);
-
-    const virtualCwdAtom = React.useMemo(() => {
-        if (!isTerminalBlock) {
-            return null;
-        }
-        return useBlockAtom(nodeModel.blockId, "term:virtualcwd", () => {
-            return jotai.atom("") as jotai.PrimitiveAtom<string>;
-        }) as jotai.PrimitiveAtom<string>;
-    }, [isTerminalBlock, nodeModel.blockId]);
-    const virtualCwd = util.useAtomValueSafe(virtualCwdAtom as any) as string;
     const terminalPathLabel = React.useMemo(() => {
         if (!isTerminalBlock) {
             return undefined;
         }
         const cwd = typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]) : "";
-        const effectiveCwd = util.isBlank(virtualCwd) ? cwd : virtualCwd;
-        const pathLabel = getPathDisplayLabel(effectiveCwd);
+        const displayCwd =
+            typeof blockData?.meta?.["display:launchcwd"] === "string"
+                ? String(blockData.meta["display:launchcwd"])
+                : getLaunchCwdForDisplay();
+        const pathLabel = formatCwdForDisplay(cwd || displayCwd);
         return util.isBlank(pathLabel) ? undefined : pathLabel;
-    }, [blockData?.meta, isTerminalBlock, virtualCwd]);
+    }, [blockData?.meta, isTerminalBlock]);
 
     const codexAuthReady = util.useAtomValueSafe(atoms.codexAuthReadyAtom) ?? false;
 
@@ -1045,3 +1019,4 @@ const BlockFrame_Header = ({
 };
 
 export { BlockFrame_Header };
+

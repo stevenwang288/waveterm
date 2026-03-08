@@ -3,7 +3,7 @@
 
 import { computeConnColorNum } from "@/app/block/blockutil";
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { getConnStatusAtom, getLocalHostDisplayNameAtom, recordTEvent } from "@/app/store/global";
+import { getConnStatusAtom, getLocalHostDisplayNameAtom, pushNotification, recordTEvent } from "@/app/store/global";
 import { IconButton } from "@/element/iconbutton";
 import * as util from "@/util/util";
 import * as jotai from "jotai";
@@ -35,6 +35,7 @@ export const ConnectionButton = React.memo(
             const { t } = useTranslation();
             const [, setConnModalOpen] = jotai.useAtom(changeConnModalAtom);
             const clickTimeoutRef = React.useRef<number | null>(null);
+            const isTerminalPathOnly = Boolean(isTerminalBlock);
             const isLocal = util.isLocalConnName(connection);
             const connStatusAtom = getConnStatusAtom(connection);
             const connStatus = jotai.useAtomValue(connStatusAtom);
@@ -48,6 +49,21 @@ export const ConnectionButton = React.memo(
                 recordTEvent("action:other", { "action:type": "conndropdown", "action:initiator": "mouse" });
                 setConnModalOpen(true);
             }, [setConnModalOpen]);
+            const copyTerminalLabel = React.useCallback(async () => {
+                if (!isTerminalBlock || util.isBlank(terminalLabelTrimmed)) {
+                    return;
+                }
+                await navigator.clipboard.writeText(terminalLabelTrimmed);
+                const now = Date.now();
+                pushNotification({
+                    icon: "copy",
+                    title: t("common.copied"),
+                    message: "",
+                    timestamp: new Date(now).toISOString(),
+                    expiration: now + 1200,
+                    type: "info",
+                });
+            }, [isTerminalBlock, t, terminalLabelTrimmed]);
             const clickHandler = React.useCallback(() => {
                 if (isTerminalBlock && onTerminalLabelDoubleClick) {
                     if (clickTimeoutRef.current != null) {
@@ -76,6 +92,23 @@ export const ConnectionButton = React.memo(
                 },
                 [isTerminalBlock, onTerminalLabelDoubleClick]
             );
+            const handleTerminalLabelClick = React.useCallback(
+                (e: React.MouseEvent<HTMLDivElement>) => {
+                    if (!isTerminalBlock || util.isBlank(terminalLabelTrimmed)) {
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (clickTimeoutRef.current != null) {
+                        window.clearTimeout(clickTimeoutRef.current);
+                    }
+                    clickTimeoutRef.current = window.setTimeout(() => {
+                        clickTimeoutRef.current = null;
+                        util.fireAndForget(copyTerminalLabel());
+                    }, onTerminalLabelDoubleClick ? 220 : 0);
+                },
+                [copyTerminalLabel, isTerminalBlock, onTerminalLabelDoubleClick, terminalLabelTrimmed]
+            );
             React.useEffect(() => {
                 return () => {
                     if (clickTimeoutRef.current != null) {
@@ -88,7 +121,12 @@ export const ConnectionButton = React.memo(
             let shouldSpin = false;
             let connDisplayName: string = null;
             let extraDisplayNameClassName = "";
-            if (isLocal) {
+            if (isTerminalPathOnly) {
+                titleText = terminalLabelTrimmed || null;
+                connDisplayName = terminalLabelTrimmed;
+                connIconElem = null;
+                color = "var(--color-secondary)";
+            } else if (isLocal) {
                 color = "var(--color-secondary)";
                 const localDefaultName = connection === "local:gitbash" ? "Git Bash" : localName;
                 if (connection === "local:gitbash") {
@@ -99,13 +137,7 @@ export const ConnectionButton = React.memo(
                         : t("connection.connectedToLocalMachine");
                 }
                 connDisplayName = localDefaultName;
-                if (isTerminalBlock) {
-                    connDisplayName = util.isBlank(terminalLabelTrimmed) ? localDefaultName : terminalLabelTrimmed;
-                    if (!util.isBlank(terminalLabelTrimmed)) {
-                        titleText = terminalLabelTrimmed;
-                    }
-                    extraDisplayNameClassName = "text-muted group-hover:text-secondary";
-                }
+
                 connIconElem = (
                     <i
                         className={util.cn(util.makeIconClass("laptop", false), "fa-stack-1x mr-[2px]")}
@@ -188,44 +220,41 @@ export const ConnectionButton = React.memo(
                     <div
                         ref={ref}
                         className={util.cn(
-                            "group flex items-center flex-nowrap overflow-hidden text-ellipsis min-w-0 font-normal text-primary rounded-sm hover:bg-highlightbg cursor-pointer",
-                            unread && "connection-unread",
+                            "group flex items-center flex-nowrap overflow-hidden text-ellipsis min-w-0 font-normal text-primary rounded-sm",
+                            isTerminalPathOnly ? "cursor-default" : "hover:bg-highlightbg cursor-pointer",
+                            unread && !isTerminalPathOnly && "connection-unread",
                             compact && "w-7 h-7 justify-center"
                         )}
-                        onClick={clickHandler}
+                        onClick={isTerminalPathOnly ? undefined : clickHandler}
                         onDoubleClick={handleContainerDoubleClick}
                         title={titleText}
                     >
-                        <span
-                            className={util.cn(
-                                "fa-stack flex-[1_1_auto] overflow-hidden",
-                                shouldSpin ? "fa-spin" : null
-                            )}
-                        >
-                            {connIconElem}
-                            <i
+                        {connIconElem != null && (
+                            <span
                                 className={util.cn(
-                                    "fa-slash fa-solid fa-stack-1x mr-[2px] [text-shadow:0_1px_black,0_1.5px_black]",
-                                    showDisconnectedSlash ? "opacity-100" : "opacity-0"
+                                    "fa-stack flex-[1_1_auto] overflow-hidden",
+                                    shouldSpin ? "fa-spin" : null
                                 )}
-                                style={{ color: color }}
-                            />
-                        </span>
+                            >
+                                {connIconElem}
+                                <i
+                                    className={util.cn(
+                                        "fa-slash fa-solid fa-stack-1x mr-[2px] [text-shadow:0_1px_black,0_1.5px_black]",
+                                        showDisconnectedSlash ? "opacity-100" : "opacity-0"
+                                    )}
+                                    style={{ color: color }}
+                                />
+                            </span>
+                        )}
                         {!compact &&
-                            (connDisplayName ? (
+                            (connDisplayName || isTerminalPathOnly ? (
                                 <div
                                     className={util.cn(
                                         "flex-[1_2_auto] overflow-hidden pr-1 ellipsis",
                                         extraDisplayNameClassName,
-                                        isTerminalBlock && "connection-terminal-label"
+                                        isTerminalBlock && "connection-terminal-label cursor-copy"
                                     )}
-                                    onClick={
-                                        isTerminalBlock
-                                            ? (e) => {
-                                                  e.stopPropagation();
-                                              }
-                                            : undefined
-                                    }
+                                    onClick={isTerminalBlock ? handleTerminalLabelClick : undefined}
                                     onDoubleClick={
                                         isTerminalBlock
                                             ? (e) => {
@@ -243,15 +272,9 @@ export const ConnectionButton = React.memo(
                                 <div
                                     className={util.cn(
                                         "flex-[1_2_auto] overflow-hidden pr-1 ellipsis",
-                                        isTerminalBlock && "connection-terminal-label"
+                                        isTerminalBlock && "connection-terminal-label cursor-copy"
                                     )}
-                                    onClick={
-                                        isTerminalBlock
-                                            ? (e) => {
-                                                  e.stopPropagation();
-                                              }
-                                            : undefined
-                                    }
+                                    onClick={isTerminalBlock ? handleTerminalLabelClick : undefined}
                                     onDoubleClick={
                                         isTerminalBlock
                                             ? (e) => {
@@ -281,3 +304,4 @@ export const ConnectionButton = React.memo(
     )
 );
 ConnectionButton.displayName = "ConnectionButton";
+

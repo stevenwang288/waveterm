@@ -25,7 +25,7 @@ function Stop-ProcessesUsingExe {
     $matches = @()
   }
 
-  foreach ($proc in ($matches ?? @())) {
+  foreach ($proc in @($matches)) {
     try {
       Write-Host "[backend] stopping locked process pid=$($proc.ProcessId) path=$fullPath" -ForegroundColor Yellow
       Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
@@ -34,7 +34,7 @@ function Stop-ProcessesUsingExe {
     }
   }
 
-  if (($matches ?? @()).Count -gt 0) {
+  if (@($matches).Count -gt 0) {
     Start-Sleep -Milliseconds 250
   }
 }

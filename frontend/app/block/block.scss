@@ -155,43 +155,10 @@
                         min-width: 0;
                     }
                 }
-
                 & .connection-terminal-label {
-                    color: var(--conn-icon-color-3);
-                    opacity: 0.9;
-                    font-weight: 500;
                     direction: rtl;
                     text-align: left;
                     unicode-bidi: isolate;
-                }
-
-                &.term-running .connection-terminal-label {
-                    color: var(--term-green);
-                }
-
-                &.term-stopped .connection-terminal-label {
-                    color: var(--term-magenta);
-                }
-
-                &.term-stopped.term-ai-ready .connection-terminal-label {
-                    color: var(--term-blue);
-                }
-
-                & .connection-unread {
-                    background-color: rgb(from var(--warning-color) r g b / 16%);
-                }
-
-                & .connection-unread:hover {
-                    background-color: rgb(from var(--warning-color) r g b / 22%);
-                }
-
-                & .connection-unread .connection-terminal-label {
-                    color: var(--warning-color);
-                    opacity: 0.95;
-                }
-
-                &.term-stopped .connection-unread {
-                    background-color: rgb(from var(--warning-color) r g b / 18%);
                 }
 
                 .connection-button {
@@ -523,3 +490,4 @@
         }
     }
 }
+

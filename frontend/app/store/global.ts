@@ -16,6 +16,7 @@ import {
 } from "@/layout/lib/types";
 import { getWebServerEndpoint } from "@/util/endpoints";
 import { fetch } from "@/util/fetchutil";
+import { getTerminalDisplayCwd } from "@/util/launchcwd";
 import { setPlatform } from "@/util/platformutil";
 import {
     base64ToString,
@@ -519,6 +520,23 @@ function getApi(): ElectronApi {
     return (window as any).api;
 }
 
+function withTerminalDisplayMeta(blockDef: BlockDef): BlockDef {
+    if (blockDef?.meta?.view !== "term" || blockDef?.meta?.controller !== "shell") {
+        return blockDef;
+    }
+    const displayCwd = getTerminalDisplayCwd(blockDef.meta as Record<string, any>);
+    if (isBlank(displayCwd)) {
+        return blockDef;
+    }
+    return {
+        ...blockDef,
+        meta: {
+            ...(blockDef.meta ?? {}),
+            "display:launchcwd": displayCwd,
+        },
+    };
+}
+
 async function createBlockSplitHorizontally(
     blockDef: BlockDef,
     targetBlockId: string,
@@ -526,7 +544,7 @@ async function createBlockSplitHorizontally(
 ): Promise<string> {
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
-    const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
+    const newBlockId = await ObjectService.CreateBlock(withTerminalDisplayMeta(blockDef), rtOpts);
     const targetNodeId = layoutModel.getNodeByBlockId(targetBlockId)?.id;
     if (targetNodeId == null) {
         throw new Error(`targetNodeId not found for blockId: ${targetBlockId}`);
@@ -549,7 +567,7 @@ async function createBlockSplitVertically(
 ): Promise<string> {
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
-    const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
+    const newBlockId = await ObjectService.CreateBlock(withTerminalDisplayMeta(blockDef), rtOpts);
     const targetNodeId = layoutModel.getNodeByBlockId(targetBlockId)?.id;
     if (targetNodeId == null) {
         throw new Error(`targetNodeId not found for blockId: ${targetBlockId}`);
@@ -568,7 +586,7 @@ async function createBlockSplitVertically(
 async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = false): Promise<string> {
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
-    const blockId = await ObjectService.CreateBlock(blockDef, rtOpts);
+    const blockId = await ObjectService.CreateBlock(withTerminalDisplayMeta(blockDef), rtOpts);
     if (ephemeral) {
         layoutModel.newEphemeralNode(blockId);
         return blockId;
@@ -586,7 +604,7 @@ async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = fa
 async function replaceBlock(blockId: string, blockDef: BlockDef, focus: boolean): Promise<string> {
     const layoutModel = getLayoutModelForStaticTab();
     const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
-    const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
+    const newBlockId = await ObjectService.CreateBlock(withTerminalDisplayMeta(blockDef), rtOpts);
     setTimeout(() => {
         fireAndForget(() => ObjectService.DeleteBlock(blockId));
     }, 300);
@@ -1014,3 +1032,5 @@ export {
     useSettingsKeyAtom,
     WOS,
 };
+
+

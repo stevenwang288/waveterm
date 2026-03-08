@@ -20,6 +20,7 @@ import {
 import {
     getElectronAppResourcesPath,
     getElectronAppUnpackedBasePath,
+    getLaunchCwd,
     getWaveConfigDir,
     getWaveDataDir,
     getWaveSrvCwd,
@@ -27,6 +28,7 @@ import {
     getXdgCurrentDesktop,
     WaveConfigHomeVarName,
     WaveDataHomeVarName,
+    WaveLaunchCwdVarName,
 } from "./emain-platform";
 import {
     getElectronExecPath,
@@ -161,6 +163,7 @@ export function runWaveSrv(handleWSEvent: (evtMsg: WSEventType) => void): Promis
     envCopy[WaveAuthKeyEnv] = AuthKey;
     envCopy[WaveDataHomeVarName] = getWaveDataDir();
     envCopy[WaveConfigHomeVarName] = getWaveConfigDir();
+    envCopy[WaveLaunchCwdVarName] = getLaunchCwd();
     const waveSrvCmd = getWaveSrvPath();
     console.log("trying to run local server", waveSrvCmd);
     const proc = child_process.spawn(getWaveSrvPath(), {
