@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld("api", {
     }) => ipcRenderer.invoke("speech-log", entry),
     pveEnsureAuth: (req: { partition: string; origin: string; lang?: string; timeoutMs?: number }) =>
         ipcRenderer.invoke("pve-ensure-auth", req),
+    pveListMachines: (req?: { origin?: string; timeoutMs?: number }) => ipcRenderer.invoke("pve-list-machines", req),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),

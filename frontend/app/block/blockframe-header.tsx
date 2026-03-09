@@ -33,6 +33,7 @@ import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { IconButton } from "@/element/iconbutton";
+import type { TermViewModel } from "@/app/view/term/term-model";
 import { formatCwdForDisplay } from "@/util/cwdlabel";
 import { getLaunchCwdForDisplay } from "@/util/launchcwd";
 import { NodeModel } from "@/layout/index";
@@ -957,6 +958,10 @@ const BlockFrame_Header = ({
         }
         nodeModel.toggleMagnify();
     }, [magnifyDisabled, nodeModel, preview]);
+    const termVm = isTerminalBlock ? (viewModel as TermViewModel) : null;
+    const canOpenRemoteGui = util.useAtomValueSafe(termVm?.canOpenRemoteGui) ?? false;
+    const termMode = util.useAtomValueSafe(termVm?.termMode);
+    const remoteGuiActive = termMode === "web" || termMode === "websplit";
 
     return (
         <div
@@ -991,6 +996,16 @@ const BlockFrame_Header = ({
                     terminalLabel={terminalPathLabel}
                     unread={isTerminalBlock && hasUnread}
                     onTerminalLabelDoubleClick={isTerminalBlock ? handleTerminalLabelDoubleClick : undefined}
+                    showRemoteGuiButton={isTerminalBlock && canOpenRemoteGui}
+                    remoteGuiActive={remoteGuiActive}
+                    onRemoteGuiClick={
+                        isTerminalBlock && canOpenRemoteGui ? () => util.fireAndForget(termVm.toggleRemoteGui()) : undefined
+                    }
+                    onRemoteGuiLongClick={
+                        isTerminalBlock && canOpenRemoteGui
+                            ? () => util.fireAndForget(termVm.cycleRemoteGuiMode())
+                            : undefined
+                    }
                 />
             )}
             {useTermHeader && termDurableStatus != null && (

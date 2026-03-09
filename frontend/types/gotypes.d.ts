@@ -745,6 +745,7 @@ declare global {
         "conn:ignoresshconfig"?: boolean;
         "conn:guiurl"?: string;
         "conn:guimode"?: string;
+        "display:name"?: string;
         "display:hidden"?: boolean;
         "display:order"?: number;
         "term:*"?: boolean;

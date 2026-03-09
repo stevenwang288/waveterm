@@ -345,6 +345,7 @@ type ConnKeywords struct {
 	ConnGuiURL              string `json:"conn:guiurl,omitempty"`
 	ConnGuiMode             string `json:"conn:guimode,omitempty"`
 
+	DisplayName   string  `json:"display:name,omitempty"`
 	DisplayHidden *bool   `json:"display:hidden,omitempty"`
 	DisplayOrder  float32 `json:"display:order,omitempty"`
 

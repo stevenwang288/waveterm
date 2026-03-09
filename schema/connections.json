@@ -24,6 +24,9 @@
         "conn:guimode": {
           "type": "string"
         },
+        "display:name": {
+          "type": "string"
+        },
         "display:hidden": {
           "type": "boolean"
         },

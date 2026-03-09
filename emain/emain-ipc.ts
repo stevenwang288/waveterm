@@ -30,7 +30,13 @@ import { getWaveVersion } from "./emain-wavesrv";
 import { createNewWaveWindow, getWaveWindowByWebContentsId } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
 import { synthesizeEdgeTtsToMp3Base64 } from "./local-tts-edge";
-import { ensurePveAuth, PveEnsureAuthRequest, storePveCredentials } from "./pve-auth";
+import {
+    ensurePveAuth,
+    listPveMachines,
+    PveEnsureAuthRequest,
+    PveListMachinesRequest,
+    storePveCredentials,
+} from "./pve-auth";
 
 const electronApp = electron.app;
 
@@ -1020,6 +1026,10 @@ export function initIpcHandlers() {
 
     electron.ipcMain.handle("pve-ensure-auth", async (_event, req: PveEnsureAuthRequest) => {
         return await ensurePveAuth(req);
+    });
+
+    electron.ipcMain.handle("pve-list-machines", async (_event, req?: PveListMachinesRequest) => {
+        return await listPveMachines(req);
     });
 
     electron.ipcMain.handle(

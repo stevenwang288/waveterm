@@ -19,6 +19,10 @@ interface ConnectionButtonProps {
     terminalLabel?: string;
     unread?: boolean;
     onTerminalLabelDoubleClick?: () => void;
+    showRemoteGuiButton?: boolean;
+    remoteGuiActive?: boolean;
+    onRemoteGuiClick?: () => void;
+    onRemoteGuiLongClick?: () => void;
 }
 
 export const ConnectionButton = React.memo(
@@ -31,6 +35,10 @@ export const ConnectionButton = React.memo(
             terminalLabel,
             unread,
             onTerminalLabelDoubleClick,
+            showRemoteGuiButton,
+            remoteGuiActive,
+            onRemoteGuiClick,
+            onRemoteGuiLongClick,
         }: ConnectionButtonProps, ref) => {
             const { t } = useTranslation();
             const [, setConnModalOpen] = jotai.useAtom(changeConnModalAtom);
@@ -121,6 +129,27 @@ export const ConnectionButton = React.memo(
             let shouldSpin = false;
             let connDisplayName: string = null;
             let extraDisplayNameClassName = "";
+            const remoteGuiButtonDecl =
+                showRemoteGuiButton && onRemoteGuiClick
+                    ? ({
+                          elemtype: "iconbutton",
+                          icon: "desktop",
+                          title: remoteGuiActive ? t("term.remoteGuiHideTitle") : t("term.remoteGuiOpenSplitTitle"),
+                          iconColor: remoteGuiActive ? "var(--success-color)" : "var(--color-secondary)",
+                          click: (e: React.MouseEvent) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onRemoteGuiClick();
+                          },
+                          longClick: onRemoteGuiLongClick
+                              ? (e: React.MouseEvent) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onRemoteGuiLongClick();
+                                }
+                              : undefined,
+                      } satisfies IconButtonDecl)
+                    : null;
             if (isTerminalPathOnly) {
                 titleText = terminalLabelTrimmed || null;
                 connDisplayName = terminalLabelTrimmed;
@@ -229,6 +258,12 @@ export const ConnectionButton = React.memo(
                         onDoubleClick={handleContainerDoubleClick}
                         title={titleText}
                     >
+                        {remoteGuiButtonDecl != null && (
+                            <IconButton
+                                decl={remoteGuiButtonDecl}
+                                className="mr-1.5 shrink-0 text-[12px] opacity-80 hover:opacity-100"
+                            />
+                        )}
                         {connIconElem != null && (
                             <span
                                 className={util.cn(

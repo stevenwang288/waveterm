@@ -175,6 +175,20 @@ declare global {
             skipped?: boolean;
             error?: string;
         }>; // pve-ensure-auth
+        pveListMachines: (req?: { origin?: string; timeoutMs?: number }) => Promise<{
+            ok: boolean;
+            error?: string;
+            machines?: Array<{
+                vmid: number;
+                node: string;
+                type: "qemu" | "lxc";
+                name: string;
+                status?: string;
+                sshHost?: string;
+                ipHints?: string[];
+                guiUrl: string;
+            }>;
+        }>; // pve-list-machines
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh

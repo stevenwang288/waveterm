@@ -5,7 +5,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { Modal } from "@/app/modals/modal";
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { atoms, createBlock, getLocalHostDisplayNameAtom } from "@/store/global";
+import { atoms, createBlock, getApi, getLocalHostDisplayNameAtom, pushNotification } from "@/store/global";
 import { fireAndForget, isBlank } from "@/util/util";
 import { useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -16,10 +16,12 @@ type RemoteSource = "managed" | "discovered";
 type ServerEntry = {
     connection?: string;
     label: string;
+    sublabel?: string;
     source: "local" | RemoteSource;
 };
 
 type ConnectionFormMode = "add" | "edit" | "adopt";
+const DEFAULT_PVE_ORIGIN = "https://192.168.1.250:8006";
 
 function normalizePort(rawPort: string): string {
     const port = rawPort.trim();
@@ -81,6 +83,18 @@ function buildConnectionName(host: string, user: string, port: string): string {
     return `${userPrefix}${normalizedHost}${portSuffix}`;
 }
 
+function normalizeHostForMatch(host: string): string {
+    return host.trim().replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
+}
+
+function getManagedConnectionHost(connection: string, connConfig?: ConnKeywords): string {
+    const explicitHost = String(connConfig?.["ssh:hostname"] ?? "").trim();
+    if (explicitHost !== "") {
+        return normalizeHostForMatch(explicitHost);
+    }
+    return normalizeHostForMatch(parseConnectionName(connection).host);
+}
+
 const ServersPanel = memo(() => {
     const { t } = useTranslation();
     const localHostLabel = useAtomValue(getLocalHostDisplayNameAtom());
@@ -96,6 +110,7 @@ const ServersPanel = memo(() => {
     const [editTargetConnection, setEditTargetConnection] = useState<string | null>(null);
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
+    const [pveRefreshing, setPveRefreshing] = useState(false);
 
     const loadConnections = useCallback(async () => {
         setLoading(true);
@@ -146,12 +161,17 @@ const ServersPanel = memo(() => {
         return connections
             .filter((item) => !isBlank(item) && item !== "local")
             .sort((a, b) => a.localeCompare(b))
-            .map((connection) => ({
-                connection,
-                label: connection,
-                source: managedConnectionSet.has(connection) ? "managed" : "discovered",
-            }));
-    }, [connections, managedConnectionSet]);
+            .map((connection) => {
+                const connConfig = fullConfig?.connections?.[connection] as ConnKeywords | undefined;
+                const displayName = String((connConfig as any)?.["display:name"] ?? "").trim();
+                return {
+                    connection,
+                    label: displayName || connection,
+                    sublabel: displayName && displayName !== connection ? connection : undefined,
+                    source: managedConnectionSet.has(connection) ? "managed" : "discovered",
+                };
+            });
+    }, [connections, fullConfig, managedConnectionSet]);
 
     const managedEntries = useMemo(() => remoteEntries.filter((entry) => entry.source === "managed"), [remoteEntries]);
     const discoveredEntries = useMemo(
@@ -196,6 +216,99 @@ const ServersPanel = memo(() => {
         });
     }, []);
 
+    const refreshFromPve = useCallback(() => {
+        if (pveRefreshing) {
+            return;
+        }
+        setPveRefreshing(true);
+        fireAndForget(async () => {
+            try {
+                const result = await getApi().pveListMachines({ origin: DEFAULT_PVE_ORIGIN, timeoutMs: 12000 });
+                if (!result?.ok) {
+                    throw new Error(result?.error || t("common.error"));
+                }
+                const machines = Array.isArray(result.machines) ? result.machines : [];
+                const existingConfigs = fullConfig?.connections ?? {};
+                const existingByHost = new Map<string, string>();
+                for (const [connName, connConfig] of Object.entries(existingConfigs)) {
+                    if (isBlank(connName) || connName === "local" || connName.startsWith("wsl://")) {
+                        continue;
+                    }
+                    const hostKey = getManagedConnectionHost(connName, connConfig as ConnKeywords);
+                    if (hostKey !== "" && !existingByHost.has(hostKey)) {
+                        existingByHost.set(hostKey, connName);
+                    }
+                }
+
+                let updatedCount = 0;
+                let createdCount = 0;
+                let skippedCount = 0;
+
+                for (const machine of machines) {
+                    const ipHints = Array.isArray(machine.ipHints) ? machine.ipHints : [];
+                    const sshHost = String(machine.sshHost ?? ipHints[0] ?? "").trim();
+                    const matchedConnName = ipHints
+                        .map((ipHint) => existingByHost.get(normalizeHostForMatch(ipHint)))
+                        .find((value) => !isBlank(value));
+                    const connectionName = matchedConnName || sshHost;
+                    if (isBlank(connectionName)) {
+                        skippedCount += 1;
+                        continue;
+                    }
+                    const existingConnConfig = existingConfigs[connectionName] as ConnKeywords | undefined;
+                    const nextMeta: Record<string, any> = {
+                        "display:name": machine.name,
+                        "conn:guiurl": machine.guiUrl,
+                    };
+                    if (!isBlank(sshHost)) {
+                        nextMeta["ssh:hostname"] = sshHost;
+                    }
+                    const existingGuiUrl = String(existingConnConfig?.["conn:guiurl"] ?? "").trim();
+                    if (!isBlank(existingGuiUrl) && !existingGuiUrl.startsWith(DEFAULT_PVE_ORIGIN)) {
+                        delete nextMeta["conn:guiurl"];
+                    }
+                    await RpcApi.SetConnectionsConfigCommand(
+                        TabRpcClient,
+                        { host: connectionName, metamaptype: nextMeta },
+                        { timeout: 60000 }
+                    );
+                    if (matchedConnName) {
+                        updatedCount += 1;
+                    } else {
+                        createdCount += 1;
+                    }
+                }
+
+                await loadConnections();
+                const now = Date.now();
+                pushNotification({
+                    icon: "server",
+                    title: t("connection.pveRefreshDoneTitle"),
+                    message: t("connection.pveRefreshDoneMessage", {
+                        updated: updatedCount,
+                        created: createdCount,
+                        skipped: skippedCount,
+                    }),
+                    timestamp: new Date(now).toISOString(),
+                    expiration: now + 2600,
+                    type: "info",
+                });
+            } catch (e) {
+                const now = Date.now();
+                pushNotification({
+                    icon: "triangle-exclamation",
+                    title: t("connection.pveRefreshFailedTitle"),
+                    message: `${e}`,
+                    timestamp: new Date(now).toISOString(),
+                    expiration: now + 3200,
+                    type: "error",
+                });
+            } finally {
+                setPveRefreshing(false);
+            }
+        });
+    }, [fullConfig, loadConnections, pveRefreshing, t]);
+
     const showPanelContextMenu = useCallback(
         (e: React.MouseEvent) => {
             e.preventDefault();
@@ -210,6 +323,10 @@ const ServersPanel = memo(() => {
                     click: openConnectionsEditor,
                 },
                 {
+                    label: t("connection.refreshFromPve"),
+                    click: refreshFromPve,
+                },
+                {
                     type: "separator",
                 },
                 {
@@ -219,7 +336,7 @@ const ServersPanel = memo(() => {
             ];
             ContextMenuModel.showContextMenu(menu, e);
         },
-        [openAddModal, openConnectionsEditor, refreshConnections, t]
+        [openAddModal, openConnectionsEditor, refreshConnections, refreshFromPve, t]
     );
 
     const openEditModal = useCallback((entry: ServerEntry) => {
@@ -368,6 +485,13 @@ const ServersPanel = memo(() => {
                     </div>
                     <div
                         className="text-xs text-secondary hover:text-primary cursor-pointer"
+                        onClick={refreshFromPve}
+                        title={t("connection.refreshFromPve")}
+                    >
+                        <i className={pveRefreshing ? "fa fa-spinner fa-spin" : "fa fa-network-wired"} />
+                    </div>
+                    <div
+                        className="text-xs text-secondary hover:text-primary cursor-pointer"
                         onClick={refreshConnections}
                         title={t("common.retry")}
                     >
@@ -406,13 +530,18 @@ const ServersPanel = memo(() => {
                         ) : (
                             managedEntries.map((entry) => (
                                 <div
-                                    key={`managed-${entry.label}`}
+                                    key={`managed-${entry.connection ?? entry.label}`}
                                     className="group flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer"
                                     onClick={() => openServer(entry)}
                                     title={entry.label}
                                 >
                                     <i className="fa fa-server text-secondary" />
-                                    <span className="truncate flex-1 min-w-0">{entry.label}</span>
+                                    <div className="flex-1 min-w-0 overflow-hidden">
+                                        <div className="truncate">{entry.label}</div>
+                                        {entry.sublabel && (
+                                            <div className="truncate text-[10px] text-secondary/70">{entry.sublabel}</div>
+                                        )}
+                                    </div>
                                     <button
                                         className="text-[11px] text-secondary hover:text-primary opacity-0 group-hover:opacity-100"
                                         onClick={(e) => {
@@ -445,13 +574,18 @@ const ServersPanel = memo(() => {
                         ) : (
                             discoveredEntries.map((entry) => (
                                 <div
-                                    key={`discovered-${entry.label}`}
+                                    key={`discovered-${entry.connection ?? entry.label}`}
                                     className="group flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer"
                                     onClick={() => openServer(entry)}
                                     title={entry.label}
                                 >
                                     <i className="fa fa-magnifying-glass text-secondary" />
-                                    <span className="truncate flex-1 min-w-0">{entry.label}</span>
+                                    <div className="flex-1 min-w-0 overflow-hidden">
+                                        <div className="truncate">{entry.label}</div>
+                                        {entry.sublabel && (
+                                            <div className="truncate text-[10px] text-secondary/70">{entry.sublabel}</div>
+                                        )}
+                                    </div>
                                     <span className="text-[10px] text-secondary/70">{t("connection.discoveredTag")}</span>
                                     <button
                                         className="text-[11px] text-secondary hover:text-accent opacity-0 group-hover:opacity-100"

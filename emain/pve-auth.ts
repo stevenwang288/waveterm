@@ -35,6 +35,28 @@ export type PveEnsureAuthResult = {
     error?: string;
 };
 
+export type PveListMachinesRequest = {
+    origin?: string;
+    timeoutMs?: number;
+};
+
+export type PveMachineInfo = {
+    vmid: number;
+    node: string;
+    type: "qemu" | "lxc";
+    name: string;
+    status?: string;
+    sshHost?: string;
+    ipHints?: string[];
+    guiUrl: string;
+};
+
+export type PveListMachinesResult = {
+    ok: boolean;
+    error?: string;
+    machines?: PveMachineInfo[];
+};
+
 type StoredPveCredEntryV1 = {
     username: string;
     passwordCiphertext: string;
@@ -269,6 +291,231 @@ async function pveTicketLogin(origin: string, usernameRaw: string, passwordRaw: 
         });
 
     return withTimeout(doReq(), timeoutMs + 1500, "pveTicketLogin");
+}
+
+function extractIpv4Candidates(input: string): string[] {
+    const matches: string[] = String(input ?? "").match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? [];
+    return matches.filter((candidate) => {
+        const parts = candidate.split(".").map((part) => Number(part));
+        if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+            return false;
+        }
+        if (parts[0] === 10) {
+            return true;
+        }
+        if (parts[0] === 192 && parts[1] === 168) {
+            return true;
+        }
+        if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) {
+            return true;
+        }
+        return false;
+    });
+}
+
+function collectStringLeaves(value: any, out: string[] = []): string[] {
+    if (value == null) {
+        return out;
+    }
+    if (typeof value === "string") {
+        out.push(value);
+        return out;
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            collectStringLeaves(item, out);
+        }
+        return out;
+    }
+    if (typeof value === "object") {
+        for (const item of Object.values(value)) {
+            collectStringLeaves(item, out);
+        }
+    }
+    return out;
+}
+
+function uniqStrings(values: string[]): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+        const normalized = String(value ?? "").trim();
+        if (!normalized || seen.has(normalized)) {
+            continue;
+        }
+        seen.add(normalized);
+        result.push(normalized);
+    }
+    return result;
+}
+
+function buildPveVmGuiUrl(origin: string, type: "qemu" | "lxc", vmid: number): string {
+    const base = normalizeOrigin(origin);
+    const target = encodeURIComponent(`${type}/${vmid}`);
+    return `${base}/#v1:0:=${target}:4:::::8::`;
+}
+
+async function pveApiJsonGet(origin: string, apiPath: string, ticket: string, timeoutMs: number): Promise<any> {
+    const base = normalizeOrigin(origin);
+    const url = new URL(apiPath, base);
+    const isHttps = url.protocol === "https:";
+    const mod = isHttps ? https : http;
+    const agent = isHttps ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+
+    const doReq = () =>
+        new Promise<any>((resolve, reject) => {
+            const req = mod.request(
+                {
+                    method: "GET",
+                    hostname: url.hostname,
+                    port: url.port || (isHttps ? 443 : 80),
+                    path: url.pathname + url.search,
+                    headers: {
+                        Cookie: `${PVE_AUTH_COOKIE_NAME}=${ticket}`,
+                        Accept: "application/json",
+                    },
+                    agent,
+                },
+                (res) => {
+                    const chunks: Buffer[] = [];
+                    res.on("data", (d) => chunks.push(d));
+                    res.on("end", () => {
+                        const text = Buffer.concat(chunks).toString("utf8");
+                        if (res.statusCode && res.statusCode >= 400) {
+                            reject(new Error(`PVE API ${apiPath} HTTP ${res.statusCode}`));
+                            return;
+                        }
+                        try {
+                            const parsed = JSON.parse(text);
+                            resolve(parsed?.data);
+                        } catch (e: any) {
+                            reject(new Error(`PVE API parse failed for ${apiPath}: ${e?.message || String(e)}`));
+                        }
+                    });
+                }
+            );
+            req.on("error", (e) => reject(e));
+            req.setTimeout(timeoutMs, () => {
+                try {
+                    req.destroy(new Error("timeout"));
+                } catch {
+                    // ignore
+                }
+            });
+            req.end();
+        });
+
+    return withTimeout(doReq(), timeoutMs + 1500, `pveApiJsonGet ${apiPath}`);
+}
+
+async function pveApiGetWithFallback(
+    origin: string,
+    apiPath: string,
+    ticket: string,
+    timeoutMs: number,
+    fallbackValue: any
+): Promise<any> {
+    try {
+        return await pveApiJsonGet(origin, apiPath, ticket, timeoutMs);
+    } catch {
+        return fallbackValue;
+    }
+}
+
+function extractIpHintsFromPayload(payload: any): string[] {
+    const stringLeaves = collectStringLeaves(payload);
+    const ips = stringLeaves.flatMap((value) => extractIpv4Candidates(value));
+    return uniqStrings(ips);
+}
+
+function pickPreferredSshHost(ipHints: string[]): string {
+    return uniqStrings(ipHints)[0] ?? "";
+}
+
+async function getApiTicketForOrigin(origin: string, timeoutMs: number): Promise<string> {
+    let host = "";
+    try {
+        host = normalizeHostToken(new URL(origin).host);
+    } catch {
+        host = "";
+    }
+    if (!host || !isAllowedPveHost(host)) {
+        throw new Error("origin host not allowed");
+    }
+    const creds = loadCredentialsForHost(host);
+    if (!creds?.username || !creds?.password) {
+        throw new Error("missing credentials");
+    }
+    const username = creds.username.includes("@") ? creds.username : `${creds.username}@${PVE_DEFAULT_REALM}`;
+    const login = await pveTicketLogin(origin, username, creds.password, timeoutMs);
+    return login.ticket;
+}
+
+export async function listPveMachines(req?: PveListMachinesRequest): Promise<PveListMachinesResult> {
+    const origin = normalizeOrigin(req?.origin ?? "https://192.168.1.250:8006");
+    if (!origin) {
+        return { ok: false, error: "origin is required" };
+    }
+    const timeoutMs = Math.max(1000, Math.min(20000, Number(req?.timeoutMs ?? 8000) || 8000));
+    try {
+        const ticket = await getApiTicketForOrigin(origin, timeoutMs);
+        const resources = await pveApiJsonGet(origin, "/api2/json/cluster/resources?type=vm", ticket, timeoutMs);
+        const vmResources = Array.isArray(resources)
+            ? resources.filter(
+                  (item) =>
+                      item != null &&
+                      (item.type === "qemu" || item.type === "lxc") &&
+                      String(item.template ?? "0") !== "1"
+              )
+            : [];
+        const machines = await Promise.all(
+            vmResources.map(async (item) => {
+                const type = item.type as "qemu" | "lxc";
+                const vmid = Number(item.vmid ?? 0);
+                const node = String(item.node ?? "").trim();
+                const configPath =
+                    type === "qemu"
+                        ? `/api2/json/nodes/${encodeURIComponent(node)}/qemu/${vmid}/config`
+                        : `/api2/json/nodes/${encodeURIComponent(node)}/lxc/${vmid}/config`;
+                const configData = await pveApiGetWithFallback(origin, configPath, ticket, timeoutMs, {});
+                const extraData =
+                    type === "qemu"
+                        ? await pveApiGetWithFallback(
+                              origin,
+                              `/api2/json/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/network-get-interfaces`,
+                              ticket,
+                              timeoutMs,
+                              {}
+                          )
+                        : await pveApiGetWithFallback(
+                              origin,
+                              `/api2/json/nodes/${encodeURIComponent(node)}/lxc/${vmid}/interfaces`,
+                              ticket,
+                              timeoutMs,
+                              {}
+                          );
+                const ipHints = uniqStrings([
+                    ...extractIpHintsFromPayload(item),
+                    ...extractIpHintsFromPayload(configData),
+                    ...extractIpHintsFromPayload(extraData),
+                ]);
+                return {
+                    vmid,
+                    node,
+                    type,
+                    name: String(item.name ?? `${type}-${vmid}`).trim() || `${type}-${vmid}`,
+                    status: String(item.status ?? "").trim() || undefined,
+                    ipHints,
+                    sshHost: pickPreferredSshHost(ipHints) || undefined,
+                    guiUrl: buildPveVmGuiUrl(origin, type, vmid),
+                } satisfies PveMachineInfo;
+            })
+        );
+        machines.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+        return { ok: true, machines };
+    } catch (e: any) {
+        return { ok: false, error: e?.message || String(e) };
+    }
 }
 
 export async function ensurePveAuth(req: PveEnsureAuthRequest): Promise<PveEnsureAuthResult> {
