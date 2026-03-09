@@ -743,6 +743,8 @@ declare global {
         "conn:wshpath"?: string;
         "conn:shellpath"?: string;
         "conn:ignoresshconfig"?: boolean;
+        "conn:guiurl"?: string;
+        "conn:guimode"?: string;
         "display:hidden"?: boolean;
         "display:order"?: number;
         "term:*"?: boolean;
@@ -1089,6 +1091,7 @@ declare global {
         "term:localshellopts"?: string[];
         "term:scrollback"?: number;
         "term:vdomblockid"?: string;
+        "term:guiblockid"?: string;
         "term:vdomtoolbarblockid"?: string;
         "term:transparency"?: number;
         "term:allowbracketedpaste"?: boolean;

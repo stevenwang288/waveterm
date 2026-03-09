@@ -58,6 +58,78 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "ClawX", command: "clawx" },
 ];
 
+const DEFAULT_PVE_ORIGIN = "https://192.168.1.250:8006";
+const DEFAULT_PVE_URL = "https://192.168.1.250:8006/#v1:0:=node%2FVUModule:4:::::8::";
+const DEFAULT_PVE_WEB_PARTITION = "persist:pve-wall";
+
+type TermModeType = "term" | "vdom" | "web" | "websplit";
+type RemoteGuiModeType = "web" | "websplit";
+
+function normalizeHostCandidate(value: string): string {
+    return String(value ?? "").trim().toLowerCase();
+}
+
+function looksLikePrivateHost(host: string): boolean {
+    const normalized = normalizeHostCandidate(host);
+    if (!normalized) {
+        return false;
+    }
+    if (normalized === "localhost" || normalized.endsWith(".local")) {
+        return false;
+    }
+    if (/^10\.\d+\.\d+\.\d+$/.test(normalized)) {
+        return true;
+    }
+    if (/^192\.168\.\d+\.\d+$/.test(normalized)) {
+        return true;
+    }
+    if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(normalized)) {
+        return true;
+    }
+    return false;
+}
+
+function getConnectionHostGuess(connName: string, connConfig?: ConnKeywords | null): string {
+    const explicitHost = normalizeHostCandidate((connConfig as any)?.["ssh:hostname"]);
+    if (explicitHost) {
+        return explicitHost;
+    }
+    const normalizedConn = String(connName ?? "").trim();
+    if (!normalizedConn) {
+        return "";
+    }
+    const sshUriMatch = normalizedConn.match(/^ssh:\/\/([^@/]+@)?([^:/?#]+)(?::\d+)?/i);
+    if (sshUriMatch?.[2]) {
+        return normalizeHostCandidate(sshUriMatch[2]);
+    }
+    const atIdx = normalizedConn.lastIndexOf("@");
+    if (atIdx >= 0 && atIdx < normalizedConn.length - 1) {
+        return normalizeHostCandidate(normalizedConn.slice(atIdx + 1));
+    }
+    return normalizeHostCandidate(normalizedConn);
+}
+
+function getResolvedRemoteGuiUrl(fullConfig: FullConfigType | null, connName: string): string {
+    if (isBlank(connName)) {
+        return "";
+    }
+    const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
+    const configuredUrl = String((connConfig as any)?.["conn:guiurl"] ?? "").trim();
+    if (!isBlank(configuredUrl)) {
+        return configuredUrl;
+    }
+    const hostGuess = getConnectionHostGuess(connName, connConfig);
+    if (looksLikePrivateHost(hostGuess)) {
+        return DEFAULT_PVE_URL;
+    }
+    return "";
+}
+
+function getPreferredRemoteGuiMode(fullConfig: FullConfigType | null, connName: string): RemoteGuiModeType {
+    const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
+    return (connConfig as any)?.["conn:guimode"] === "web" ? "web" : "websplit";
+}
+
 const BUILTIN_TERM_THEME_DISPLAY_NAME_TO_I18N_KEY: Record<string, string> = {
     "Default Dark": "term.themeNames.defaultDark",
     "One Dark Pro": "term.themeNames.oneDarkPro",
@@ -167,8 +239,12 @@ export class TermViewModel implements ViewModel {
     useTermHeader: jotai.Atom<boolean>;
     termWshClient: TermWshClient;
     vdomBlockId: jotai.Atom<string>;
+    guiBlockId: jotai.Atom<string>;
     vdomToolbarBlockId: jotai.Atom<string>;
     vdomToolbarTarget: jotai.PrimitiveAtom<VDomTargetToolbar>;
+    remoteGuiUrl: jotai.Atom<string>;
+    preferredRemoteGuiMode: jotai.Atom<RemoteGuiModeType>;
+    canOpenRemoteGui: jotai.Atom<boolean>;
     fontSizeAtom: jotai.Atom<number>;
     termThemeNameAtom: jotai.Atom<string>;
     termTransparencyAtom: jotai.Atom<number>;
@@ -203,11 +279,32 @@ export class TermViewModel implements ViewModel {
             const blockData = get(this.blockAtom);
             return blockData?.meta?.["term:vdomblockid"];
         });
+        this.guiBlockId = jotai.atom((get) => {
+            const blockData = get(this.blockAtom);
+            return blockData?.meta?.["term:guiblockid"];
+        });
         this.vdomToolbarBlockId = jotai.atom((get) => {
             const blockData = get(this.blockAtom);
             return blockData?.meta?.["term:vdomtoolbarblockid"];
         });
         this.vdomToolbarTarget = jotai.atom<VDomTargetToolbar>(null) as jotai.PrimitiveAtom<VDomTargetToolbar>;
+        this.remoteGuiUrl = jotai.atom((get) => {
+            const blockData = get(this.blockAtom);
+            const connName = String(blockData?.meta?.connection ?? "").trim();
+            const fullConfig = get(atoms.fullConfigAtom);
+            return getResolvedRemoteGuiUrl(fullConfig, connName);
+        });
+        this.preferredRemoteGuiMode = jotai.atom((get) => {
+            const blockData = get(this.blockAtom);
+            const connName = String(blockData?.meta?.connection ?? "").trim();
+            const fullConfig = get(atoms.fullConfigAtom);
+            return getPreferredRemoteGuiMode(fullConfig, connName);
+        });
+        this.canOpenRemoteGui = jotai.atom((get) => {
+            const blockData = get(this.blockAtom);
+            const connName = String(blockData?.meta?.connection ?? "").trim();
+            return !isBlank(connName) && !isBlank(get(this.remoteGuiUrl));
+        });
         this.termMode = jotai.atom((get) => {
             const blockData = get(this.blockAtom);
             return blockData?.meta?.["term:mode"] ?? "term";
@@ -392,7 +489,28 @@ export class TermViewModel implements ViewModel {
             const shellProcStatus = get(this.shellProcStatus);
             const connStatus = get(this.connStatus);
             const isCmd = get(this.isCmdController);
+            const termMode = get(this.termMode) as TermModeType;
             const rtn: IconButtonDecl[] = [];
+
+            if (get(this.canOpenRemoteGui) && connStatus?.status === "connected") {
+                const preferredGuiMode = get(this.preferredRemoteGuiMode);
+                rtn.push({
+                    elemtype: "iconbutton",
+                    icon: "display",
+                    iconColor:
+                        termMode === "web" || termMode === "websplit"
+                            ? "var(--success-color)"
+                            : "var(--accent-color)",
+                    title:
+                        termMode === "web" || termMode === "websplit"
+                            ? i18next.t("term.remoteGuiHideTitle")
+                            : preferredGuiMode === "web"
+                              ? i18next.t("term.remoteGuiOpenOnlyTitle")
+                              : i18next.t("term.remoteGuiOpenSplitTitle"),
+                    click: () => fireAndForget(() => this.toggleRemoteGui()),
+                    longClick: () => fireAndForget(() => this.cycleRemoteGuiMode()),
+                });
+            }
 
             if (blockData?.meta?.["controller"] != "cmd" && shellProcStatus != "done") {
                 return rtn;
@@ -618,7 +736,7 @@ export class TermViewModel implements ViewModel {
         }
     }
 
-    setTermMode(mode: "term" | "vdom") {
+    setTermMode(mode: TermModeType) {
         if (mode == "term") {
             mode = null;
         }
@@ -683,6 +801,121 @@ export class TermViewModel implements ViewModel {
         return bcm.viewModel as VDomModel;
     }
 
+    private pushRemoteGuiModeNotification(mode: RemoteGuiModeType) {
+        const now = Date.now();
+        pushNotification({
+            icon: "display",
+            title:
+                mode === "web"
+                    ? i18next.t("term.remoteGuiModeOnlyTitle")
+                    : i18next.t("term.remoteGuiModeSplitTitle"),
+            message: i18next.t("term.remoteGuiModeHint"),
+            timestamp: new Date(now).toISOString(),
+            expiration: now + 2200,
+            type: "info",
+        });
+    }
+
+    private async persistRemoteGuiMode(mode: RemoteGuiModeType): Promise<void> {
+        const blockData = globalStore.get(this.blockAtom);
+        const connName = String(blockData?.meta?.connection ?? "").trim();
+        if (isBlank(connName)) {
+            return;
+        }
+        await RpcApi.SetConnectionsConfigCommand(TabRpcClient, {
+            host: connName,
+            metamaptype: { "conn:guimode": mode } as any,
+        });
+    }
+
+    private async ensureRemoteGuiBlock(): Promise<string | null> {
+        const url = String(globalStore.get(this.remoteGuiUrl) ?? "").trim();
+        if (isBlank(url)) {
+            return null;
+        }
+
+        if (url.startsWith(DEFAULT_PVE_ORIGIN)) {
+            try {
+                await getApi().pveEnsureAuth({
+                    partition: DEFAULT_PVE_WEB_PARTITION,
+                    origin: DEFAULT_PVE_ORIGIN,
+                    lang: "zh_CN",
+                });
+            } catch {
+                // fall back to the normal login page
+            }
+        }
+
+        const blockData = globalStore.get(this.blockAtom);
+        const connName = String(blockData?.meta?.connection ?? "").trim();
+        const existingGuiBlockId = String(globalStore.get(this.guiBlockId) ?? "").trim();
+        const guiBlockMeta: Record<string, any> = {
+            view: "web",
+            url,
+            "web:hidenav": true,
+            "web:zoom": 0.9,
+            "web:partition": DEFAULT_PVE_WEB_PARTITION,
+            "display:name": isBlank(connName) ? i18next.t("term.remoteGuiTitle") : `${connName} GUI`,
+        };
+
+        if (!isBlank(existingGuiBlockId)) {
+            try {
+                await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", existingGuiBlockId), guiBlockMeta);
+                return existingGuiBlockId;
+            } catch {
+                // fall through and recreate the paired GUI block
+            }
+        }
+
+        const oref = await RpcApi.CreateSubBlockCommand(TabRpcClient, {
+            parentblockid: this.blockId,
+            blockdef: {
+                meta: guiBlockMeta,
+            },
+        });
+        const [_, newGuiBlockId] = WOS.splitORef(oref);
+        await RpcApi.SetMetaCommand(TabRpcClient, {
+            oref: WOS.makeORef("block", this.blockId),
+            meta: {
+                "term:guiblockid": newGuiBlockId,
+            },
+        });
+        return newGuiBlockId;
+    }
+
+    async toggleRemoteGui(): Promise<void> {
+        const termMode = globalStore.get(this.termMode) as TermModeType;
+        if (termMode === "web" || termMode === "websplit") {
+            this.setTermMode("term");
+            return;
+        }
+        const guiBlockId = await this.ensureRemoteGuiBlock();
+        if (isBlank(guiBlockId)) {
+            const now = Date.now();
+            pushNotification({
+                icon: "triangle-exclamation",
+                title: i18next.t("term.remoteGuiUnavailableTitle"),
+                message: i18next.t("term.remoteGuiUnavailableMessage"),
+                timestamp: new Date(now).toISOString(),
+                expiration: now + 2600,
+                type: "warning",
+            });
+            return;
+        }
+        this.setTermMode(globalStore.get(this.preferredRemoteGuiMode));
+    }
+
+    async cycleRemoteGuiMode(): Promise<void> {
+        const nextMode: RemoteGuiModeType = globalStore.get(this.preferredRemoteGuiMode) === "web" ? "websplit" : "web";
+        await this.persistRemoteGuiMode(nextMode);
+        const termMode = globalStore.get(this.termMode) as TermModeType;
+        if (termMode === "web" || termMode === "websplit") {
+            await this.ensureRemoteGuiBlock();
+            this.setTermMode(nextMode);
+        }
+        this.pushRemoteGuiModeNotification(nextMode);
+    }
+
     dispose() {
         DefaultRouter.unregisterRoute(makeFeBlockRouteId(this.blockId));
         this.shellProcStatusUnsubFn?.();
@@ -717,6 +950,10 @@ export class TermViewModel implements ViewModel {
         if (keyutil.checkKeyPressed(waveEvent, "Cmd:Escape")) {
             const blockAtom = WOS.getWaveObjectAtom<Block>(`block:${this.blockId}`);
             const blockData = globalStore.get(blockAtom);
+            if (blockData?.meta?.["term:mode"] === "web" || blockData?.meta?.["term:mode"] === "websplit") {
+                this.setTermMode("term");
+                return true;
+            }
             const newTermMode = blockData?.meta?.["term:mode"] == "vdom" ? null : "vdom";
             const vdomBlockId = globalStore.get(this.vdomBlockId);
             if (newTermMode == "vdom" && !vdomBlockId) {

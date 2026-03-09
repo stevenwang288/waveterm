@@ -140,6 +140,16 @@ type PveLoginFormHandles = {
     passwordInput: HTMLInputElement;
 };
 
+function isPveVmPage(): boolean {
+    const hashText = String(window.location?.hash ?? "").toLowerCase();
+    return hashText.includes("qemu%2f") || hashText.includes("lxc%2f");
+}
+
+function isPveConsolePage(): boolean {
+    const searchText = String(window.location?.search ?? "").toLowerCase();
+    return searchText.includes("console=");
+}
+
 function isVisibleInput(elem: HTMLInputElement): boolean {
     if (!elem || elem.disabled || elem.readOnly) {
         return false;
@@ -238,6 +248,40 @@ function maybePersistPveCredentials(host: string) {
     ipcRenderer.invoke("pve-store-credentials", { host, username, password }).catch(() => {});
 }
 
+function findPveConsoleTrigger(): HTMLElement | null {
+    const candidates = Array.from(document.querySelectorAll("button, a, div, span")) as HTMLElement[];
+    for (const elem of candidates) {
+        if (!isVisibleElement(elem)) {
+            continue;
+        }
+        const text = String(elem.textContent ?? "").replace(/\s+/g, "").toLowerCase();
+        if (!text) {
+            continue;
+        }
+        if (text.includes("控制台") || text.includes("console")) {
+            return elem;
+        }
+    }
+    return null;
+}
+
+function findPveNoVncMenuItem(): HTMLElement | null {
+    const candidates = Array.from(document.querySelectorAll("button, a, div, span")) as HTMLElement[];
+    for (const elem of candidates) {
+        if (!isVisibleElement(elem)) {
+            continue;
+        }
+        const text = String(elem.textContent ?? "").replace(/\s+/g, "").toLowerCase();
+        if (!text) {
+            continue;
+        }
+        if (text.includes("novnc") || text.includes("html5")) {
+            return elem;
+        }
+    }
+    return null;
+}
+
 function setupPveIntegration() {
     const host = getHostForPveIntegration();
     if (!isAllowedPveHost(host)) {
@@ -245,10 +289,35 @@ function setupPveIntegration() {
     }
 
     patchPveWindowOpen(host);
+    let autoConsoleTriggered = false;
+
+    const maybeAutoOpenConsole = () => {
+        if (autoConsoleTriggered || !isPveVmPage() || isPveConsolePage()) {
+            return;
+        }
+        if (findPveLoginFormHandles()) {
+            return;
+        }
+        const consoleTrigger = findPveConsoleTrigger();
+        if (!consoleTrigger) {
+            return;
+        }
+        autoConsoleTriggered = true;
+        consoleTrigger.click();
+        setTimeout(() => {
+            const menuItem = findPveNoVncMenuItem();
+            if (menuItem) {
+                menuItem.click();
+            } else {
+                autoConsoleTriggered = false;
+            }
+        }, 180);
+    };
 
     const onAttempt = () => {
         setTimeout(() => {
             maybePersistPveCredentials(host);
+            maybeAutoOpenConsole();
         }, 0);
     };
 
@@ -262,6 +331,14 @@ function setupPveIntegration() {
         },
         true
     );
+
+    const observer = new MutationObserver(() => {
+        maybeAutoOpenConsole();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    maybeAutoOpenConsole();
+    setTimeout(maybeAutoOpenConsole, 400);
+    setTimeout(maybeAutoOpenConsole, 1200);
 }
 
 if (document.readyState === "loading") {

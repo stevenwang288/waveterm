@@ -57,10 +57,19 @@
     .term-connectelem {
         flex-grow: 1;
         min-height: 0;
+        min-width: 0;
         overflow: hidden;
         line-height: 1;
         margin: 5px;
         margin-left: 4px;
+    }
+
+    .term-body {
+        display: flex;
+        flex-grow: 1;
+        min-height: 0;
+        min-width: 0;
+        overflow: hidden;
     }
 
     .term-htmlelem {
@@ -69,6 +78,7 @@
         width: 100%;
         flex-grow: 1;
         min-height: 0;
+        min-width: 0;
         overflow: hidden;
 
         .block-content {
@@ -77,26 +87,73 @@
     }
 
     &.term-mode-term {
+        .term-body {
+            flex-direction: column;
+        }
         .term-connectelem {
             display: flex;
         }
-        .term-htmlelem {
+        .term-vdom-elem,
+        .term-gui-elem {
             display: none;
         }
     }
 
     &.term-mode-vdom {
+        .term-body {
+            flex-direction: column;
+        }
         .term-connectelem {
             display: none;
         }
-        .term-htmlelem {
+        .term-vdom-elem {
             display: flex;
+        }
+        .term-gui-elem {
+            display: none;
         }
 
         .ijson iframe {
             width: 100%;
             height: 100%;
             border: none;
+        }
+    }
+
+    &.term-mode-web {
+        .term-body {
+            flex-direction: column;
+        }
+        .term-connectelem {
+            display: none;
+        }
+        .term-vdom-elem {
+            display: none;
+        }
+        .term-gui-elem {
+            display: flex;
+            margin: 5px 5px 5px 4px;
+        }
+    }
+
+    &.term-mode-websplit {
+        .term-body {
+            flex-direction: row;
+            gap: 0;
+        }
+        .term-connectelem {
+            display: flex;
+            flex: 1 1 50%;
+            margin: 5px 2px 5px 4px;
+        }
+        .term-vdom-elem {
+            display: none;
+        }
+        .term-gui-elem {
+            display: flex;
+            flex: 1 1 50%;
+            margin: 5px 4px 5px 2px;
+            border-left: 1px solid var(--border-color);
         }
     }
 

@@ -18,6 +18,12 @@
         "conn:ignoresshconfig": {
           "type": "boolean"
         },
+        "conn:guiurl": {
+          "type": "string"
+        },
+        "conn:guimode": {
+          "type": "string"
+        },
         "display:hidden": {
           "type": "boolean"
         },

@@ -136,7 +136,7 @@ const TermVDomNodeSingleId = ({ vdomBlockId, blockId, model }: TerminalViewProps
         };
     }, [vdomBlockId, model]);
     return (
-        <div key="htmlElem" className="term-htmlelem">
+        <div key="htmlElem" className="term-htmlelem term-vdom-elem">
             <SubBlock key="vdom" nodeModel={vdomNodeModel} />
         </div>
     );
@@ -148,6 +148,61 @@ const TermVDomNode = ({ blockId, model }: TerminalViewProps) => {
         return null;
     }
     return <TermVDomNodeSingleId key={vdomBlockId} vdomBlockId={vdomBlockId} blockId={blockId} model={model} />;
+};
+
+const TermGuiNodeSingleId = ({ guiBlockId, blockId, model }: TerminalViewProps & { guiBlockId: string }) => {
+    React.useEffect(() => {
+        const unsub = waveEventSubscribeSingle({
+            eventType: "blockclose",
+            scope: WOS.makeORef("block", guiBlockId),
+            handler: () => {
+                const currentMode = globalStore.get(model.termMode);
+                RpcApi.SetMetaCommand(TabRpcClient, {
+                    oref: WOS.makeORef("block", blockId),
+                    meta: {
+                        "term:mode": currentMode === "web" || currentMode === "websplit" ? null : currentMode,
+                        "term:guiblockid": null,
+                    },
+                });
+            },
+        });
+        return () => {
+            unsub();
+        };
+    }, [blockId, guiBlockId, model.termMode]);
+    const guiNodeModel: BlockNodeModel = React.useMemo(() => {
+        const isFocusedAtom = jotai.atom((get) => {
+            const termMode = get(model.termMode);
+            return get(model.nodeModel.isFocused) && (termMode === "web" || termMode === "websplit");
+        });
+        return {
+            blockId: guiBlockId,
+            isFocused: isFocusedAtom,
+            isMagnified: jotai.atom(false),
+            focusNode: () => {
+                model.nodeModel.focusNode();
+            },
+            toggleMagnify: () => {},
+            onClose: () => {
+                if (guiBlockId != null) {
+                    RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: guiBlockId });
+                }
+            },
+        };
+    }, [guiBlockId, model]);
+    return (
+        <div key="webElem" className="term-htmlelem term-gui-elem">
+            <SubBlock key="remote-gui" nodeModel={guiNodeModel} />
+        </div>
+    );
+};
+
+const TermGuiNode = ({ blockId, model }: TerminalViewProps) => {
+    const guiBlockId = jotai.useAtomValue(model.guiBlockId);
+    if (guiBlockId == null) {
+        return null;
+    }
+    return <TermGuiNodeSingleId key={guiBlockId} guiBlockId={guiBlockId} blockId={blockId} model={model} />;
 };
 
 const TermToolbarVDomNode = ({ blockId, model }: TerminalViewProps) => {
@@ -172,7 +227,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     const termSettingsAtom = getSettingsPrefixAtom("term");
     const termSettings = jotai.useAtomValue(termSettingsAtom);
     let termMode = blockData?.meta?.["term:mode"] ?? "term";
-    if (termMode != "term" && termMode != "vdom") {
+    if (termMode != "term" && termMode != "vdom" && termMode != "web" && termMode != "websplit") {
         termMode = "term";
     }
     const termModeRef = React.useRef(termMode);
@@ -357,7 +412,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     }, [isMagnified]);
 
     React.useEffect(() => {
-        if (termModeRef.current == "vdom" && termMode == "term") {
+        if (termModeRef.current != "term" && termMode == "term") {
             // focus the terminal
             model.giveFocus();
         }
@@ -415,14 +470,17 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
             <TermThemeUpdater blockId={blockId} model={model} termRef={model.termRef} />
             <TermStickers config={stickerConfig} />
             <TermToolbarVDomNode key="vdom-toolbar" blockId={blockId} model={model} />
-            <TermVDomNode key="vdom" blockId={blockId} model={model} />
-            <div key="conntectElem" className="term-connectelem" ref={connectElemRef}>
-                <div className="term-scrollbar-show-observer" onPointerOver={onScrollbarShowObserver} />
-                <div
-                    ref={scrollbarHideObserverRef}
-                    className="term-scrollbar-hide-observer"
-                    onPointerOver={onScrollbarHideObserver}
-                />
+            <div className="term-body">
+                <TermVDomNode key="vdom" blockId={blockId} model={model} />
+                <TermGuiNode key="remote-gui" blockId={blockId} model={model} />
+                <div key="conntectElem" className="term-connectelem" ref={connectElemRef}>
+                    <div className="term-scrollbar-show-observer" onPointerOver={onScrollbarShowObserver} />
+                    <div
+                        ref={scrollbarHideObserverRef}
+                        className="term-scrollbar-hide-observer"
+                        onPointerOver={onScrollbarHideObserver}
+                    />
+                </div>
             </div>
             <Search {...searchProps} />
         </div>
