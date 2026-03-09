@@ -18,6 +18,18 @@ type ServerEntry = {
     label: string;
     sublabel?: string;
     source: "local" | RemoteSource;
+    pveVmid?: number;
+};
+
+type PveMachineInfoLocal = {
+    vmid: number;
+    node: string;
+    type: "qemu" | "lxc";
+    name: string;
+    status?: string;
+    sshHost?: string;
+    ipHints?: string[];
+    guiUrl: string;
 };
 
 type ConnectionFormMode = "add" | "edit" | "adopt";
@@ -95,6 +107,41 @@ function getManagedConnectionHost(connection: string, connConfig?: ConnKeywords)
     return normalizeHostForMatch(parseConnectionName(connection).host);
 }
 
+function getConnectionVmid(connConfig?: ConnKeywords): number {
+    const vmid = Number((connConfig as any)?.["pve:vmid"] ?? 0);
+    return Number.isFinite(vmid) && vmid > 0 ? vmid : 0;
+}
+
+function scorePveEntry(entry: ServerEntry, connConfig: ConnKeywords | undefined, machine: PveMachineInfoLocal): number {
+    let score = 0;
+    const displayName = String((connConfig as any)?.["display:name"] ?? "").trim();
+    const host = getManagedConnectionHost(entry.connection ?? "", connConfig);
+    const sshHost = normalizeHostForMatch(machine.sshHost ?? "");
+    const ipHints = new Set((Array.isArray(machine.ipHints) ? machine.ipHints : []).map((ip) => normalizeHostForMatch(ip)));
+    const connectionName = String(entry.connection ?? "");
+
+    if (displayName === machine.name) {
+        score += 100;
+    }
+    if (host !== "" && (host === sshHost || ipHints.has(host))) {
+        score += 40;
+    }
+    if (!/\s/.test(connectionName)) {
+        score += 15;
+    }
+    if (connectionName.includes(" codex")) {
+        score -= 30;
+    }
+    if (String((connConfig as any)?.["cmd:initscript.sh"] ?? "").trim() !== "") {
+        score -= 10;
+    }
+    if (String((connConfig as any)?.["cmd:initscript.pwsh"] ?? "").trim() !== "") {
+        score -= 10;
+    }
+    score -= connectionName.length / 1000;
+    return score;
+}
+
 const ServersPanel = memo(() => {
     const { t } = useTranslation();
     const localHostLabel = useAtomValue(getLocalHostDisplayNameAtom());
@@ -111,6 +158,7 @@ const ServersPanel = memo(() => {
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
     const [pveRefreshing, setPveRefreshing] = useState(false);
+    const [pveMachines, setPveMachines] = useState<PveMachineInfoLocal[] | null>(null);
 
     const loadConnections = useCallback(async () => {
         setLoading(true);
@@ -155,12 +203,29 @@ const ServersPanel = memo(() => {
         refreshConnections();
     }, [refreshConnections]);
 
+    useEffect(() => {
+        fireAndForget(async () => {
+            try {
+                const result = await getApi().pveListMachines({ origin: DEFAULT_PVE_ORIGIN, timeoutMs: 12000 });
+                if (result?.ok && Array.isArray(result.machines)) {
+                    setPveMachines(result.machines as PveMachineInfoLocal[]);
+                }
+            } catch {
+                // ignore silent bootstrap failures
+            }
+        });
+    }, []);
+
     const localEntries = useMemo<ServerEntry[]>(() => [{ label: localHostLabel, source: "local" }], [localHostLabel]);
 
     const remoteEntries = useMemo<ServerEntry[]>(() => {
         return connections
             .filter((item) => !isBlank(item) && item !== "local")
             .sort((a, b) => a.localeCompare(b))
+            .filter((connection) => {
+                const connConfig = fullConfig?.connections?.[connection] as ConnKeywords | undefined;
+                return !Boolean((connConfig as any)?.["display:hidden"]);
+            })
             .map((connection) => {
                 const connConfig = fullConfig?.connections?.[connection] as ConnKeywords | undefined;
                 const displayName = String((connConfig as any)?.["display:name"] ?? "").trim();
@@ -169,11 +234,46 @@ const ServersPanel = memo(() => {
                     label: displayName || connection,
                     sublabel: displayName && displayName !== connection ? connection : undefined,
                     source: managedConnectionSet.has(connection) ? "managed" : "discovered",
+                    pveVmid: getConnectionVmid(connConfig) || undefined,
                 };
             });
     }, [connections, fullConfig, managedConnectionSet]);
 
-    const managedEntries = useMemo(() => remoteEntries.filter((entry) => entry.source === "managed"), [remoteEntries]);
+    const managedEntries = useMemo(() => {
+        const baseEntries = remoteEntries.filter((entry) => entry.source === "managed");
+        const nonPveEntries = baseEntries.filter((entry) => !entry.pveVmid);
+        if (pveMachines == null) {
+            return [...nonPveEntries, ...baseEntries.filter((entry) => entry.pveVmid)];
+        }
+
+        const machineByVmid = new Map<number, PveMachineInfoLocal>();
+        for (const machine of pveMachines) {
+            machineByVmid.set(machine.vmid, machine);
+        }
+
+        const bestByVmid = new Map<number, { entry: ServerEntry; score: number }>();
+        for (const entry of baseEntries) {
+            if (!entry.pveVmid) {
+                continue;
+            }
+            const machine = machineByVmid.get(entry.pveVmid);
+            if (!machine) {
+                continue;
+            }
+            const connConfig = fullConfig?.connections?.[entry.connection ?? ""] as ConnKeywords | undefined;
+            const score = scorePveEntry(entry, connConfig, machine);
+            const prev = bestByVmid.get(entry.pveVmid);
+            if (prev == null || score > prev.score) {
+                bestByVmid.set(entry.pveVmid, { entry, score });
+            }
+        }
+
+        const pveEntries = pveMachines
+            .map((machine) => bestByVmid.get(machine.vmid)?.entry)
+            .filter((entry): entry is ServerEntry => entry != null);
+
+        return [...nonPveEntries, ...pveEntries];
+    }, [fullConfig, pveMachines, remoteEntries]);
     const discoveredEntries = useMemo(
         () => remoteEntries.filter((entry) => entry.source === "discovered"),
         [remoteEntries]
@@ -228,6 +328,7 @@ const ServersPanel = memo(() => {
                     throw new Error(result?.error || t("common.error"));
                 }
                 const machines = Array.isArray(result.machines) ? result.machines : [];
+                setPveMachines(machines as PveMachineInfoLocal[]);
                 const existingConfigs = fullConfig?.connections ?? {};
                 const existingByHost = new Map<string, string>();
                 for (const [connName, connConfig] of Object.entries(existingConfigs)) {
@@ -258,6 +359,9 @@ const ServersPanel = memo(() => {
                     const existingConnConfig = existingConfigs[connectionName] as ConnKeywords | undefined;
                     const nextMeta: Record<string, any> = {
                         "display:name": machine.name,
+                        "pve:vmid": machine.vmid,
+                        "pve:node": machine.node,
+                        "pve:type": machine.type,
                         "conn:guiurl": machine.guiUrl,
                     };
                     if (!isBlank(sshHost)) {

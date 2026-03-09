@@ -118,6 +118,11 @@ function getResolvedRemoteGuiUrl(fullConfig: FullConfigType | null, connName: st
     if (!isBlank(configuredUrl)) {
         return configuredUrl;
     }
+    const pveVmid = Number((connConfig as any)?.["pve:vmid"] ?? 0);
+    if (Number.isFinite(pveVmid) && pveVmid > 0) {
+        const pveType = String((connConfig as any)?.["pve:type"] ?? "qemu").trim() || "qemu";
+        return `${DEFAULT_PVE_ORIGIN}/#v1:0:=${encodeURIComponent(`${pveType}/${pveVmid}`)}:4:::::8::`;
+    }
     const hostGuess = getConnectionHostGuess(connName, connConfig);
     if (looksLikePrivateHost(hostGuess)) {
         return DEFAULT_PVE_URL;
