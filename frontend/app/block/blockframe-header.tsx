@@ -998,14 +998,6 @@ const BlockFrame_Header = ({
                     onTerminalLabelDoubleClick={isTerminalBlock ? handleTerminalLabelDoubleClick : undefined}
                     showRemoteGuiButton={isTerminalBlock && canOpenRemoteGui}
                     remoteGuiActive={remoteGuiActive}
-                    onRemoteGuiClick={
-                        isTerminalBlock && canOpenRemoteGui ? () => util.fireAndForget(termVm.toggleRemoteGui()) : undefined
-                    }
-                    onRemoteGuiLongClick={
-                        isTerminalBlock && canOpenRemoteGui
-                            ? () => util.fireAndForget(termVm.cycleRemoteGuiMode())
-                            : undefined
-                    }
                 />
             )}
             {useTermHeader && termDurableStatus != null && (

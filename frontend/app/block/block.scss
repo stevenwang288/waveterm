@@ -478,7 +478,10 @@
 
         &.block-focused {
             .block-mask {
-                border: 2px solid var(--accent-color);
+                border: 2px solid rgb(from var(--accent-color) r g b / 96%);
+                box-shadow:
+                    0 0 0 1px rgb(from var(--accent-color) r g b / 45%),
+                    0 0 14px rgb(from var(--accent-color) r g b / 28%);
             }
 
             &.block-no-highlight,
