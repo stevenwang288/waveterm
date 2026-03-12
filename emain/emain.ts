@@ -483,38 +483,43 @@ async function appMain() {
         electronApp.disableHardwareAcceleration();
     }
     const startTs = Date.now();
-    const instanceLock = electronApp.requestSingleInstanceLock();
-    if (!instanceLock) {
-        console.log("waveterm-app could not get single-instance-lock, shutting down");
-        setUserConfirmedQuit(true);
-        electronApp.quit();
-        return;
-    }
-    // When a user tries to launch WAVE again, bring the existing window to the foreground
-    // instead of silently doing nothing (which looks like a crash).
-    electronApp.on("second-instance", () => {
-        const bringToFront = (win: WaveBrowserWindow) => {
-            try {
-                win.show();
-            } catch (e) {
-                console.log("second-instance: failed to show window", e);
-            }
-            try {
-                win.focus();
-            } catch (e) {
-                console.log("second-instance: failed to focus window", e);
-            }
-        };
-        const selectedWindow = focusedWaveWindow;
-        const firstWaveWindow = getAllWaveWindows()[0];
-        if (selectedWindow) {
-            bringToFront(selectedWindow);
-        } else if (firstWaveWindow) {
-            bringToFront(firstWaveWindow);
-        } else {
-            fireAndForget(createNewWaveWindow);
+    const enforceSingleInstanceLock = !isDev;
+    if (enforceSingleInstanceLock) {
+        const instanceLock = electronApp.requestSingleInstanceLock();
+        if (!instanceLock) {
+            console.log("waveterm-app could not get single-instance-lock, shutting down");
+            setUserConfirmedQuit(true);
+            electronApp.quit();
+            return;
         }
-    });
+        // When a user tries to launch WAVE again, bring the existing window to the foreground
+        // instead of silently doing nothing (which looks like a crash).
+        electronApp.on("second-instance", () => {
+            const bringToFront = (win: WaveBrowserWindow) => {
+                try {
+                    win.show();
+                } catch (e) {
+                    console.log("second-instance: failed to show window", e);
+                }
+                try {
+                    win.focus();
+                } catch (e) {
+                    console.log("second-instance: failed to focus window", e);
+                }
+            };
+            const selectedWindow = focusedWaveWindow;
+            const firstWaveWindow = getAllWaveWindows()[0];
+            if (selectedWindow) {
+                bringToFront(selectedWindow);
+            } else if (firstWaveWindow) {
+                bringToFront(firstWaveWindow);
+            } else {
+                fireAndForget(createNewWaveWindow);
+            }
+        });
+    } else {
+        console.log("waveterm-app skipping single-instance-lock in dev mode");
+    }
     try {
         await runWaveSrv(handleWSEvent);
     } catch (e) {

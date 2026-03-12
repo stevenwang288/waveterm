@@ -16,6 +16,7 @@ bin/
 out/
 make/
 artifacts/
+artifacts-*.png
 mikework/
 manifests/
 third_party/

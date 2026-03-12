@@ -24,6 +24,18 @@
         "conn:guimode": {
           "type": "string"
         },
+        "pve:vmid": {
+          "type": "integer"
+        },
+        "pve:node": {
+          "type": "string"
+        },
+        "pve:type": {
+          "type": "string"
+        },
+        "pve:name": {
+          "type": "string"
+        },
         "display:name": {
           "type": "string"
         },

@@ -344,6 +344,10 @@ type ConnKeywords struct {
 	ConnIgnoreSshConfig     *bool  `json:"conn:ignoresshconfig,omitempty"`
 	ConnGuiURL              string `json:"conn:guiurl,omitempty"`
 	ConnGuiMode             string `json:"conn:guimode,omitempty"`
+	PveVmid                 int    `json:"pve:vmid,omitempty"`
+	PveNode                 string `json:"pve:node,omitempty"`
+	PveType                 string `json:"pve:type,omitempty"`
+	PveName                 string `json:"pve:name,omitempty"`
 
 	DisplayName   string  `json:"display:name,omitempty"`
 	DisplayHidden *bool   `json:"display:hidden,omitempty"`

@@ -10,6 +10,7 @@ import { TabContent } from "@/app/tab/tabcontent";
 import { FavoritesPanel } from "@/app/workspace/favorites";
 import { GitPanel } from "@/app/workspace/git-panel";
 import { LayoutsPanel } from "@/app/workspace/layouts-panel";
+import { PathHistoryPanel } from "@/app/workspace/path-history-panel";
 import { ServersPanel } from "@/app/workspace/servers-panel";
 import { Widgets } from "@/app/workspace/widgets";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
@@ -79,6 +80,8 @@ const WorkspaceElem = memo(() => {
                                 {tabId !== "" &&
                                     (sidePanelView === "ai" ? (
                                         <AIPanel />
+                                    ) : sidePanelView === "history" ? (
+                                        <PathHistoryPanel />
                                     ) : sidePanelView === "favorites" ? (
                                         <FavoritesPanel />
                                     ) : sidePanelView === "servers" ? (

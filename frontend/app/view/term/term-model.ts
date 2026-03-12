@@ -18,6 +18,7 @@ import { TermWshClient } from "@/app/view/term/term-wsh";
 import { VDomModel } from "@/app/view/vdom/vdom-model";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { openCliLayoutInNewTab } from "@/util/clilayout";
+import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import {
     atoms,
     createBlock,
@@ -47,6 +48,17 @@ import * as React from "react";
 import { getBlockingCommand } from "./shellblocking";
 import { computeTheme, DefaultTermTheme } from "./termutil";
 import { TermWrap } from "./termwrap";
+import {
+    DEFAULT_PVE_ORIGIN,
+    RemoteGuiSplitPane,
+    TermModeType,
+    getConnectionHostGuess,
+    getNextRemoteGuiMode,
+    getRemoteGuiModeTransitionStrategy,
+    hasConfiguredRemoteGuiTarget,
+    shouldAttemptPveDiscovery,
+    shouldShowRemoteGuiButton,
+} from "./remote-gui";
 
 const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Codex", command: "codex" },
@@ -58,55 +70,20 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "ClawX", command: "clawx" },
 ];
 
-const DEFAULT_PVE_ORIGIN = "https://192.168.1.250:8006";
-const DEFAULT_PVE_URL = "https://192.168.1.250:8006/#v1:0:=node%2FVUModule:4:::::8::";
-const DEFAULT_PVE_WEB_PARTITION = "persist:pve-wall";
+const DEFAULT_PVE_NODE = "VUModule";
 
-type TermModeType = "term" | "vdom" | "web" | "websplit";
-type RemoteGuiModeType = "web" | "websplit";
+type PveMachineInfo = {
+    vmid: number;
+    node: string;
+    type: "qemu" | "lxc";
+    name: string;
+    status?: string;
+    sshHost?: string;
+    ipHints?: string[];
+};
 
 function normalizeHostCandidate(value: string): string {
     return String(value ?? "").trim().toLowerCase();
-}
-
-function looksLikePrivateHost(host: string): boolean {
-    const normalized = normalizeHostCandidate(host);
-    if (!normalized) {
-        return false;
-    }
-    if (normalized === "localhost" || normalized.endsWith(".local")) {
-        return false;
-    }
-    if (/^10\.\d+\.\d+\.\d+$/.test(normalized)) {
-        return true;
-    }
-    if (/^192\.168\.\d+\.\d+$/.test(normalized)) {
-        return true;
-    }
-    if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(normalized)) {
-        return true;
-    }
-    return false;
-}
-
-function getConnectionHostGuess(connName: string, connConfig?: ConnKeywords | null): string {
-    const explicitHost = normalizeHostCandidate((connConfig as any)?.["ssh:hostname"]);
-    if (explicitHost) {
-        return explicitHost;
-    }
-    const normalizedConn = String(connName ?? "").trim();
-    if (!normalizedConn) {
-        return "";
-    }
-    const sshUriMatch = normalizedConn.match(/^ssh:\/\/([^@/]+@)?([^:/?#]+)(?::\d+)?/i);
-    if (sshUriMatch?.[2]) {
-        return normalizeHostCandidate(sshUriMatch[2]);
-    }
-    const atIdx = normalizedConn.lastIndexOf("@");
-    if (atIdx >= 0 && atIdx < normalizedConn.length - 1) {
-        return normalizeHostCandidate(normalizedConn.slice(atIdx + 1));
-    }
-    return normalizeHostCandidate(normalizedConn);
 }
 
 function getResolvedRemoteGuiUrl(fullConfig: FullConfigType | null, connName: string): string {
@@ -116,24 +93,92 @@ function getResolvedRemoteGuiUrl(fullConfig: FullConfigType | null, connName: st
     const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
     const configuredUrl = String((connConfig as any)?.["conn:guiurl"] ?? "").trim();
     if (!isBlank(configuredUrl)) {
-        return configuredUrl;
-    }
-    const pveVmid = Number((connConfig as any)?.["pve:vmid"] ?? 0);
-    if (Number.isFinite(pveVmid) && pveVmid > 0) {
-        const pveType = String((connConfig as any)?.["pve:type"] ?? "qemu").trim() || "qemu";
-        return `${DEFAULT_PVE_ORIGIN}/#v1:0:=${encodeURIComponent(`${pveType}/${pveVmid}`)}:4:::::8::`;
-    }
-    const hostGuess = getConnectionHostGuess(connName, connConfig);
-    if (looksLikePrivateHost(hostGuess)) {
-        return DEFAULT_PVE_URL;
+        return configuredUrl.startsWith(DEFAULT_PVE_ORIGIN) ? "" : configuredUrl;
     }
     return "";
 }
 
-function getPreferredRemoteGuiMode(fullConfig: FullConfigType | null, connName: string): RemoteGuiModeType {
-    const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
-    return (connConfig as any)?.["conn:guimode"] === "web" ? "web" : "websplit";
+function uniqNonBlank(values: Array<string | undefined | null>): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+        const normalized = String(value ?? "").trim();
+        if (!normalized || seen.has(normalized)) {
+            continue;
+        }
+        seen.add(normalized);
+        result.push(normalized);
+    }
+    return result;
 }
+
+function extractIpv4Hints(value: string): string[] {
+    return uniqNonBlank((String(value ?? "").match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? []).map(normalizeHostCandidate));
+}
+
+function getConnectionHostCandidates(connName: string, connConfig?: ConnKeywords | null): string[] {
+    return uniqNonBlank([
+        normalizeHostCandidate(String((connConfig as any)?.["ssh:hostname"] ?? "")),
+        getConnectionHostGuess(connName, connConfig),
+        ...extractIpv4Hints(connName),
+        ...extractIpv4Hints(String((connConfig as any)?.["ssh:hostname"] ?? "")),
+    ]);
+}
+
+function getMachineHostCandidates(machine: PveMachineInfo): string[] {
+    return uniqNonBlank([
+        normalizeHostCandidate(machine.sshHost ?? ""),
+        ...(Array.isArray(machine.ipHints) ? machine.ipHints : []).map(normalizeHostCandidate),
+    ]);
+}
+
+function findMatchingPveMachine(
+    connName: string,
+    connConfig: ConnKeywords | undefined,
+    machines: PveMachineInfo[]
+): PveMachineInfo | null {
+    const configuredVmid = Number((connConfig as any)?.["pve:vmid"] ?? 0);
+    if (Number.isFinite(configuredVmid) && configuredVmid > 0) {
+        const matchedByVmid = machines.find((machine) => machine.vmid === configuredVmid);
+        if (matchedByVmid) {
+            return matchedByVmid;
+        }
+    }
+
+    const connectionHosts = new Set(getConnectionHostCandidates(connName, connConfig));
+    if (connectionHosts.size === 0) {
+        return null;
+    }
+    return (
+        machines.find((machine) => {
+            const machineHosts = getMachineHostCandidates(machine);
+            return machineHosts.some((host) => connectionHosts.has(host));
+        }) ?? null
+    );
+}
+
+function getConfiguredPveMachine(connName: string, connConfig?: ConnKeywords | null): PveMachineInfo | null {
+    const vmid = Number((connConfig as any)?.["pve:vmid"] ?? 0);
+    if (!Number.isFinite(vmid) || vmid <= 0) {
+        return null;
+    }
+    const type = String((connConfig as any)?.["pve:type"] ?? "qemu").trim().toLowerCase() === "lxc" ? "lxc" : "qemu";
+    const node = String((connConfig as any)?.["pve:node"] ?? "").trim() || DEFAULT_PVE_NODE;
+    const name =
+        String((connConfig as any)?.["pve:name"] ?? (connConfig as any)?.["display:name"] ?? connName).trim() || connName;
+    return {
+        vmid,
+        node,
+        type,
+        name,
+    };
+}
+
+function canAttemptRemoteGui(connName: string, connConfig?: ConnKeywords | null): boolean {
+    return shouldShowRemoteGuiButton(connName) && hasConfiguredRemoteGuiTarget(connConfig as Record<string, unknown>);
+}
+
+const remoteGuiDiscoveryPromises = new Map<string, Promise<void>>();
 
 const BUILTIN_TERM_THEME_DISPLAY_NAME_TO_I18N_KEY: Record<string, string> = {
     "Default Dark": "term.themeNames.defaultDark",
@@ -233,6 +278,7 @@ export class TermViewModel implements ViewModel {
     termRef: React.RefObject<TermWrap> = { current: null };
     blockAtom: jotai.Atom<Block>;
     termMode: jotai.Atom<string>;
+    activeSplitPane: jotai.PrimitiveAtom<RemoteGuiSplitPane>;
     blockId: string;
     viewIcon: jotai.Atom<IconButtonDecl>;
     viewName: jotai.Atom<string>;
@@ -248,7 +294,7 @@ export class TermViewModel implements ViewModel {
     vdomToolbarBlockId: jotai.Atom<string>;
     vdomToolbarTarget: jotai.PrimitiveAtom<VDomTargetToolbar>;
     remoteGuiUrl: jotai.Atom<string>;
-    preferredRemoteGuiMode: jotai.Atom<RemoteGuiModeType>;
+    showRemoteGuiButton: jotai.Atom<boolean>;
     canOpenRemoteGui: jotai.Atom<boolean>;
     fontSizeAtom: jotai.Atom<number>;
     termThemeNameAtom: jotai.Atom<string>;
@@ -299,21 +345,24 @@ export class TermViewModel implements ViewModel {
             const fullConfig = get(atoms.fullConfigAtom);
             return getResolvedRemoteGuiUrl(fullConfig, connName);
         });
-        this.preferredRemoteGuiMode = jotai.atom((get) => {
+        this.showRemoteGuiButton = jotai.atom((get) => {
             const blockData = get(this.blockAtom);
             const connName = String(blockData?.meta?.connection ?? "").trim();
-            const fullConfig = get(atoms.fullConfigAtom);
-            return getPreferredRemoteGuiMode(fullConfig, connName);
+            return shouldShowRemoteGuiButton(connName);
         });
         this.canOpenRemoteGui = jotai.atom((get) => {
             const blockData = get(this.blockAtom);
             const connName = String(blockData?.meta?.connection ?? "").trim();
-            return !isBlank(connName) && !isBlank(get(this.remoteGuiUrl));
+            const fullConfig = get(atoms.fullConfigAtom);
+            const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
+            return canAttemptRemoteGui(connName, connConfig);
         });
+        fireAndForget(() => this.maybeDiscoverRemoteGuiTarget());
         this.termMode = jotai.atom((get) => {
             const blockData = get(this.blockAtom);
             return blockData?.meta?.["term:mode"] ?? "term";
         });
+        this.activeSplitPane = jotai.atom<RemoteGuiSplitPane>("term");
         this.isRestarting = jotai.atom(false);
         this.viewIcon = jotai.atom((get) => {
             const termMode = get(this.termMode);
@@ -497,23 +546,46 @@ export class TermViewModel implements ViewModel {
             const termMode = get(this.termMode) as TermModeType;
             const rtn: IconButtonDecl[] = [];
 
-            if (get(this.canOpenRemoteGui) && connStatus?.status === "connected") {
-                const preferredGuiMode = get(this.preferredRemoteGuiMode);
+            const remoteGuiButtonVisible = get(this.showRemoteGuiButton);
+            const remoteGuiAvailable = get(this.canOpenRemoteGui);
+            const remoteGuiActive = termMode === "web" || termMode === "websplit";
+            if (remoteGuiButtonVisible || remoteGuiActive) {
+                const canTryRemoteGui = remoteGuiButtonVisible || remoteGuiActive;
+                const terminalActive = termMode !== "web" && termMode !== "websplit";
+                const vncActive = termMode === "web";
+                const splitActive = termMode === "websplit";
+                const remoteModeClassName = (active: boolean) => (active ? "toggle active" : "toggle");
+                const remoteModeColor = (active: boolean) =>
+                    active
+                        ? "var(--accent-color)"
+                        : remoteGuiAvailable
+                          ? "var(--success-color)"
+                          : "var(--grey-text-color)";
+                rtn.push({
+                    elemtype: "iconbutton",
+                    icon: "terminal",
+                    iconColor: terminalActive ? "var(--accent-color)" : "var(--secondary-text-color)",
+                    className: remoteModeClassName(terminalActive),
+                    title: i18next.t("term.remoteGuiShowTerminalTitle"),
+                    click: () => this.setTermMode("term"),
+                });
                 rtn.push({
                     elemtype: "iconbutton",
                     icon: "display",
-                    iconColor:
-                        termMode === "web" || termMode === "websplit"
-                            ? "var(--success-color)"
-                            : "var(--accent-color)",
-                    title:
-                        termMode === "web" || termMode === "websplit"
-                            ? i18next.t("term.remoteGuiHideTitle")
-                            : preferredGuiMode === "web"
-                              ? i18next.t("term.remoteGuiOpenOnlyTitle")
-                              : i18next.t("term.remoteGuiOpenSplitTitle"),
-                    click: () => fireAndForget(() => this.toggleRemoteGui()),
-                    longClick: () => fireAndForget(() => this.cycleRemoteGuiMode()),
+                    iconColor: remoteModeColor(vncActive),
+                    className: remoteModeClassName(vncActive),
+                    title: remoteGuiAvailable ? i18next.t("term.remoteGuiShowOnlyTitle") : i18next.t("term.remoteGuiDisabledTitle"),
+                    disabled: !canTryRemoteGui,
+                    click: () => fireAndForget(() => this.showRemoteGuiMode("web")),
+                });
+                rtn.push({
+                    elemtype: "iconbutton",
+                    icon: "table-columns",
+                    iconColor: remoteModeColor(splitActive),
+                    className: remoteModeClassName(splitActive),
+                    title: remoteGuiAvailable ? i18next.t("term.remoteGuiShowSplitTitle") : i18next.t("term.remoteGuiDisabledTitle"),
+                    disabled: !canTryRemoteGui,
+                    click: () => fireAndForget(() => this.showRemoteGuiMode("websplit")),
                 });
             }
 
@@ -806,62 +878,121 @@ export class TermViewModel implements ViewModel {
         return bcm.viewModel as VDomModel;
     }
 
-    private pushRemoteGuiModeNotification(mode: RemoteGuiModeType) {
-        const now = Date.now();
-        pushNotification({
-            icon: "display",
-            title:
-                mode === "web"
-                    ? i18next.t("term.remoteGuiModeOnlyTitle")
-                    : i18next.t("term.remoteGuiModeSplitTitle"),
-            message: i18next.t("term.remoteGuiModeHint"),
-            timestamp: new Date(now).toISOString(),
-            expiration: now + 2200,
-            type: "info",
-        });
-    }
-
-    private async persistRemoteGuiMode(mode: RemoteGuiModeType): Promise<void> {
+    private maybeDiscoverRemoteGuiTarget = async (): Promise<void> => {
         const blockData = globalStore.get(this.blockAtom);
         const connName = String(blockData?.meta?.connection ?? "").trim();
-        if (isBlank(connName)) {
+        const fullConfig = globalStore.get(atoms.fullConfigAtom);
+        const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
+        if (!shouldAttemptPveDiscovery(connName, connConfig as Record<string, unknown>)) {
             return;
         }
-        await RpcApi.SetConnectionsConfigCommand(TabRpcClient, {
-            host: connName,
-            metamaptype: { "conn:guimode": mode } as any,
-        });
-    }
-
-    private async ensureRemoteGuiBlock(): Promise<string | null> {
-        const url = String(globalStore.get(this.remoteGuiUrl) ?? "").trim();
-        if (isBlank(url)) {
-            return null;
+        if (remoteGuiDiscoveryPromises.has(connName)) {
+            await remoteGuiDiscoveryPromises.get(connName);
+            return;
         }
-
-        if (url.startsWith(DEFAULT_PVE_ORIGIN)) {
+        const promise = (async () => {
             try {
-                await getApi().pveEnsureAuth({
-                    partition: DEFAULT_PVE_WEB_PARTITION,
-                    origin: DEFAULT_PVE_ORIGIN,
-                    lang: "zh_CN",
+                const machineResult = await getApi().pveListMachines({ origin: DEFAULT_PVE_ORIGIN, timeoutMs: 12000 });
+                if (!machineResult?.ok || !Array.isArray(machineResult.machines)) {
+                    return;
+                }
+                const discoveredMachine = findMatchingPveMachine(connName, connConfig, machineResult.machines);
+                if (!discoveredMachine) {
+                    return;
+                }
+                await RpcApi.SetConnectionsConfigCommand(TabRpcClient, {
+                    host: connName,
+                    metamaptype: {
+                        "pve:vmid": discoveredMachine.vmid,
+                        "pve:node": discoveredMachine.node,
+                        "pve:type": discoveredMachine.type,
+                        "pve:name": discoveredMachine.name,
+                    } as any,
                 });
             } catch {
-                // fall back to the normal login page
+                // ignore auto-discovery failures and keep the button disabled
+            }
+        })().finally(() => {
+            remoteGuiDiscoveryPromises.delete(connName);
+        });
+        remoteGuiDiscoveryPromises.set(connName, promise);
+        await promise;
+    };
+
+    private ensureRemoteGuiBlock = async (): Promise<string | null> => {
+        const resolvedUrl = String(globalStore.get(this.remoteGuiUrl) ?? "").trim();
+        const blockData = globalStore.get(this.blockAtom);
+        const connName = String(blockData?.meta?.connection ?? "").trim();
+        const fullConfig = globalStore.get(atoms.fullConfigAtom);
+        const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
+        let matchedPveMachine: PveMachineInfo | null = getConfiguredPveMachine(connName, connConfig);
+        if (matchedPveMachine == null) {
+            await this.maybeDiscoverRemoteGuiTarget();
+        }
+        const refreshedFullConfig = globalStore.get(atoms.fullConfigAtom);
+        const refreshedConnConfig = refreshedFullConfig?.connections?.[connName] as ConnKeywords | undefined;
+        matchedPveMachine = getConfiguredPveMachine(connName, refreshedConnConfig) ?? matchedPveMachine;
+        if (matchedPveMachine != null || shouldAttemptPveDiscovery(connName, refreshedConnConfig as Record<string, unknown>)) {
+            try {
+                const machineResult = await getApi().pveListMachines({ origin: DEFAULT_PVE_ORIGIN, timeoutMs: 12000 });
+                if (machineResult?.ok && Array.isArray(machineResult.machines)) {
+                    const discoveredMachine = findMatchingPveMachine(connName, refreshedConnConfig, machineResult.machines);
+                    if (discoveredMachine) {
+                        matchedPveMachine = discoveredMachine;
+                    }
+                }
+            } catch {
+                // fall back to statically configured PVE metadata only
             }
         }
 
-        const blockData = globalStore.get(this.blockAtom);
-        const connName = String(blockData?.meta?.connection ?? "").trim();
         const existingGuiBlockId = String(globalStore.get(this.guiBlockId) ?? "").trim();
-        const guiBlockMeta: Record<string, any> = {
-            view: "web",
-            url,
-            "web:hidenav": true,
-            "web:zoom": 0.9,
-            "web:partition": DEFAULT_PVE_WEB_PARTITION,
-            "display:name": isBlank(connName) ? i18next.t("term.remoteGuiTitle") : `${connName} GUI`,
-        };
+        const displayName =
+            matchedPveMachine?.name != null && !isBlank(matchedPveMachine.name)
+                ? `${matchedPveMachine.name} GUI`
+                : isBlank(connName)
+                  ? i18next.t("term.remoteGuiTitle")
+                  : `${connName} GUI`;
+        let guiBlockMeta: Record<string, any>;
+
+        if (matchedPveMachine) {
+            guiBlockMeta = {
+                view: "pvevnc",
+                "display:name": displayName,
+                url: null,
+                "web:hidenav": null,
+                "web:zoom": null,
+                "web:partition": null,
+                "web:lockurl": null,
+                "pvevnc:origin": DEFAULT_PVE_ORIGIN,
+                "pvevnc:node": matchedPveMachine.node,
+                "pvevnc:vmid": matchedPveMachine.vmid,
+                "pvevnc:type": matchedPveMachine.type,
+                "pvevnc:name": matchedPveMachine.name,
+            };
+        } else {
+            const isPveBackedConnection = Number((refreshedConnConfig as any)?.["pve:vmid"] ?? 0) > 0;
+            if (isPveBackedConnection || resolvedUrl.startsWith(DEFAULT_PVE_ORIGIN)) {
+                return null;
+            }
+            if (isBlank(resolvedUrl)) {
+                return null;
+            }
+            guiBlockMeta = {
+                view: "web",
+                url: resolvedUrl,
+                "web:hidenav": true,
+                "web:zoom": 0.9,
+                "display:name": displayName,
+                "web:partition": null,
+                "web:lockurl": null,
+                "pvevnc:origin": null,
+                "pvevnc:node": null,
+                "pvevnc:vmid": null,
+                "pvevnc:type": null,
+                "pvevnc:name": null,
+            };
+        }
 
         if (!isBlank(existingGuiBlockId)) {
             try {
@@ -886,46 +1017,109 @@ export class TermViewModel implements ViewModel {
             },
         });
         return newGuiBlockId;
-    }
+    };
 
-    async toggleRemoteGui(): Promise<void> {
+    toggleRemoteGui = async (): Promise<void> => {
         const termMode = globalStore.get(this.termMode) as TermModeType;
-        if (termMode === "web" || termMode === "websplit") {
+        const nextMode = getNextRemoteGuiMode(termMode);
+        if (nextMode === "term") {
             this.setTermMode("term");
             return;
         }
-        const guiBlockId = await this.ensureRemoteGuiBlock();
-        if (isBlank(guiBlockId)) {
+        await this.showRemoteGuiMode(nextMode as Extract<TermModeType, "web" | "websplit">);
+    };
+
+    private showRemoteGuiMode = async (targetMode: Extract<TermModeType, "web" | "websplit">): Promise<void> => {
+        console.log("remote gui mode requested", {
+            blockId: this.blockId,
+            targetMode,
+        });
+        try {
+            const transitionStrategy = getRemoteGuiModeTransitionStrategy({
+                currentMode: globalStore.get(this.termMode) as TermModeType,
+                targetMode,
+                guiBlockId: globalStore.get(this.guiBlockId),
+            });
+            if (transitionStrategy === "noop") {
+                return;
+            }
+            if (transitionStrategy === "switch-immediately") {
+                this.setTermMode(targetMode);
+                return;
+            }
+            const guiBlockId = await this.ensureRemoteGuiBlock();
+            if (isBlank(guiBlockId)) {
+                const now = Date.now();
+                pushNotification({
+                    icon: "triangle-exclamation",
+                    title: i18next.t("term.remoteGuiUnavailableTitle"),
+                    message: i18next.t("term.remoteGuiUnavailableMessage"),
+                    timestamp: new Date(now).toISOString(),
+                    expiration: now + 2600,
+                    type: "warning",
+                });
+                console.log("remote gui mode unavailable", {
+                    blockId: this.blockId,
+                    targetMode,
+                });
+                return;
+            }
+            this.setTermMode(targetMode);
+        } catch (error) {
             const now = Date.now();
             pushNotification({
                 icon: "triangle-exclamation",
                 title: i18next.t("term.remoteGuiUnavailableTitle"),
-                message: i18next.t("term.remoteGuiUnavailableMessage"),
+                message: error instanceof Error ? error.message : i18next.t("term.remoteGuiUnavailableMessage"),
                 timestamp: new Date(now).toISOString(),
-                expiration: now + 2600,
+                expiration: now + 4000,
                 type: "warning",
             });
-            return;
+            console.log("remote gui mode error", {
+                blockId: this.blockId,
+                targetMode,
+                error,
+            });
         }
-        this.setTermMode(globalStore.get(this.preferredRemoteGuiMode));
-    }
-
-    async cycleRemoteGuiMode(): Promise<void> {
-        const nextMode: RemoteGuiModeType = globalStore.get(this.preferredRemoteGuiMode) === "web" ? "websplit" : "web";
-        await this.persistRemoteGuiMode(nextMode);
-        const termMode = globalStore.get(this.termMode) as TermModeType;
-        if (termMode === "web" || termMode === "websplit") {
-            await this.ensureRemoteGuiBlock();
-            this.setTermMode(nextMode);
-        }
-        this.pushRemoteGuiModeNotification(nextMode);
-    }
+    };
 
     dispose() {
         DefaultRouter.unregisterRoute(makeFeBlockRouteId(this.blockId));
         this.shellProcStatusUnsubFn?.();
         this.blockJobStatusUnsubFn?.();
         this.termBPMUnsubFn?.();
+    }
+
+    private focusTerminalSurface(): boolean {
+        if (this.termRef?.current?.terminal) {
+            this.termRef.current.terminal.focus();
+            return true;
+        }
+        return false;
+    }
+
+    private focusRemoteGuiSurface(): boolean {
+        const guiBlockId = globalStore.get(this.guiBlockId);
+        if (!guiBlockId) {
+            return false;
+        }
+        const guiViewModel = getBlockComponentModel(guiBlockId)?.viewModel;
+        if (guiViewModel?.giveFocus?.()) {
+            return true;
+        }
+        return true;
+    }
+
+    setActiveSplitPane(pane: RemoteGuiSplitPane) {
+        globalStore.set(this.activeSplitPane, pane);
+    }
+
+    focusSplitPane(pane: RemoteGuiSplitPane): boolean {
+        this.setActiveSplitPane(pane);
+        if (pane === "gui") {
+            return this.focusRemoteGuiSurface();
+        }
+        return this.focusTerminalSurface();
     }
 
     giveFocus(): boolean {
@@ -935,10 +1129,13 @@ export class TermViewModel implements ViewModel {
         }
         let termMode = globalStore.get(this.termMode);
         if (termMode == "term") {
-            if (this.termRef?.current?.terminal) {
-                this.termRef.current.terminal.focus();
-                return true;
-            }
+            return this.focusTerminalSurface();
+        }
+        if (termMode == "web") {
+            return this.focusRemoteGuiSurface();
+        }
+        if (termMode == "websplit") {
+            return this.focusSplitPane(globalStore.get(this.activeSplitPane));
         }
         return false;
     }
@@ -1756,10 +1953,8 @@ export class TermViewModel implements ViewModel {
             },
         };
 
-        const shellIntegrationStatus = globalStore.get(this.termRef?.current?.shellIntegrationStatusAtom);
-        const cwd = blockData?.meta?.["cmd:cwd"];
-        console.log("term-model: newBlockInheritCwd check", { shellIntegrationStatus, cwd, blockId: this.blockId });
-        const canInheritCwd = cwd != null; // Temporarily relaxed for debugging/fix
+        const cwd = getTerminalInheritableCwd(blockData?.meta);
+        const canInheritCwd = !isBlank(cwd);
         const canShowFileBrowser = canInheritCwd;
 
         const fullMenu: ContextMenuItem[] = [];
@@ -1789,7 +1984,6 @@ export class TermViewModel implements ViewModel {
             click: () => {
                 const blockData = globalStore.get(this.blockAtom);
                 const connection = blockData?.meta?.connection;
-                const cwd = blockData?.meta?.["cmd:cwd"];
                 const meta: Record<string, any> = {
                     ...defaultTermBlockDef.meta,
                     "cmd:cwd": cwd,

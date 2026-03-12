@@ -5,6 +5,7 @@ import { ClientService, ObjectService, WindowService, WorkspaceService } from "@
 import { RpcApi } from "@/app/store/wshclientapi";
 import { fireAndForget } from "@/util/util";
 import { app, BaseWindow, BaseWindowConstructorOptions, dialog, globalShortcut, ipcMain, screen } from "electron";
+import fs from "fs";
 import { globalEvents } from "emain/emain-events";
 import path from "path";
 import { debounce } from "throttle-debounce";
@@ -31,6 +32,254 @@ export type WindowOpts = {
 
 export const MinWindowWidth = 800;
 export const MinWindowHeight = 500;
+
+function getDevWindowCaptureScript(): string {
+    return `(() => {
+        const readText = (selector) => {
+            const elem = document.querySelector(selector);
+            return elem instanceof HTMLElement ? (elem.innerText || elem.textContent || "").trim() : "";
+        };
+        const allDisplayIcons = Array.from(document.querySelectorAll("i.fa-display"));
+        const endDisplayIcons = allDisplayIcons.filter((icon) => icon.closest(".block-frame-end-icons") != null);
+        const strayDisplayIcons = allDisplayIcons.filter((icon) => icon.closest(".block-frame-end-icons") == null);
+        const endDisplayIconDetails = endDisplayIcons.map((icon) => {
+            const button = icon.closest(".wave-iconbutton");
+            const block = icon.closest("[data-blockid]");
+            const header = icon.closest(".block-frame-default-header");
+            const endIconsContainer = icon.closest(".block-frame-end-icons");
+            const viewType = header?.querySelector(".block-frame-view-type");
+            const connectionButton = header?.querySelector(".connection-button");
+            const rect = button?.getBoundingClientRect();
+            const siblingButtons = endIconsContainer
+                ? Array.from(endIconsContainer.querySelectorAll(".wave-iconbutton"))
+                : [];
+            return {
+                blockId: block?.getAttribute("data-blockid") ?? "",
+                title:
+                    button?.getAttribute("title") ??
+                    button?.getAttribute("aria-label") ??
+                    icon.getAttribute("title") ??
+                    "",
+                viewName: viewType instanceof HTMLElement ? (viewType.innerText || viewType.textContent || "").trim() : "",
+                connection:
+                    connectionButton instanceof HTMLElement
+                        ? (connectionButton.innerText || connectionButton.textContent || "").trim()
+                        : "",
+                className: button?.className ?? icon.className ?? "",
+                iconHtml: icon.outerHTML ?? "",
+                buttonHtml: button?.outerHTML ?? "",
+                buttonInnerHtml: button?.innerHTML ?? "",
+                buttonChildCount: button?.childElementCount ?? 0,
+                buttonIndexWithinEndIcons: button ? siblingButtons.indexOf(button) : -1,
+                endIconsButtonCount: siblingButtons.length,
+                endIconsContainerCount: block
+                    ? block.querySelectorAll(".block-frame-end-icons").length
+                    : document.querySelectorAll(".block-frame-end-icons").length,
+                rect: rect
+                    ? {
+                          x: Math.round(rect.x),
+                          y: Math.round(rect.y),
+                          width: Math.round(rect.width),
+                          height: Math.round(rect.height),
+                      }
+                    : null,
+            };
+        });
+        const canvas = document.querySelector('[data-testid="pvevnc-session"] canvas');
+        let canvasInfo = null;
+        if (canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0) {
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            const sampledColors = new Set();
+            let nonBlackSamples = 0;
+            if (ctx != null) {
+                const sampleCols = 8;
+                const sampleRows = 6;
+                for (let row = 0; row < sampleRows; row++) {
+                    for (let col = 0; col < sampleCols; col++) {
+                        const x = Math.min(canvas.width - 1, Math.floor((canvas.width - 1) * (col / Math.max(1, sampleCols - 1))));
+                        const y = Math.min(canvas.height - 1, Math.floor((canvas.height - 1) * (row / Math.max(1, sampleRows - 1))));
+                        const pixel = ctx.getImageData(x, y, 1, 1).data;
+                        const key = [pixel[0], pixel[1], pixel[2], pixel[3]].join(",");
+                        sampledColors.add(key);
+                        if (pixel[0] > 8 || pixel[1] > 8 || pixel[2] > 8) {
+                            nonBlackSamples++;
+                        }
+                    }
+                }
+            }
+            const exportCanvas = document.createElement("canvas");
+            const maxWidth = 1200;
+            const scale = Math.min(1, maxWidth / canvas.width);
+            exportCanvas.width = Math.max(1, Math.round(canvas.width * scale));
+            exportCanvas.height = Math.max(1, Math.round(canvas.height * scale));
+            const exportCtx = exportCanvas.getContext("2d");
+            if (exportCtx != null) {
+                exportCtx.drawImage(canvas, 0, 0, exportCanvas.width, exportCanvas.height);
+            }
+            canvasInfo = {
+                width: canvas.width,
+                height: canvas.height,
+                sampledColorCount: sampledColors.size,
+                nonBlackSamples,
+                sampleCount: 48,
+                pngDataUrl: exportCanvas.toDataURL("image/png"),
+            };
+        }
+        return {
+            href: window.location.href,
+            title: document.title,
+            displayIconCount: allDisplayIcons.length,
+            endDisplayIconCount: endDisplayIcons.length,
+            endDisplayIconDetails,
+            strayDisplayIconCount: strayDisplayIcons.length,
+            linkSlashCount: document.querySelectorAll("i.fa-link-slash").length,
+            pveAdminEmbedCount: document.querySelectorAll('webview[src*="192.168.1.250:8006"], iframe[src*="192.168.1.250:8006"]').length,
+            pvevncRootCount: document.querySelectorAll('[data-testid="pvevnc-root"]').length,
+            pvevnc: {
+                title: readText('[data-testid="pvevnc-title"]'),
+                reconnectLabel: readText('[data-testid="pvevnc-reconnect"]'),
+                loadingText: readText('[data-testid="pvevnc-loading"]'),
+                errorText: readText('[data-testid="pvevnc-error"]'),
+                overlayVisible: document.querySelector('[data-testid="pvevnc-overlay"]') != null,
+                canvas: canvasInfo,
+            },
+        };
+    })();`;
+}
+
+function writeDevCapturePng(dataUrl: string, outputPath: string): void {
+    const prefix = "data:image/png;base64,";
+    if (!dataUrl?.startsWith(prefix)) {
+        return;
+    }
+    fs.writeFileSync(outputPath, Buffer.from(dataUrl.slice(prefix.length), "base64"));
+}
+
+function captureDevWindowSnapshot(win: WaveBrowserWindow, label: string, delayMs: number): void {
+    if (process.env.WAVETERM_PROFILE !== "dev") {
+        return;
+    }
+    setTimeout(() => {
+        fireAndForget(async () => {
+            try {
+                const tabView = win?.activeTabView;
+                const wc = tabView?.webContents;
+                if (!wc || wc.isDestroyed()) {
+                    return;
+                }
+                const outputDir = path.join(process.env.WAVETERM_DATA_HOME ?? app.getPath("userData"), "dev-captures");
+                fs.mkdirSync(outputDir, { recursive: true });
+                const captureData = (await wc.executeJavaScript(getDevWindowCaptureScript(), true)) as Record<
+                    string,
+                    any
+                > | null;
+                if (captureData == null) {
+                    console.log("dev renderer snapshot returned no data", label);
+                    return;
+                }
+                const canvasDataUrl = captureData?.pvevnc?.canvas?.pngDataUrl;
+                if (typeof canvasDataUrl === "string" && canvasDataUrl.length > 0) {
+                    const pngOutputPath = path.join(outputDir, `${label}.png`);
+                    writeDevCapturePng(canvasDataUrl, pngOutputPath);
+                    captureData.pvevnc.canvas.pngPath = pngOutputPath;
+                    delete captureData.pvevnc.canvas.pngDataUrl;
+                }
+                const jsonOutputPath = path.join(outputDir, `${label}.json`);
+                fs.writeFileSync(jsonOutputPath, JSON.stringify(captureData, null, 2), "utf8");
+                console.log("dev renderer snapshot saved", jsonOutputPath);
+            } catch (error) {
+                console.log("dev renderer snapshot failed", label, error);
+            }
+        });
+    }, delayMs);
+}
+
+function getDevClickToolbarIconScript(iconClass: string): string {
+    return `(() => {
+        const buttons = Array.from(document.querySelectorAll(".block-frame-end-icons .wave-iconbutton"));
+        const button = buttons.find((candidate) => {
+            const icon = candidate.querySelector("i");
+            if (!(icon instanceof HTMLElement)) {
+                return false;
+            }
+            if (!icon.classList.contains("${iconClass}")) {
+                return false;
+            }
+            const rect = candidate.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0;
+        });
+        if (!(button instanceof HTMLButtonElement)) {
+            return { ok: false, iconClass: "${iconClass}", reason: "button-not-found" };
+        }
+        const rect = button.getBoundingClientRect();
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+        return {
+            ok: true,
+            iconClass: "${iconClass}",
+            title: button.getAttribute("title") ?? button.getAttribute("aria-label") ?? "",
+            className: button.className,
+            rect: {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+            },
+        };
+    })();`;
+}
+
+function scheduleDevRemoteGuiAutotest(win: WaveBrowserWindow): void {
+    if (process.env.WAVETERM_PROFILE !== "dev" || process.env.WAVETERM_DEV_AUTOTEST_REMOTE_GUI !== "1") {
+        return;
+    }
+    const scheduleClick = (label: string, delayMs: number, iconClass: string) => {
+        setTimeout(() => {
+            fireAndForget(async () => {
+                try {
+                    const wc = win?.activeTabView?.webContents;
+                    if (!wc || wc.isDestroyed()) {
+                        return;
+                    }
+                    const result = await wc.executeJavaScript(getDevClickToolbarIconScript(iconClass), true);
+                    console.log("dev remote gui autotest click", label, result);
+                } catch (error) {
+                    console.log("dev remote gui autotest click failed", label, error);
+                }
+            });
+        }, delayMs);
+    };
+    scheduleClick("vnc-only", 6000, "fa-display");
+    captureDevWindowSnapshot(win, `${win.waveWindowId}-after-autoclick-vnc-2s`, 8000);
+    captureDevWindowSnapshot(win, `${win.waveWindowId}-after-autoclick-vnc-8s`, 14000);
+    captureDevWindowSnapshot(win, `${win.waveWindowId}-after-autoclick-vnc-16s`, 22000);
+    scheduleClick("split", 26000, "fa-table-columns");
+    captureDevWindowSnapshot(win, `${win.waveWindowId}-after-autoclick-split-2s`, 28000);
+    captureDevWindowSnapshot(win, `${win.waveWindowId}-after-autoclick-split-8s`, 34000);
+}
+
+function scheduleDevWindowReadyCaptures(win: WaveBrowserWindow): void {
+    if (process.env.WAVETERM_PROFILE !== "dev") {
+        return;
+    }
+    const tabView = win?.activeTabView;
+    const wc = tabView?.webContents;
+    if (!wc || wc.isDestroyed()) {
+        return;
+    }
+    const scheduleReadyCaptures = (phase: string) => {
+        captureDevWindowSnapshot(win, `${win.waveWindowId}-${phase}-2s`, 2000);
+        captureDevWindowSnapshot(win, `${win.waveWindowId}-${phase}-8s`, 8000);
+    };
+    wc.once("dom-ready", () => {
+        scheduleReadyCaptures("after-dom-ready");
+    });
+    wc.once("did-finish-load", () => {
+        scheduleReadyCaptures("after-finish-load");
+    });
+    if (!wc.isLoadingMainFrame()) {
+        scheduleReadyCaptures("after-ready-immediate");
+    }
+}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<{ ok: boolean; value?: T }> {
     let timeoutHandle: NodeJS.Timeout | null = null;
@@ -979,6 +1228,10 @@ export async function relaunchBrowserWindows() {
     for (const win of wins) {
         console.log("show window", win.waveWindowId);
         win.show();
+        captureDevWindowSnapshot(win, `${win.waveWindowId}-after-show-4s`, 4000);
+        captureDevWindowSnapshot(win, `${win.waveWindowId}-after-show-12s`, 12000);
+        scheduleDevWindowReadyCaptures(win);
+        scheduleDevRemoteGuiAutotest(win);
     }
 }
 

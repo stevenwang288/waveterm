@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 
 function commandExists(command) {
@@ -53,10 +54,17 @@ function shouldRebuildBackend() {
     const exeSuffix = process.platform === "win32" ? ".exe" : "";
     const wavesrvPath = path.join(process.cwd(), "dist", "bin", `wavesrv.${archTag}${exeSuffix}`);
 
+    if (!fs.existsSync(wavesrvPath)) {
+        return true;
+    }
+
     const latestBackendCommitTime = getLatestBackendCommitTime();
     const wavesrvBuildTime = getWavesrvBuildTime(wavesrvPath);
 
-    if (latestBackendCommitTime == null || wavesrvBuildTime == null) {
+    if (wavesrvBuildTime == null) {
+        return true;
+    }
+    if (latestBackendCommitTime == null) {
         return false;
     }
     return wavesrvBuildTime < latestBackendCommitTime;

@@ -92,9 +92,15 @@ contextBridge.exposeInMainWorld("api", {
         error?: string;
         ts?: number;
     }) => ipcRenderer.invoke("speech-log", entry),
-    pveEnsureAuth: (req: { partition: string; origin: string; lang?: string; timeoutMs?: number }) =>
-        ipcRenderer.invoke("pve-ensure-auth", req),
     pveListMachines: (req?: { origin?: string; timeoutMs?: number }) => ipcRenderer.invoke("pve-list-machines", req),
+    pveCreateConsoleSession: (req: {
+        origin?: string;
+        node: string;
+        vmid: number;
+        type: "qemu" | "lxc";
+        name?: string;
+        timeoutMs?: number;
+    }) => ipcRenderer.invoke("pve-create-console-session", req),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),

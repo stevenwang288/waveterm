@@ -745,6 +745,10 @@ declare global {
         "conn:ignoresshconfig"?: boolean;
         "conn:guiurl"?: string;
         "conn:guimode"?: string;
+        "pve:vmid"?: number;
+        "pve:node"?: string;
+        "pve:type"?: string;
+        "pve:name"?: string;
         "display:name"?: string;
         "display:hidden"?: boolean;
         "display:order"?: number;
@@ -1106,6 +1110,11 @@ declare global {
         "web:hidenav"?: boolean;
         "web:partition"?: string;
         "web:useragenttype"?: string;
+        "pvevnc:origin"?: string;
+        "pvevnc:node"?: string;
+        "pvevnc:vmid"?: number;
+        "pvevnc:type"?: string;
+        "pvevnc:name"?: string;
         "markdown:fontsize"?: number;
         "markdown:fixedfontsize"?: number;
         "tsunami:*"?: boolean;

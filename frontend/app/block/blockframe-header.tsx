@@ -33,9 +33,7 @@ import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { IconButton } from "@/element/iconbutton";
-import type { TermViewModel } from "@/app/view/term/term-model";
-import { formatCwdForDisplay } from "@/util/cwdlabel";
-import { getLaunchCwdForDisplay } from "@/util/launchcwd";
+import { getTerminalDisplayCwd, getTerminalInheritableCwd } from "@/util/launchcwd";
 import { NodeModel } from "@/layout/index";
 import * as util from "@/util/util";
 import { cn } from "@/util/util";
@@ -813,6 +811,15 @@ const BlockFrame_Header = ({
         }) as jotai.PrimitiveAtom<number>;
     }, [isTerminalBlock, nodeModel.blockId]);
     const lastOutputTs = util.useAtomValueSafe(lastOutputTsAtom as any) as number;
+    const displayCwdAtom = React.useMemo(() => {
+        if (!isTerminalBlock) {
+            return null;
+        }
+        return useBlockAtom(nodeModel.blockId, "term:displaycwd", () => {
+            return jotai.atom("") as jotai.PrimitiveAtom<string>;
+        }) as jotai.PrimitiveAtom<string>;
+    }, [isTerminalBlock, nodeModel.blockId]);
+    const liveDisplayCwd = util.useAtomValueSafe(displayCwdAtom as any) as string;
     const lastCommandDoneTsAtom = React.useMemo(() => {
         if (!isTerminalBlock) {
             return null;
@@ -901,13 +908,15 @@ const BlockFrame_Header = ({
         if (!isTerminalBlock) {
             return undefined;
         }
-        const cwd = typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]) : "";
-        const displayCwd =
-            typeof blockData?.meta?.["display:launchcwd"] === "string"
-                ? String(blockData.meta["display:launchcwd"])
-                : getLaunchCwdForDisplay();
-        const pathLabel = formatCwdForDisplay(cwd || displayCwd);
+        const pathLabel = liveDisplayCwd || getTerminalDisplayCwd(blockData?.meta);
         return util.isBlank(pathLabel) ? undefined : pathLabel;
+    }, [blockData?.meta, isTerminalBlock, liveDisplayCwd, lastOutputTs]);
+    const terminalCwd = React.useMemo(() => {
+        if (!isTerminalBlock) {
+            return undefined;
+        }
+        const cwd = getTerminalInheritableCwd(blockData?.meta);
+        return util.isBlank(cwd) ? undefined : cwd;
     }, [blockData?.meta, isTerminalBlock]);
 
     const codexAuthReady = util.useAtomValueSafe(atoms.codexAuthReadyAtom) ?? false;
@@ -958,11 +967,6 @@ const BlockFrame_Header = ({
         }
         nodeModel.toggleMagnify();
     }, [magnifyDisabled, nodeModel, preview]);
-    const termVm = isTerminalBlock ? (viewModel as TermViewModel) : null;
-    const canOpenRemoteGui = util.useAtomValueSafe(termVm?.canOpenRemoteGui) ?? false;
-    const termMode = util.useAtomValueSafe(termVm?.termMode);
-    const remoteGuiActive = termMode === "web" || termMode === "websplit";
-
     return (
         <div
             className={cn(
@@ -994,10 +998,9 @@ const BlockFrame_Header = ({
                     changeConnModalAtom={changeConnModalAtom}
                     isTerminalBlock={isTerminalBlock}
                     terminalLabel={terminalPathLabel}
+                    terminalCwd={terminalCwd}
                     unread={isTerminalBlock && hasUnread}
                     onTerminalLabelDoubleClick={isTerminalBlock ? handleTerminalLabelDoubleClick : undefined}
-                    showRemoteGuiButton={isTerminalBlock && canOpenRemoteGui}
-                    remoteGuiActive={remoteGuiActive}
                 />
             )}
             {useTermHeader && termDurableStatus != null && (

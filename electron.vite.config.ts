@@ -172,6 +172,7 @@ export default defineConfig({
         },
         optimizeDeps: {
             include: ["monaco-yaml/yaml.worker.js"],
+            exclude: ["@novnc/novnc"],
         },
         server: {
             host: "127.0.0.1",

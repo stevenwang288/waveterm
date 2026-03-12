@@ -64,3 +64,34 @@ func TestNormalizeJSONConfigBytes_DecodesUTF16BE(t *testing.T) {
 	}
 }
 
+func TestConnKeywords_UnmarshalPreservesPveFields(t *testing.T) {
+	var keywords ConnKeywords
+	err := json.Unmarshal(
+		[]byte(`{
+			"pve:vmid": 152,
+			"pve:node": "VUModule",
+			"pve:type": "qemu",
+			"pve:name": "152-win11-magisk----GUI--win11",
+			"ssh:hostname": "10.20.0.152"
+		}`),
+		&keywords,
+	)
+	if err != nil {
+		t.Fatalf("json.Unmarshal returned error: %v", err)
+	}
+	if keywords.PveVmid != 152 {
+		t.Fatalf("expected pve vmid 152, got %d", keywords.PveVmid)
+	}
+	if keywords.PveNode != "VUModule" {
+		t.Fatalf("expected pve node VUModule, got %q", keywords.PveNode)
+	}
+	if keywords.PveType != "qemu" {
+		t.Fatalf("expected pve type qemu, got %q", keywords.PveType)
+	}
+	if keywords.PveName != "152-win11-magisk----GUI--win11" {
+		t.Fatalf("expected pve name to survive unmarshal, got %q", keywords.PveName)
+	}
+	if keywords.SshHostName == nil || *keywords.SshHostName != "10.20.0.152" {
+		t.Fatalf("expected ssh hostname to survive unmarshal, got %#v", keywords.SshHostName)
+	}
+}

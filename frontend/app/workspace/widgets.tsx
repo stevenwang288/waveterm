@@ -10,7 +10,6 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { shouldIncludeWidgetForWorkspace } from "@/app/workspace/widgetfilter";
 import { GitPanel } from "@/app/workspace/git-panel";
-import { openPveInNewTab } from "@/util/clilayout";
 import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
@@ -528,12 +527,6 @@ const Widgets = memo(() => {
         WorkspaceLayoutModel.getInstance().toggleSidePanelView("git");
     }, []);
 
-    const openPve = useCallback(() => {
-        fireAndForget(async () => {
-            await openPveInNewTab();
-        });
-    }, []);
-
     const openSettingsPanel = useCallback(() => {
         const blockDef: BlockDef = {
             meta: {
@@ -663,24 +656,6 @@ const Widgets = memo(() => {
                             </div>
                             <div
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
-                                onClick={() => {
-                                    openPve();
-                                    setIsAppsOpen(false);
-                                }}
-                            >
-                                <Tooltip content={t("clilayout.pveWallTitle")} placement="right" disable={false}>
-                                    <div>
-                                        <div className="flex flex-col items-center">
-                                            <i className={makeIconClass("globe", true)}></i>
-                                            <div className="text-[9px] leading-none mt-0.5 font-semibold text-cyan-200/90">
-                                                {t("clilayout.pveWallName")}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </Tooltip>
-                            </div>
-                            <div
-                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={showAiLauncherMenu}
                             >
                                 <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
@@ -759,24 +734,6 @@ const Widgets = memo(() => {
                         </div>
                         <div
                             className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
-                            onClick={() => {
-                                openPve();
-                                setIsAppsOpen(false);
-                            }}
-                        >
-                            <Tooltip content={t("clilayout.pveWallTitle")} placement="right" disable={false}>
-                                <div className="flex flex-col items-center w-full">
-                                    <div>
-                                        <i className={makeIconClass("globe", true)}></i>
-                                    </div>
-                                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                                        {t("clilayout.pveWallName")}
-                                    </div>
-                                </div>
-                            </Tooltip>
-                        </div>
-                        <div
-                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                             onClick={showAiLauncherMenu}
                         >
                             <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
@@ -844,12 +801,6 @@ const Widgets = memo(() => {
                         <i className={makeIconClass("robot", true)}></i>
                     </div>
                     <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.ai")}</div>
-                </div>
-                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
-                    <div>
-                        <i className={makeIconClass("globe", true)}></i>
-                    </div>
-                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("clilayout.pveWallName")}</div>
                 </div>
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>

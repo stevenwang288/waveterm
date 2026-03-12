@@ -198,6 +198,9 @@ export class WaveTabView extends WebContentsView {
         this.webContents.on("did-finish-load", () => {
             logTabViewWebContentsEvent(this, "did-finish-load");
         });
+        this.webContents.on("dom-ready", () => {
+            logTabViewWebContentsEvent(this, "dom-ready");
+        });
         this.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
             logTabViewWebContentsEvent(this, "did-fail-load", {
                 errorCode,
@@ -221,9 +224,6 @@ export class WaveTabView extends WebContentsView {
             });
         });
         this.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-            if (level < 2) {
-                return;
-            }
             logTabViewWebContentsEvent(this, "console-message", {
                 level,
                 message,
@@ -238,11 +238,27 @@ export class WaveTabView extends WebContentsView {
         });
         this.setBackgroundColor(computeBgColor(fullConfig));
 
-        if (isDevVite) {
-            this.webContents.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html`);
-        } else {
-            this.webContents.loadFile(path.join(getElectronAppBasePath(), "frontend", "index.html"));
-        }
+        const loadPromise = isDevVite
+            ? this.webContents.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html`)
+            : this.webContents.loadFile(path.join(getElectronAppBasePath(), "frontend", "index.html"));
+        loadPromise
+            .then(() => {
+                logTabViewWebContentsEvent(this, "load-resolved");
+            })
+            .catch((error) => {
+                logTabViewWebContentsEvent(this, "load-rejected", {
+                    errorName: error?.name,
+                    errorMessage: error?.message,
+                    errorStack: error?.stack,
+                });
+            });
+        setTimeout(() => {
+            logTabViewWebContentsEvent(this, "load-status-snapshot", {
+                isLoading: this.webContents.isLoading(),
+                isLoadingMainFrame: this.webContents.isLoadingMainFrame(),
+                url: this.webContents.getURL(),
+            });
+        }, 5000);
     }
 
     get waveTabId(): string {
@@ -413,11 +429,9 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
             }
         }
     });
-    tabView.webContents.setWindowOpenHandler(({ url, userGesture }) => {
-        // Only open external browsers on explicit user gestures. Some pages attempt to `window.open()` on load,
-        // which is disruptive (and can look like WAVE is "randomly launching Chrome").
+    tabView.webContents.setWindowOpenHandler(({ url }) => {
         const isExternalUrl = url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://");
-        if (userGesture && isExternalUrl) {
+        if (isExternalUrl) {
             console.log("openExternal fallback", url);
             shell.openExternal(url);
         }

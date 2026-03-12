@@ -12,7 +12,7 @@ import { isMacOS, isWindows } from "@/util/platformutil";
 import { fireAndForget } from "@/util/util";
 import { useAtomValue } from "jotai";
 import { OverlayScrollbars } from "overlayscrollbars";
-import { createRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRef, Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 import { debounce } from "throttle-debounce";
 import { IconButton } from "../element/iconbutton";
 import { WorkspaceService } from "../store/services";
@@ -45,7 +45,7 @@ interface TabBarProps {
     workspace: Workspace;
 }
 
-const DefaultSidePanelButtonOrder: SidePanelView[] = ["ai", "servers", "layouts", "git"];
+const DefaultSidePanelButtonOrder: SidePanelView[] = ["ai", "history", "servers", "layouts", "git"];
 
 function normalizeSidePanelButtonOrder(raw: unknown): SidePanelView[] {
     const normalized: SidePanelView[] = [];
@@ -142,6 +142,12 @@ const WaveAIButton = memo(() => {
     return <SidePanelToggleButton view="ai" iconClass="fa fa-sparkles" label="AI" labelClassName="font-mono" showLabel={false} />;
 });
 WaveAIButton.displayName = "WaveAIButton";
+
+const PathHistoryQuickButton = memo(() => {
+    const { t } = useTranslation();
+    return <SidePanelToggleButton view="history" iconClass="fa fa-history" label={t("pathHistory.title")} showLabel={false} />;
+});
+PathHistoryQuickButton.displayName = "PathHistoryQuickButton";
 
 const FavoritesQuickButton = memo(() => {
     const { t } = useTranslation();
@@ -299,6 +305,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const updateStatusBannerRef = useRef<HTMLButtonElement>(null);
     const configErrorButtonRef = useRef<HTMLElement>(null);
     const aiButtonRef = useRef<HTMLDivElement>(null);
+    const historyButtonRef = useRef<HTMLDivElement>(null);
     const favoritesButtonRef = useRef<HTMLDivElement>(null);
     const serversButtonRef = useRef<HTMLDivElement>(null);
     const layoutButtonRef = useRef<HTMLDivElement>(null);
@@ -389,6 +396,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
 
     const sidePanelButtonRefs: Record<SidePanelView, React.RefObject<HTMLDivElement>> = {
         ai: aiButtonRef,
+        history: historyButtonRef,
         favorites: favoritesButtonRef,
         servers: serversButtonRef,
         layouts: layoutButtonRef,
@@ -396,6 +404,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     };
     const sidePanelButtonComponents: Record<SidePanelView, React.ComponentType> = {
         ai: WaveAIButton,
+        history: PathHistoryQuickButton,
         favorites: FavoritesQuickButton,
         servers: ServersQuickButton,
         layouts: LayoutQuickButton,
@@ -452,6 +461,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         const configErrorWidth = configErrorButtonRef.current?.getBoundingClientRect().width ?? 0;
         const appMenuButtonWidth = appMenuButtonRef.current?.getBoundingClientRect().width ?? 0;
         const aiButtonWidth = aiButtonRef.current?.getBoundingClientRect().width ?? 0;
+        const historyButtonWidth = historyButtonRef.current?.getBoundingClientRect().width ?? 0;
         const favoritesButtonWidth = favoritesButtonRef.current?.getBoundingClientRect().width ?? 0;
         const serversButtonWidth = serversButtonRef.current?.getBoundingClientRect().width ?? 0;
         const layoutButtonWidth = layoutButtonRef.current?.getBoundingClientRect().width ?? 0;
@@ -466,6 +476,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             configErrorWidth +
             appMenuButtonWidth +
             aiButtonWidth +
+            historyButtonWidth +
             favoritesButtonWidth +
             serversButtonWidth +
             layoutButtonWidth +
@@ -885,18 +896,19 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                 const Btn = sidePanelButtonComponents[view];
                 const wrapperRef = sidePanelButtonRefs[view];
                 return (
-                    <div
-                        key={view}
-                        ref={wrapperRef}
-                        draggable
-                        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                        onDragStart={(e) => handleSidePanelButtonDragStart(view, e)}
-                        onDragOver={(e) => handleSidePanelButtonDragOver(view, e)}
-                        onDrop={handleSidePanelButtonDrop}
-                        onDragEnd={handleSidePanelButtonDragEnd}
-                    >
-                        <Btn />
-                    </div>
+                    <Fragment key={view}>
+                        <div
+                            ref={wrapperRef}
+                            draggable
+                            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                            onDragStart={(e) => handleSidePanelButtonDragStart(view, e)}
+                            onDragOver={(e) => handleSidePanelButtonDragOver(view, e)}
+                            onDrop={handleSidePanelButtonDrop}
+                            onDragEnd={handleSidePanelButtonDragEnd}
+                        >
+                            <Btn />
+                        </div>
+                    </Fragment>
                 );
             })}
             <WorkspaceSwitcher ref={workspaceSwitcherRef} />

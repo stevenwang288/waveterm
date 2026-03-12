@@ -169,12 +169,6 @@ declare global {
             error?: string;
             ts?: number;
         }) => Promise<boolean>; // speech-log
-        pveEnsureAuth: (req: { partition: string; origin: string; lang?: string; timeoutMs?: number }) => Promise<{
-            ok: boolean;
-            cached?: boolean;
-            skipped?: boolean;
-            error?: string;
-        }>; // pve-ensure-auth
         pveListMachines: (req?: { origin?: string; timeoutMs?: number }) => Promise<{
             ok: boolean;
             error?: string;
@@ -186,9 +180,28 @@ declare global {
                 status?: string;
                 sshHost?: string;
                 ipHints?: string[];
-                guiUrl: string;
             }>;
         }>; // pve-list-machines
+        pveCreateConsoleSession: (req: {
+            origin?: string;
+            node: string;
+            vmid: number;
+            type: "qemu" | "lxc";
+            name?: string;
+            timeoutMs?: number;
+        }) => Promise<{
+            ok: boolean;
+            websocketUrl?: string;
+            password?: string;
+            ticket?: string;
+            port?: number;
+            origin?: string;
+            node?: string;
+            vmid?: number;
+            type?: "qemu" | "lxc";
+            name?: string;
+            error?: string;
+        }>; // pve-create-console-session
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh
@@ -581,3 +594,8 @@ declare global {
 }
 
 export {};
+
+declare module "@novnc/novnc/core/rfb" {
+    const RFB: any;
+    export default RFB;
+}

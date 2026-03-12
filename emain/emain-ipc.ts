@@ -31,11 +31,10 @@ import { createNewWaveWindow, getWaveWindowByWebContentsId } from "./emain-windo
 import { ElectronWshClient } from "./emain-wsh";
 import { synthesizeEdgeTtsToMp3Base64 } from "./local-tts-edge";
 import {
-    ensurePveAuth,
+    createPveConsoleSession,
+    PveCreateConsoleSessionRequest,
     listPveMachines,
-    PveEnsureAuthRequest,
     PveListMachinesRequest,
-    storePveCredentials,
 } from "./pve-auth";
 
 const electronApp = electron.app;
@@ -1024,20 +1023,12 @@ export function initIpcHandlers() {
         return true;
     });
 
-    electron.ipcMain.handle("pve-ensure-auth", async (_event, req: PveEnsureAuthRequest) => {
-        return await ensurePveAuth(req);
-    });
-
     electron.ipcMain.handle("pve-list-machines", async (_event, req?: PveListMachinesRequest) => {
         return await listPveMachines(req);
     });
-
-    electron.ipcMain.handle(
-        "pve-store-credentials",
-        async (_event, payload: { host: string; username: string; password: string }) => {
-            return await storePveCredentials(payload?.host, payload?.username, payload?.password);
-        }
-    );
+    electron.ipcMain.handle("pve-create-console-session", async (_event, req: PveCreateConsoleSessionRequest) => {
+        return await createPveConsoleSession(req);
+    });
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {
         console.log("open-native-path", filePath);

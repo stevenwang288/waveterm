@@ -101,14 +101,31 @@ function enableGlobalKeybindings() {
     globalKeybindingsDisabled = false;
 }
 
-function shouldDispatchToBlock(e: WaveKeyboardEvent): boolean {
-    if (globalStore.get(atoms.modalOpen)) {
+type KeyboardDispatchActiveElement = {
+    tagName?: string;
+    contentEditable?: string;
+    classList?: { contains: (token: string) => boolean };
+};
+
+function isManagedKeyboardProxyElement(activeElem: KeyboardDispatchActiveElement): boolean {
+    return (
+        activeElem.classList?.contains("dummy-focus") ||
+        activeElem.classList?.contains("dummy") ||
+        activeElem.classList?.contains("xterm-helper-textarea")
+    );
+}
+
+export function shouldDispatchToBlockForActiveElement(
+    activeElem: KeyboardDispatchActiveElement | null,
+    e: WaveKeyboardEvent,
+    modalOpen: boolean
+): boolean {
+    if (modalOpen) {
         return false;
     }
-    const activeElem = document.activeElement;
-    if (activeElem != null && activeElem instanceof HTMLElement) {
+    if (activeElem != null) {
         if (activeElem.tagName == "INPUT" || activeElem.tagName == "TEXTAREA" || activeElem.contentEditable == "true") {
-            if (activeElem.classList.contains("dummy-focus") || activeElem.classList.contains("dummy")) {
+            if (isManagedKeyboardProxyElement(activeElem)) {
                 return true;
             }
             if (keyutil.isInputEvent(e)) {
@@ -118,6 +135,10 @@ function shouldDispatchToBlock(e: WaveKeyboardEvent): boolean {
         }
     }
     return true;
+}
+
+function shouldDispatchToBlock(e: WaveKeyboardEvent): boolean {
+    return shouldDispatchToBlockForActiveElement(document.activeElement, e, globalStore.get(atoms.modalOpen));
 }
 
 function shouldHandleTabPaneSwitch(waveEvent: WaveKeyboardEvent): boolean {
@@ -705,6 +726,13 @@ function registerGlobalKeys() {
             return false;
         }
         switchBlockByCycle(1);
+        return true;
+    });
+    globalKeyMap.set("Shift:Tab", (waveEvent) => {
+        if (!shouldHandleTabPaneSwitch(waveEvent)) {
+            return false;
+        }
+        switchBlockByCycle(-1);
         return true;
     });
     globalKeyMap.set("Ctrl:Shift:x", () => {

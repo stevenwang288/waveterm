@@ -13,6 +13,7 @@ export const IconButton = memo(
     forwardRef<HTMLButtonElement, IconButtonProps>(({ decl, className }, ref) => {
         ref = ref ?? useRef<HTMLButtonElement>(null);
         const spin = decl.iconSpin ?? false;
+        const hasLongClick = decl.longClick != null;
         useLongClick(ref, decl.click, decl.longClick, decl.disabled);
         const disabled = decl.disabled ?? false;
         const styleVal: CSSProperties = {};
@@ -29,6 +30,7 @@ export const IconButton = memo(
                 title={decl.title}
                 aria-label={decl.title}
                 style={styleVal}
+                onClick={!hasLongClick && !disabled ? decl.click : undefined}
                 disabled={disabled}
             >
                 {typeof decl.icon === "string" ? <i className={makeIconClass(decl.icon, true, { spin })} /> : decl.icon}

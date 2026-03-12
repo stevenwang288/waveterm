@@ -21,6 +21,7 @@ import * as jotai from "jotai";
 import * as React from "react";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
+import { clampRemoteGuiSplitPct } from "./remote-gui";
 import { computeTheme } from "./termutil";
 import { TermWrap } from "./termwrap";
 import "./xterm.css";
@@ -150,7 +151,12 @@ const TermVDomNode = ({ blockId, model }: TerminalViewProps) => {
     return <TermVDomNodeSingleId key={vdomBlockId} vdomBlockId={vdomBlockId} blockId={blockId} model={model} />;
 };
 
-const TermGuiNodeSingleId = ({ guiBlockId, blockId, model }: TerminalViewProps & { guiBlockId: string }) => {
+const TermGuiNodeSingleId = ({
+    guiBlockId,
+    blockId,
+    model,
+    style,
+}: TerminalViewProps & { guiBlockId: string; style?: React.CSSProperties }) => {
     React.useEffect(() => {
         const unsub = waveEventSubscribeSingle({
             eventType: "blockclose",
@@ -173,13 +179,20 @@ const TermGuiNodeSingleId = ({ guiBlockId, blockId, model }: TerminalViewProps &
     const guiNodeModel: BlockNodeModel = React.useMemo(() => {
         const isFocusedAtom = jotai.atom((get) => {
             const termMode = get(model.termMode);
-            return get(model.nodeModel.isFocused) && (termMode === "web" || termMode === "websplit");
+            if (termMode === "web") {
+                return get(model.nodeModel.isFocused);
+            }
+            if (termMode === "websplit") {
+                return get(model.nodeModel.isFocused) && get(model.activeSplitPane) === "gui";
+            }
+            return false;
         });
         return {
             blockId: guiBlockId,
             isFocused: isFocusedAtom,
             isMagnified: jotai.atom(false),
             focusNode: () => {
+                model.setActiveSplitPane("gui");
                 model.nodeModel.focusNode();
             },
             toggleMagnify: () => {},
@@ -191,18 +204,18 @@ const TermGuiNodeSingleId = ({ guiBlockId, blockId, model }: TerminalViewProps &
         };
     }, [guiBlockId, model]);
     return (
-        <div key="webElem" className="term-htmlelem term-gui-elem">
+        <div key="webElem" className="term-htmlelem term-gui-elem" style={style}>
             <SubBlock key="remote-gui" nodeModel={guiNodeModel} />
         </div>
     );
 };
 
-const TermGuiNode = ({ blockId, model }: TerminalViewProps) => {
+const TermGuiNode = ({ blockId, model, style }: TerminalViewProps & { style?: React.CSSProperties }) => {
     const guiBlockId = jotai.useAtomValue(model.guiBlockId);
     if (guiBlockId == null) {
         return null;
     }
-    return <TermGuiNodeSingleId key={guiBlockId} guiBlockId={guiBlockId} blockId={blockId} model={model} />;
+    return <TermGuiNodeSingleId key={guiBlockId} guiBlockId={guiBlockId} blockId={blockId} model={model} style={style} />;
 };
 
 const TermToolbarVDomNode = ({ blockId, model }: TerminalViewProps) => {
@@ -223,6 +236,8 @@ const TermToolbarVDomNode = ({ blockId, model }: TerminalViewProps) => {
 const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => {
     const viewRef = React.useRef<HTMLDivElement>(null);
     const connectElemRef = React.useRef<HTMLDivElement>(null);
+    const termBodyRef = React.useRef<HTMLDivElement>(null);
+    const splitHandleRef = React.useRef<HTMLDivElement>(null);
     const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
     const termSettingsAtom = getSettingsPrefixAtom("term");
     const termSettings = jotai.useAtomValue(termSettingsAtom);
@@ -231,12 +246,24 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         termMode = "term";
     }
     const termModeRef = React.useRef(termMode);
+    const [remoteGuiSplitPct, setRemoteGuiSplitPct] = React.useState(() =>
+        clampRemoteGuiSplitPct(Number((blockData?.meta as any)?.["term:guiwidth"] ?? 0.5))
+    );
+    const [splitResizePointerId, setSplitResizePointerId] = React.useState<number | null>(null);
+
+    React.useEffect(() => {
+        if (splitResizePointerId != null) {
+            return;
+        }
+        setRemoteGuiSplitPct(clampRemoteGuiSplitPct(Number((blockData?.meta as any)?.["term:guiwidth"] ?? 0.5)));
+    }, [blockData?.meta?.["term:guiwidth"], splitResizePointerId]);
 
     const tabModel = useTabModel();
     const termFontSize = jotai.useAtomValue(model.fontSizeAtom);
     const fullConfig = globalStore.get(atoms.fullConfigAtom);
     const connFontFamily = fullConfig.connections?.[blockData?.meta?.connection]?.["term:fontfamily"];
     const isFocused = jotai.useAtomValue(model.nodeModel.isFocused);
+    const activeSplitPane = jotai.useAtomValue(model.activeSplitPane);
     const isMagnified = jotai.useAtomValue(model.nodeModel.isMagnified);
     const isMI = jotai.useAtomValue(tabModel.isTermMultiInput);
     const isBasicTerm = termMode != "vdom" && blockData?.meta?.controller != "cmd"; // needs to match isBasicTerm
@@ -412,12 +439,101 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     }, [isMagnified]);
 
     React.useEffect(() => {
-        if (termModeRef.current != "term" && termMode == "term") {
+        const prevTermMode = termModeRef.current;
+        if (termMode === "web") {
+            model.setActiveSplitPane("gui");
+        } else if (termMode === "term") {
+            model.setActiveSplitPane("term");
+        } else if (termMode === "websplit" && prevTermMode !== "websplit") {
+            model.setActiveSplitPane(prevTermMode === "web" ? "gui" : "term");
+        }
+        if (prevTermMode != "term" && termMode == "term") {
             // focus the terminal
             model.giveFocus();
         }
         termModeRef.current = termMode;
+    }, [model, termMode]);
+
+    const computeRemoteGuiSplitPct = React.useCallback((clientX: number): number | null => {
+        const container = termBodyRef.current;
+        if (!container) {
+            return null;
+        }
+        const rect = container.getBoundingClientRect();
+        if (!Number.isFinite(rect.width) || rect.width <= 0) {
+            return null;
+        }
+        return clampRemoteGuiSplitPct((clientX - rect.left) / rect.width);
+    }, []);
+
+    const persistRemoteGuiSplitPct = React.useCallback(
+        async (value: number) => {
+            await RpcApi.SetMetaCommand(TabRpcClient, {
+                oref: WOS.makeORef("block", blockId),
+                meta: {
+                    "term:guiwidth": clampRemoteGuiSplitPct(value),
+                } as any,
+            });
+        },
+        [blockId]
+    );
+
+    const startRemoteGuiSplitResize = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        if (termMode !== "websplit") {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        splitHandleRef.current?.setPointerCapture(event.pointerId);
     }, [termMode]);
+
+    const handleRemoteGuiSplitPointerCapture = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        setSplitResizePointerId(event.pointerId);
+    }, []);
+
+    const handleRemoteGuiSplitPointerMove = React.useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            if (splitResizePointerId == null || splitResizePointerId !== event.pointerId) {
+                return;
+            }
+            const nextPct = computeRemoteGuiSplitPct(event.clientX);
+            if (nextPct != null) {
+                setRemoteGuiSplitPct(nextPct);
+            }
+        },
+        [computeRemoteGuiSplitPct, splitResizePointerId]
+    );
+
+    const handleRemoteGuiSplitPointerRelease = React.useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            if (splitResizePointerId == null || splitResizePointerId !== event.pointerId) {
+                return;
+            }
+            const nextPct = computeRemoteGuiSplitPct(event.clientX) ?? remoteGuiSplitPct;
+            setSplitResizePointerId(null);
+            setRemoteGuiSplitPct(nextPct);
+            fireAndForget(persistRemoteGuiSplitPct(nextPct));
+        },
+        [computeRemoteGuiSplitPct, persistRemoteGuiSplitPct, remoteGuiSplitPct, splitResizePointerId]
+    );
+
+    React.useEffect(() => {
+        if (termMode !== "websplit") {
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            model.termRef.current?.handleResize_debounced();
+            window.dispatchEvent(new Event("resize"));
+        }, 0);
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [model, remoteGuiSplitPct, termMode]);
+
+    const termPaneStyle = termMode === "websplit" ? { flexBasis: `${remoteGuiSplitPct * 100}%` } : undefined;
+    const guiPaneStyle = termMode === "websplit" ? { flexBasis: `${(1 - remoteGuiSplitPct) * 100}%` } : undefined;
+    const termPaneActive = termMode === "websplit" && isFocused && activeSplitPane === "term";
+    const guiPaneActive = termMode === "websplit" && isFocused && activeSplitPane === "gui";
 
     React.useEffect(() => {
         if (isMI && isBasicTerm && isFocused && model.termRef.current != null) {
@@ -462,6 +578,18 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         },
         [model]
     );
+    const activateTermPane = React.useCallback(() => {
+        if (!isFocused) {
+            model.nodeModel.focusNode();
+        }
+        model.setActiveSplitPane("term");
+    }, [isFocused, model]);
+    const activateGuiPane = React.useCallback(() => {
+        if (!isFocused) {
+            model.nodeModel.focusNode();
+        }
+        model.setActiveSplitPane("gui");
+    }, [isFocused, model]);
 
     return (
         <div className={clsx("view-term", "term-mode-" + termMode)} ref={viewRef} onContextMenu={handleContextMenu}>
@@ -470,16 +598,38 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
             <TermThemeUpdater blockId={blockId} model={model} termRef={model.termRef} />
             <TermStickers config={stickerConfig} />
             <TermToolbarVDomNode key="vdom-toolbar" blockId={blockId} model={model} />
-            <div className="term-body">
+            <div className="term-body" ref={termBodyRef}>
                 <TermVDomNode key="vdom" blockId={blockId} model={model} />
-                <TermGuiNode key="remote-gui" blockId={blockId} model={model} />
-                <div key="conntectElem" className="term-connectelem" ref={connectElemRef}>
+                <div
+                    key="conntectElem"
+                    className={clsx("term-connectelem", "term-split-pane", { "split-active": termPaneActive })}
+                    ref={connectElemRef}
+                    style={termPaneStyle}
+                    onPointerDown={activateTermPane}
+                    onFocusCapture={activateTermPane}
+                >
                     <div className="term-scrollbar-show-observer" onPointerOver={onScrollbarShowObserver} />
                     <div
                         ref={scrollbarHideObserverRef}
                         className="term-scrollbar-hide-observer"
                         onPointerOver={onScrollbarHideObserver}
                     />
+                </div>
+                <div
+                    ref={splitHandleRef}
+                    className="term-gui-divider"
+                    onPointerDown={startRemoteGuiSplitResize}
+                    onGotPointerCapture={handleRemoteGuiSplitPointerCapture}
+                    onPointerMove={handleRemoteGuiSplitPointerMove}
+                    onLostPointerCapture={handleRemoteGuiSplitPointerRelease}
+                />
+                <div
+                    className={clsx("term-split-pane", "term-gui-pane-wrap", { "split-active": guiPaneActive })}
+                    style={guiPaneStyle}
+                    onPointerDown={activateGuiPane}
+                    onFocusCapture={activateGuiPane}
+                >
+                    <TermGuiNode key="remote-gui" blockId={blockId} model={model} />
                 </div>
             </div>
             <Search {...searchProps} />

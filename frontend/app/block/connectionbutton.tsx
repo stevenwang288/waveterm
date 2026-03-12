@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { computeConnColorNum } from "@/app/block/blockutil";
+import { getTerminalConnectionDisplayLabel } from "@/app/block/connectionbutton-label";
+import { buildTerminalLabelContextMenu } from "@/app/block/connectionbutton-menu";
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { getConnStatusAtom, getLocalHostDisplayNameAtom, pushNotification, recordTEvent } from "@/app/store/global";
+import { createBlock, getConnStatusAtom, getLocalHostDisplayNameAtom, pushNotification, recordTEvent } from "@/app/store/global";
 import { IconButton } from "@/element/iconbutton";
 import * as util from "@/util/util";
 import * as jotai from "jotai";
@@ -17,10 +19,9 @@ interface ConnectionButtonProps {
     isTerminalBlock?: boolean;
     compact?: boolean;
     terminalLabel?: string;
+    terminalCwd?: string;
     unread?: boolean;
     onTerminalLabelDoubleClick?: () => void;
-    showRemoteGuiButton?: boolean;
-    remoteGuiActive?: boolean;
 }
 
 export const ConnectionButton = React.memo(
@@ -31,20 +32,19 @@ export const ConnectionButton = React.memo(
             isTerminalBlock,
             compact,
             terminalLabel,
+            terminalCwd,
             unread,
             onTerminalLabelDoubleClick,
-            showRemoteGuiButton,
-            remoteGuiActive,
         }: ConnectionButtonProps, ref) => {
             const { t } = useTranslation();
             const [, setConnModalOpen] = jotai.useAtom(changeConnModalAtom);
             const clickTimeoutRef = React.useRef<number | null>(null);
-            const isTerminalPathOnly = Boolean(isTerminalBlock);
             const isLocal = util.isLocalConnName(connection);
             const connStatusAtom = getConnStatusAtom(connection);
             const connStatus = jotai.useAtomValue(connStatusAtom);
             const localName = jotai.useAtomValue(getLocalHostDisplayNameAtom());
             const terminalLabelTrimmed = isTerminalBlock && typeof terminalLabel === "string" ? terminalLabel.trim() : "";
+            const terminalCwdTrimmed = isTerminalBlock && typeof terminalCwd === "string" ? terminalCwd.trim() : "";
             let showDisconnectedSlash = false;
             let connIconElem: React.ReactNode = null;
             const connColorNum = computeConnColorNum(connStatus);
@@ -125,22 +125,7 @@ export const ConnectionButton = React.memo(
             let shouldSpin = false;
             let connDisplayName: string = null;
             let extraDisplayNameClassName = "";
-            if (isTerminalPathOnly) {
-                titleText = terminalLabelTrimmed || null;
-                connDisplayName = terminalLabelTrimmed;
-                if (showRemoteGuiButton) {
-                    color = remoteGuiActive ? "var(--success-color)" : "var(--color-secondary)";
-                    connIconElem = (
-                        <i
-                            className={util.cn(util.makeIconClass("desktop", false), "fa-stack-1x mr-[2px]")}
-                            style={{ color }}
-                        />
-                    );
-                } else {
-                    connIconElem = null;
-                    color = "var(--color-secondary)";
-                }
-            } else if (isLocal) {
+            if (isLocal) {
                 color = "var(--color-secondary)";
                 const localDefaultName = connection === "local:gitbash" ? "Git Bash" : localName;
                 if (connection === "local:gitbash") {
@@ -208,8 +193,22 @@ export const ConnectionButton = React.memo(
 
             }
 
+            if (isTerminalBlock) {
+                const terminalDisplayLabel = getTerminalConnectionDisplayLabel({
+                    isLocal,
+                    connection,
+                    connectionDisplayName: connDisplayName || connection,
+                    terminalLabel: terminalLabelTrimmed,
+                });
+                titleText = terminalDisplayLabel || titleText;
+                connDisplayName = terminalDisplayLabel || connDisplayName || connection;
+                if (isLocal) {
+                    extraDisplayNameClassName = "text-muted group-hover:text-secondary";
+                }
+            }
+
             const wshProblem = connection && !connStatus?.wshenabled && connStatus?.status == "connected";
-            const showNoWshButton = wshProblem && !isLocal;
+            const showNoWshButton = wshProblem && !isLocal && !isTerminalBlock;
 
             const handleTerminalLabelContextMenu = React.useCallback(
                 (e: React.MouseEvent) => {
@@ -218,15 +217,17 @@ export const ConnectionButton = React.memo(
                     }
                     e.preventDefault();
                     e.stopPropagation();
-                    const menu: ContextMenuItem[] = [
-                        {
-                            label: t("preview.copyFullPath"),
-                            click: () => util.fireAndForget(() => navigator.clipboard.writeText(terminalLabelTrimmed)),
-                        },
-                    ];
+                    const menu = buildTerminalLabelContextMenu({
+                        connection,
+                        terminalCwd: terminalCwdTrimmed,
+                        terminalLabel: terminalLabelTrimmed,
+                        t,
+                        createTermBlock: createBlock,
+                        copyText: (text) => util.fireAndForget(() => navigator.clipboard.writeText(text)),
+                    });
                     ContextMenuModel.showContextMenu(menu, e);
                 },
-                [isTerminalBlock, t, terminalLabelTrimmed]
+                [connection, isTerminalBlock, t, terminalCwdTrimmed, terminalLabelTrimmed]
             );
 
             return (
@@ -235,11 +236,11 @@ export const ConnectionButton = React.memo(
                         ref={ref}
                         className={util.cn(
                             "group flex items-center flex-nowrap overflow-hidden text-ellipsis min-w-0 font-normal text-primary rounded-sm",
-                            isTerminalPathOnly ? "cursor-default" : "hover:bg-highlightbg cursor-pointer",
-                            unread && !isTerminalPathOnly && "connection-unread",
+                            "hover:bg-highlightbg cursor-pointer",
+                            unread && "connection-unread",
                             compact && "w-7 h-7 justify-center"
                         )}
-                        onClick={isTerminalPathOnly ? undefined : clickHandler}
+                        onClick={clickHandler}
                         onDoubleClick={handleContainerDoubleClick}
                         title={titleText}
                     >
@@ -261,7 +262,7 @@ export const ConnectionButton = React.memo(
                             </span>
                         )}
                         {!compact &&
-                            (connDisplayName || isTerminalPathOnly ? (
+                            (connDisplayName ? (
                                 <div
                                     className={util.cn(
                                         "flex-[1_2_auto] overflow-hidden pr-1 ellipsis",

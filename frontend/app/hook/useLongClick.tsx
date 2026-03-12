@@ -40,7 +40,7 @@ export const useLongClick = (ref, onClick, onLongClick, disabled = false, ms = 3
     useEffect(() => {
         const element = ref.current;
 
-        if (!element || disabled) return;
+        if (!element || disabled || onLongClick == null) return;
 
         element.addEventListener("mousedown", startPress);
         element.addEventListener("mouseup", stopPress);

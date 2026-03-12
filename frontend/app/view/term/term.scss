@@ -72,6 +72,56 @@
         overflow: hidden;
     }
 
+    .term-split-pane {
+        position: relative;
+        min-height: 0;
+        min-width: 0;
+        border-radius: calc(var(--block-border-radius) - 2px);
+
+        &::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border-radius: inherit;
+            box-shadow: inset 0 0 0 1px rgb(from var(--border-color) r g b / 10%);
+            transition:
+                box-shadow 120ms ease,
+                opacity 120ms ease;
+            opacity: 0;
+        }
+
+        &.split-active::after {
+            opacity: 1;
+            box-shadow:
+                inset 0 0 0 4px rgb(from var(--accent-color) r g b / 90%),
+                0 0 0 1px rgb(from var(--accent-color) r g b / 20%);
+        }
+    }
+
+    .term-gui-divider {
+        display: none;
+        width: 6px;
+        flex: 0 0 6px;
+        cursor: col-resize;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+
+        &::before {
+            content: "";
+            width: 1px;
+            height: calc(100% - 10px);
+            background: var(--border-color);
+            transition: background-color 120ms ease;
+        }
+
+        &:hover::before,
+        &:active::before {
+            background: var(--accent-color);
+        }
+    }
+
     .term-htmlelem {
         display: flex;
         flex-direction: column;
@@ -86,6 +136,12 @@
         }
     }
 
+    .term-gui-pane-wrap {
+        display: none;
+        min-height: 0;
+        min-width: 0;
+    }
+
     &.term-mode-term {
         .term-body {
             flex-direction: column;
@@ -94,7 +150,7 @@
             display: flex;
         }
         .term-vdom-elem,
-        .term-gui-elem {
+        .term-gui-pane-wrap {
             display: none;
         }
     }
@@ -109,7 +165,7 @@
         .term-vdom-elem {
             display: flex;
         }
-        .term-gui-elem {
+        .term-gui-pane-wrap {
             display: none;
         }
 
@@ -130,9 +186,19 @@
         .term-vdom-elem {
             display: none;
         }
+        .term-gui-pane-wrap {
+            display: flex;
+            flex: 1 1 auto;
+            width: 100%;
+            height: auto;
+            min-height: 0;
+            min-width: 0;
+            margin: 5px 5px 5px 4px;
+        }
         .term-gui-elem {
             display: flex;
-            margin: 5px 5px 5px 4px;
+            flex: 1 1 auto;
+            margin: 0;
         }
     }
 
@@ -143,17 +209,27 @@
         }
         .term-connectelem {
             display: flex;
-            flex: 1 1 50%;
+            flex: 0 0 50%;
             margin: 5px 2px 5px 4px;
         }
         .term-vdom-elem {
             display: none;
         }
+        .term-gui-divider {
+            display: flex;
+            margin: 5px 0;
+        }
+        .term-gui-pane-wrap {
+            display: flex;
+            flex: 0 0 50%;
+            min-height: 0;
+            min-width: 0;
+            margin: 5px 4px 5px 2px;
+        }
         .term-gui-elem {
             display: flex;
-            flex: 1 1 50%;
-            margin: 5px 4px 5px 2px;
-            border-left: 1px solid var(--border-color);
+            flex: 1 1 auto;
+            margin: 0;
         }
     }
 

@@ -2,7 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getLayoutModelForStaticTab } from "@/layout/index";
-import { atoms, createBlockSplitHorizontally, createBlockSplitVertically, getApi, getFocusedBlockId, globalStore, replaceBlock, WOS } from "@/store/global";
+import {
+    atoms,
+    createBlockSplitHorizontally,
+    createBlockSplitVertically,
+    getApi,
+    getFocusedBlockId,
+    globalStore,
+    replaceBlock,
+    WOS,
+} from "@/store/global";
 import { ObjectService, WorkspaceService } from "@/store/services";
 import { fireAndForget, isBlank } from "@/util/util";
 
@@ -38,11 +47,6 @@ type PendingCliLayout = {
 
 const PENDING_KEY_PREFIX = "waveterm:pending-cli-layout:";
 const PENDING_VERSION = 1 as const;
-const DEFAULT_PVE_TAB_NAME = "PVE";
-const DEFAULT_PVE_ORIGIN = "https://192.168.1.250:8006";
-const DEFAULT_PVE_URL = "https://192.168.1.250:8006/#v1:0:=node%2FVUModule:4:::::8::";
-const DEFAULT_PVE_WEB_PARTITION = "persist:pve-wall";
-
 function makePendingKey(tabId: string): string {
     return `${PENDING_KEY_PREFIX}${tabId}`;
 }
@@ -345,41 +349,6 @@ export async function openCliLayoutInNewTab(state: CliLayoutState, tabName: stri
         return;
     }
     getApi().setActiveTab(newTabId);
-}
-
-export async function openPveInNewTab(): Promise<void> {
-    try {
-        await getApi().pveEnsureAuth({
-            partition: DEFAULT_PVE_WEB_PARTITION,
-            origin: DEFAULT_PVE_ORIGIN,
-            lang: "zh_CN",
-        });
-    } catch {
-        // ignore auth prime errors, fall back to normal login page
-    }
-
-    const slots: CliLayoutSlot[] = [
-        {
-        type: "web",
-        title: DEFAULT_PVE_TAB_NAME,
-        url: DEFAULT_PVE_URL,
-        hideNav: true,
-        zoom: 0.9,
-        partition: DEFAULT_PVE_WEB_PARTITION,
-        },
-    ];
-    await openCliLayoutInNewTab(
-        {
-            rows: 1,
-            cols: 1,
-            paths: [],
-            commands: [],
-            slots,
-            updatedTs: Date.now(),
-        },
-        DEFAULT_PVE_TAB_NAME,
-        "pve"
-    );
 }
 
 export function maybeApplyPendingCliLayout(tabId: string): void {

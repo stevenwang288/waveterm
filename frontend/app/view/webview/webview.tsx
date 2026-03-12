@@ -589,7 +589,10 @@ export class WebViewModel implements ViewModel {
      * @param url The URL that has been navigated to.
      */
     handleNavigate(url: string) {
-        fireAndForget(() => ObjectService.UpdateObjectMeta(WOS.makeORef("block", this.blockId), { url }));
+        const lockUrl = Boolean(globalStore.get(this.blockAtom)?.meta?.["web:lockurl"]);
+        if (!lockUrl) {
+            fireAndForget(() => ObjectService.UpdateObjectMeta(WOS.makeORef("block", this.blockId), { url }));
+        }
         globalStore.set(this.url, url);
         if (this.searchAtoms) {
             globalStore.set(this.searchAtoms.isOpen, false);

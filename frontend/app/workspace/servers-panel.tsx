@@ -1,11 +1,12 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { computeConnColorNum } from "@/app/block/blockutil";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { Modal } from "@/app/modals/modal";
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { atoms, createBlock, getApi, getLocalHostDisplayNameAtom, pushNotification } from "@/store/global";
+import { atoms, createBlock, getApi, getConnStatusAtom, getLocalHostDisplayNameAtom, pushNotification } from "@/store/global";
 import { fireAndForget, isBlank } from "@/util/util";
 import { useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -19,6 +20,7 @@ type ServerEntry = {
     sublabel?: string;
     source: "local" | RemoteSource;
     pveVmid?: number;
+    pveMachine?: PveMachineInfoLocal;
 };
 
 type PveMachineInfoLocal = {
@@ -29,7 +31,6 @@ type PveMachineInfoLocal = {
     status?: string;
     sshHost?: string;
     ipHints?: string[];
-    guiUrl: string;
 };
 
 type ConnectionFormMode = "add" | "edit" | "adopt";
@@ -99,6 +100,25 @@ function normalizeHostForMatch(host: string): string {
     return host.trim().replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
 }
 
+function uniqNonBlank(values: string[]): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const value of values) {
+        const normalized = String(value ?? "").trim();
+        if (normalized === "" || seen.has(normalized)) {
+            continue;
+        }
+        seen.add(normalized);
+        result.push(normalized);
+    }
+    return result;
+}
+
+function extractIpv4Hints(value: string): string[] {
+    const matches = String(value ?? "").match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? [];
+    return uniqNonBlank(matches.map((item) => normalizeHostForMatch(item)));
+}
+
 function getManagedConnectionHost(connection: string, connConfig?: ConnKeywords): string {
     const explicitHost = String(connConfig?.["ssh:hostname"] ?? "").trim();
     if (explicitHost !== "") {
@@ -110,6 +130,32 @@ function getManagedConnectionHost(connection: string, connConfig?: ConnKeywords)
 function getConnectionVmid(connConfig?: ConnKeywords): number {
     const vmid = Number((connConfig as any)?.["pve:vmid"] ?? 0);
     return Number.isFinite(vmid) && vmid > 0 ? vmid : 0;
+}
+
+function getConnectionHostCandidates(connection: string, connConfig?: ConnKeywords): string[] {
+    const parsed = parseConnectionName(connection);
+    return uniqNonBlank([
+        normalizeHostForMatch(String(connConfig?.["ssh:hostname"] ?? "")),
+        normalizeHostForMatch(parsed.host),
+        ...extractIpv4Hints(connection),
+        ...extractIpv4Hints(String(connConfig?.["ssh:hostname"] ?? "")),
+    ]);
+}
+
+function getMachineHostCandidates(machine: PveMachineInfoLocal): string[] {
+    return uniqNonBlank([
+        normalizeHostForMatch(machine.sshHost ?? ""),
+        ...(Array.isArray(machine.ipHints) ? machine.ipHints : []).map((ip) => normalizeHostForMatch(ip)),
+    ]);
+}
+
+function doesConnectionMatchMachine(connection: string, connConfig: ConnKeywords | undefined, machine: PveMachineInfoLocal): boolean {
+    if (getConnectionVmid(connConfig) === machine.vmid) {
+        return true;
+    }
+    const connHosts = new Set(getConnectionHostCandidates(connection, connConfig));
+    const machineHosts = getMachineHostCandidates(machine);
+    return machineHosts.some((host) => connHosts.has(host));
 }
 
 function scorePveEntry(entry: ServerEntry, connConfig: ConnKeywords | undefined, machine: PveMachineInfoLocal): number {
@@ -141,6 +187,152 @@ function scorePveEntry(entry: ServerEntry, connConfig: ConnKeywords | undefined,
     score -= connectionName.length / 1000;
     return score;
 }
+
+function scoreConnectionCandidate(
+    connection: string,
+    connConfig: ConnKeywords | undefined,
+    source: RemoteSource,
+    machine: PveMachineInfoLocal
+): number {
+    const entry: ServerEntry = {
+        connection,
+        label: connection,
+        source,
+        pveVmid: getConnectionVmid(connConfig) || undefined,
+    };
+    let score = scorePveEntry(entry, connConfig, machine);
+    if (source === "managed") {
+        score += 25;
+    }
+    if (!isBlank(parseConnectionName(connection).user) || !isBlank(String(connConfig?.["ssh:user"] ?? ""))) {
+        score += 5;
+    }
+    return score;
+}
+
+function decorateEntryWithMachine(
+    entry: ServerEntry,
+    fullConfig: FullConfigType | null,
+    pveMachines: PveMachineInfoLocal[] | null
+): ServerEntry {
+    if (pveMachines == null || isBlank(entry.connection)) {
+        return entry;
+    }
+    const connConfig = fullConfig?.connections?.[entry.connection ?? ""] as ConnKeywords | undefined;
+    const matchedMachine = pveMachines.find((machine) => doesConnectionMatchMachine(entry.connection ?? "", connConfig, machine));
+    if (matchedMachine == null) {
+        return entry;
+    }
+    const label = matchedMachine.name || entry.label;
+    const sublabel = label !== (entry.connection ?? "") ? entry.connection : entry.sublabel;
+    return {
+        ...entry,
+        label,
+        sublabel,
+        pveVmid: matchedMachine.vmid,
+        pveMachine: matchedMachine,
+    };
+}
+
+const ServerRow = memo(
+    ({
+        entry,
+        iconClassName,
+        tag,
+        onOpen,
+        onEdit,
+        onDelete,
+        onAdopt,
+    }: {
+        entry: ServerEntry;
+        iconClassName: string;
+        tag?: string;
+        onOpen: (entry: ServerEntry) => void;
+        onEdit?: (entry: ServerEntry) => void;
+        onDelete?: (entry: ServerEntry) => void;
+        onAdopt?: (entry: ServerEntry) => void;
+    }) => {
+        const connStatus = useAtomValue(getConnStatusAtom(entry.connection ?? ""));
+        const connColorNum = computeConnColorNum(connStatus);
+        const machineStatus = String(entry.pveMachine?.status ?? "").trim().toLowerCase();
+        let statusBadge: React.ReactNode = null;
+
+        if (!isBlank(entry.connection) && connStatus?.status === "connected") {
+            statusBadge = (
+                <span
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: `var(--conn-icon-color-${connColorNum})` }}
+                    title="connected"
+                />
+            );
+        } else if (!isBlank(entry.connection) && (connStatus?.status === "error" || !isBlank(connStatus?.error))) {
+            statusBadge = (
+                <span className="text-[10px] text-red-400" title={connStatus?.error || connStatus?.status}>
+                    <i className="fa fa-triangle-exclamation" />
+                </span>
+            );
+        } else if (machineStatus !== "" && machineStatus !== "running") {
+            statusBadge = (
+                <span className="text-[10px] text-amber-400" title={machineStatus}>
+                    {machineStatus}
+                </span>
+            );
+        }
+
+        return (
+            <div
+                className="group flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer"
+                onClick={() => onOpen(entry)}
+                title={entry.label}
+            >
+                <i className={`${iconClassName} text-secondary`} />
+                <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="truncate">{entry.label}</div>
+                    {entry.sublabel && <div className="truncate text-[10px] text-secondary/70">{entry.sublabel}</div>}
+                </div>
+                {statusBadge}
+                {tag && <span className="text-[10px] text-secondary/70">{tag}</span>}
+                {onAdopt && (
+                    <button
+                        className="text-[11px] text-secondary hover:text-accent opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onAdopt(entry);
+                        }}
+                        title="adopt"
+                    >
+                        <i className="fa fa-plus" />
+                    </button>
+                )}
+                {onEdit && (
+                    <button
+                        className="text-[11px] text-secondary hover:text-primary opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit(entry);
+                        }}
+                        title="edit"
+                    >
+                        <i className="fa fa-pen" />
+                    </button>
+                )}
+                {onDelete && (
+                    <button
+                        className="text-[11px] text-secondary hover:text-red-400 opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(entry);
+                        }}
+                        title="delete"
+                    >
+                        <i className="fa fa-trash" />
+                    </button>
+                )}
+            </div>
+        );
+    }
+);
+ServerRow.displayName = "ServerRow";
 
 const ServersPanel = memo(() => {
     const { t } = useTranslation();
@@ -219,9 +411,10 @@ const ServersPanel = memo(() => {
     const localEntries = useMemo<ServerEntry[]>(() => [{ label: localHostLabel, source: "local" }], [localHostLabel]);
 
     const remoteEntries = useMemo<ServerEntry[]>(() => {
-        return connections
-            .filter((item) => !isBlank(item) && item !== "local")
-            .sort((a, b) => a.localeCompare(b))
+        const allConnectionNames = uniqNonBlank(connections)
+            .filter((item) => !isBlank(item) && item !== "local" && !item.startsWith("wsl://"))
+            .sort((a, b) => a.localeCompare(b));
+        return allConnectionNames
             .filter((connection) => {
                 const connConfig = fullConfig?.connections?.[connection] as ConnKeywords | undefined;
                 return !Boolean((connConfig as any)?.["display:hidden"]);
@@ -241,43 +434,98 @@ const ServersPanel = memo(() => {
 
     const managedEntries = useMemo(() => {
         const baseEntries = remoteEntries.filter((entry) => entry.source === "managed");
-        const nonPveEntries = baseEntries.filter((entry) => !entry.pveVmid);
         if (pveMachines == null) {
-            return [...nonPveEntries, ...baseEntries.filter((entry) => entry.pveVmid)];
-        }
-
-        const machineByVmid = new Map<number, PveMachineInfoLocal>();
-        for (const machine of pveMachines) {
-            machineByVmid.set(machine.vmid, machine);
+            return baseEntries;
         }
 
         const bestByVmid = new Map<number, { entry: ServerEntry; score: number }>();
         for (const entry of baseEntries) {
-            if (!entry.pveVmid) {
-                continue;
+            const connConfig = fullConfig?.connections?.[entry.connection ?? ""] as ConnKeywords | undefined;
+            for (const machine of pveMachines) {
+                if (!doesConnectionMatchMachine(entry.connection ?? "", connConfig, machine)) {
+                    continue;
+                }
+                const score = scorePveEntry(entry, connConfig, machine);
+                const prev = bestByVmid.get(machine.vmid);
+                if (prev == null || score > prev.score) {
+                    bestByVmid.set(machine.vmid, { entry, score });
+                }
             }
-            const machine = machineByVmid.get(entry.pveVmid);
-            if (!machine) {
+        }
+
+        const usedConnections = new Set<string>();
+        const pveEntries = pveMachines
+            .map((machine) => {
+                const matched = bestByVmid.get(machine.vmid)?.entry;
+                if (matched == null) {
+                    return null;
+                }
+                usedConnections.add(matched.connection ?? "");
+                return decorateEntryWithMachine(matched, fullConfig, pveMachines);
+            })
+            .filter((entry): entry is ServerEntry => entry != null);
+
+        const unmatchedManaged = baseEntries
+            .filter((entry) => !usedConnections.has(entry.connection ?? ""))
+            .map((entry) => decorateEntryWithMachine(entry, fullConfig, pveMachines))
+            .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }));
+
+        return [...pveEntries, ...unmatchedManaged];
+    }, [fullConfig, pveMachines, remoteEntries]);
+    const discoveredEntries = useMemo(() => {
+        if (pveMachines == null) {
+            return [];
+        }
+        const baseDiscovered = remoteEntries.filter((entry) => entry.source === "discovered");
+        const managedHosts = new Set<string>();
+        const managedVmids = new Set<number>();
+
+        for (const entry of managedEntries) {
+            if (!isBlank(entry.connection)) {
+                const connConfig = fullConfig?.connections?.[entry.connection ?? ""] as ConnKeywords | undefined;
+                for (const host of getConnectionHostCandidates(entry.connection ?? "", connConfig)) {
+                    managedHosts.add(host);
+                }
+            }
+            if (entry.pveVmid) {
+                managedVmids.add(entry.pveVmid);
+            }
+        }
+
+        const filteredDiscovered = baseDiscovered
+            .map((entry) => decorateEntryWithMachine(entry, fullConfig, pveMachines))
+            .filter((entry) => {
+                if (entry.pveMachine == null) {
+                    return false;
+                }
+                const connConfig = fullConfig?.connections?.[entry.connection ?? ""] as ConnKeywords | undefined;
+                const hosts = getConnectionHostCandidates(entry.connection ?? "", connConfig);
+                if (hosts.some((host) => managedHosts.has(host))) {
+                    return false;
+                }
+                if (entry.pveVmid && managedVmids.has(entry.pveVmid)) {
+                    return false;
+                }
+                return true;
+            });
+
+        const bestByVmid = new Map<number, { entry: ServerEntry; score: number }>();
+        for (const entry of filteredDiscovered) {
+            if (!entry.pveMachine || !entry.pveVmid) {
                 continue;
             }
             const connConfig = fullConfig?.connections?.[entry.connection ?? ""] as ConnKeywords | undefined;
-            const score = scorePveEntry(entry, connConfig, machine);
+            const score = scoreConnectionCandidate(entry.connection ?? "", connConfig, "discovered", entry.pveMachine);
             const prev = bestByVmid.get(entry.pveVmid);
             if (prev == null || score > prev.score) {
                 bestByVmid.set(entry.pveVmid, { entry, score });
             }
         }
 
-        const pveEntries = pveMachines
-            .map((machine) => bestByVmid.get(machine.vmid)?.entry)
-            .filter((entry): entry is ServerEntry => entry != null);
-
-        return [...nonPveEntries, ...pveEntries];
-    }, [fullConfig, pveMachines, remoteEntries]);
-    const discoveredEntries = useMemo(
-        () => remoteEntries.filter((entry) => entry.source === "discovered"),
-        [remoteEntries]
-    );
+        return Array.from(bestByVmid.values())
+            .map((item) => item.entry)
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }, [fullConfig, managedEntries, pveMachines, remoteEntries]);
 
     const openServer = useCallback((entry: ServerEntry) => {
         const meta: Record<string, any> = {
@@ -341,6 +589,14 @@ const ServersPanel = memo(() => {
                     }
                 }
 
+                const connectionCandidates = uniqNonBlank([...Array.from(managedConnectionSet), ...connections])
+                    .filter((connName) => !isBlank(connName) && connName !== "local" && !connName.startsWith("wsl://"))
+                    .map((connName) => ({
+                        connection: connName,
+                        connConfig: existingConfigs[connName] as ConnKeywords | undefined,
+                        source: managedConnectionSet.has(connName) ? ("managed" as const) : ("discovered" as const),
+                    }));
+
                 let updatedCount = 0;
                 let createdCount = 0;
                 let skippedCount = 0;
@@ -348,28 +604,31 @@ const ServersPanel = memo(() => {
                 for (const machine of machines) {
                     const ipHints = Array.isArray(machine.ipHints) ? machine.ipHints : [];
                     const sshHost = String(machine.sshHost ?? ipHints[0] ?? "").trim();
-                    const matchedConnName = ipHints
+                    const matchedConnNameFromConfig = ipHints
                         .map((ipHint) => existingByHost.get(normalizeHostForMatch(ipHint)))
                         .find((value) => !isBlank(value));
+                    const scoredCandidates = connectionCandidates
+                        .filter((candidate) => doesConnectionMatchMachine(candidate.connection, candidate.connConfig, machine))
+                        .map((candidate) => ({
+                            connection: candidate.connection,
+                            score: scoreConnectionCandidate(candidate.connection, candidate.connConfig, candidate.source, machine),
+                        }))
+                        .sort((a, b) => b.score - a.score);
+                    const matchedConnName = scoredCandidates[0]?.connection ?? matchedConnNameFromConfig;
                     const connectionName = matchedConnName || sshHost;
                     if (isBlank(connectionName)) {
                         skippedCount += 1;
                         continue;
                     }
-                    const existingConnConfig = existingConfigs[connectionName] as ConnKeywords | undefined;
                     const nextMeta: Record<string, any> = {
+                        "display:hidden": false,
                         "display:name": machine.name,
                         "pve:vmid": machine.vmid,
                         "pve:node": machine.node,
                         "pve:type": machine.type,
-                        "conn:guiurl": machine.guiUrl,
                     };
                     if (!isBlank(sshHost)) {
                         nextMeta["ssh:hostname"] = sshHost;
-                    }
-                    const existingGuiUrl = String(existingConnConfig?.["conn:guiurl"] ?? "").trim();
-                    if (!isBlank(existingGuiUrl) && !existingGuiUrl.startsWith(DEFAULT_PVE_ORIGIN)) {
-                        delete nextMeta["conn:guiurl"];
                     }
                     await RpcApi.SetConnectionsConfigCommand(
                         TabRpcClient,
@@ -411,7 +670,7 @@ const ServersPanel = memo(() => {
                 setPveRefreshing(false);
             }
         });
-    }, [fullConfig, loadConnections, pveRefreshing, t]);
+    }, [connections, fullConfig, loadConnections, managedConnectionSet, pveRefreshing, t]);
 
     const showPanelContextMenu = useCallback(
         (e: React.MouseEvent) => {
@@ -633,40 +892,14 @@ const ServersPanel = memo(() => {
                             <div className="text-xs text-secondary px-2 py-2">{t("connection.noManagedConnections")}</div>
                         ) : (
                             managedEntries.map((entry) => (
-                                <div
+                                <ServerRow
                                     key={`managed-${entry.connection ?? entry.label}`}
-                                    className="group flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer"
-                                    onClick={() => openServer(entry)}
-                                    title={entry.label}
-                                >
-                                    <i className="fa fa-server text-secondary" />
-                                    <div className="flex-1 min-w-0 overflow-hidden">
-                                        <div className="truncate">{entry.label}</div>
-                                        {entry.sublabel && (
-                                            <div className="truncate text-[10px] text-secondary/70">{entry.sublabel}</div>
-                                        )}
-                                    </div>
-                                    <button
-                                        className="text-[11px] text-secondary hover:text-primary opacity-0 group-hover:opacity-100"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            openEditModal(entry);
-                                        }}
-                                        title={t("connection.editServer")}
-                                    >
-                                        <i className="fa fa-pen" />
-                                    </button>
-                                    <button
-                                        className="text-[11px] text-secondary hover:text-red-400 opacity-0 group-hover:opacity-100"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteServer(entry);
-                                        }}
-                                        title={t("common.delete")}
-                                    >
-                                        <i className="fa fa-trash" />
-                                    </button>
-                                </div>
+                                    entry={entry}
+                                    iconClassName="fa fa-server"
+                                    onOpen={openServer}
+                                    onEdit={openEditModal}
+                                    onDelete={handleDeleteServer}
+                                />
                             ))
                         )}
 
@@ -677,31 +910,14 @@ const ServersPanel = memo(() => {
                             <div className="text-xs text-secondary px-2 py-2">{t("connection.noDiscoveredConnections")}</div>
                         ) : (
                             discoveredEntries.map((entry) => (
-                                <div
+                                <ServerRow
                                     key={`discovered-${entry.connection ?? entry.label}`}
-                                    className="group flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer"
-                                    onClick={() => openServer(entry)}
-                                    title={entry.label}
-                                >
-                                    <i className="fa fa-magnifying-glass text-secondary" />
-                                    <div className="flex-1 min-w-0 overflow-hidden">
-                                        <div className="truncate">{entry.label}</div>
-                                        {entry.sublabel && (
-                                            <div className="truncate text-[10px] text-secondary/70">{entry.sublabel}</div>
-                                        )}
-                                    </div>
-                                    <span className="text-[10px] text-secondary/70">{t("connection.discoveredTag")}</span>
-                                    <button
-                                        className="text-[11px] text-secondary hover:text-accent opacity-0 group-hover:opacity-100"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            openAdoptModal(entry);
-                                        }}
-                                        title={t("connection.addToManagedList")}
-                                    >
-                                        <i className="fa fa-plus" />
-                                    </button>
-                                </div>
+                                    entry={entry}
+                                    iconClassName="fa fa-magnifying-glass"
+                                    tag={t("connection.discoveredTag")}
+                                    onOpen={openServer}
+                                    onAdopt={openAdoptModal}
+                                />
                             ))
                         )}
                     </>

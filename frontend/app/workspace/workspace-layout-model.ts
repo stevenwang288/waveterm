@@ -20,10 +20,17 @@ const AIPANEL_DEFAULTWIDTHRATIO = 0.33;
 const AIPANEL_MINWIDTH = 180;
 const AIPANEL_MAXWIDTHRATIO = 0.95;
 
-export type SidePanelView = "ai" | "favorites" | "servers" | "layouts" | "git";
+export type SidePanelView = "ai" | "history" | "favorites" | "servers" | "layouts" | "git";
 
 function isSidePanelView(value: string): value is SidePanelView {
-    return value === "ai" || value === "favorites" || value === "servers" || value === "layouts" || value === "git";
+    return (
+        value === "ai" ||
+        value === "history" ||
+        value === "favorites" ||
+        value === "servers" ||
+        value === "layouts" ||
+        value === "git"
+    );
 }
 
 class WorkspaceLayoutModel {

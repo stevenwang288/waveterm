@@ -1,6 +1,7 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { LocalPathHistoryModel } from "@/app/store/local-path-history-model";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import {
@@ -527,6 +528,10 @@ function withTerminalDisplayMeta(blockDef: BlockDef): BlockDef {
     const displayCwd = getTerminalDisplayCwd(blockDef.meta as Record<string, any>);
     if (isBlank(displayCwd)) {
         return blockDef;
+    }
+    const connName = typeof blockDef?.meta?.connection === "string" ? String(blockDef.meta.connection).trim() : "";
+    if (isLocalConnName(connName)) {
+        LocalPathHistoryModel.getInstance().recordPath(displayCwd);
     }
     return {
         ...blockDef,

@@ -3,6 +3,7 @@
 
 import type { BlockNodeModel } from "@/app/block/blocktypes";
 import i18next from "@/app/i18n";
+import { LocalPathHistoryModel } from "@/app/store/local-path-history-model";
 import { getFileSubject } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -21,6 +22,7 @@ import {
     WOS,
 } from "@/store/global";
 import * as services from "@/store/services";
+import { extractTerminalDisplayCwdFromBufferLines, getTerminalDisplayCwd } from "@/util/launchcwd";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
 import { base64ToArray, base64ToString, fireAndForget, isBlank, isLocalConnName, stringToBase64 } from "@/util/util";
 import { SearchAddon } from "@xterm/addon-search";
@@ -214,6 +216,7 @@ function handleOsc7Command(data: string, blockId: string, loaded: boolean, termW
     const blockData = globalStore.get(blockAtom);
     const prevPath =
         typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]).trim() : "";
+    const connName = typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
     const shouldUpdateMeta = prevPath !== nextPath;
     if (!loaded) {
         console.log("OSC 7 received before terminal loaded", { blockId, path: nextPath });
@@ -227,6 +230,12 @@ function handleOsc7Command(data: string, blockId: string, loaded: boolean, termW
                     await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
                         "cmd:cwd": nextPath,
                     });
+                    if (isLocalConnName(connName)) {
+                        const displayPath = getTerminalDisplayCwd({ connection: connName, "cmd:cwd": nextPath });
+                        if (!isBlank(displayPath)) {
+                            LocalPathHistoryModel.getInstance().recordPath(displayPath);
+                        }
+                    }
                 }
 
                 const rtInfo = { "shell:hascurcwd": true };
@@ -653,9 +662,22 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                         });
                         fireAndForget(async () => {
                             try {
+                                const connName =
+                                    typeof blockData?.meta?.connection === "string"
+                                        ? String(blockData.meta.connection).trim()
+                                        : "";
                                 await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
                                     "cmd:cwd": inferredCwd,
                                 });
+                                if (isLocalConnName(connName)) {
+                                    const displayPath = getTerminalDisplayCwd({
+                                        connection: connName,
+                                        "cmd:cwd": inferredCwd,
+                                    });
+                                    if (!isBlank(displayPath)) {
+                                        LocalPathHistoryModel.getInstance().recordPath(displayPath);
+                                    }
+                                }
                             } catch (e) {
                                 console.log("Inferred cwd apply failed", { blockId, cwd: inferredCwd, error: e });
                             }
@@ -737,6 +759,7 @@ export class TermWrap {
     shellIntegrationStatusAtom: jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     virtualCwdAtom: jotai.PrimitiveAtom<string>;
+    displayCwdAtom: jotai.PrimitiveAtom<string>;
     nodeModel: BlockNodeModel; // this can be null
     unreadAtom: jotai.PrimitiveAtom<boolean>;
     lastOutputTsAtom: jotai.PrimitiveAtom<number>;
@@ -803,6 +826,9 @@ export class TermWrap {
         }) as jotai.PrimitiveAtom<"ready" | "running-command" | null>;
         this.lastCommandAtom = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
         this.virtualCwdAtom = useBlockAtom(this.blockId, "term:virtualcwd", () => {
+            return jotai.atom("") as jotai.PrimitiveAtom<string>;
+        }) as jotai.PrimitiveAtom<string>;
+        this.displayCwdAtom = useBlockAtom(this.blockId, "term:displaycwd", () => {
             return jotai.atom("") as jotai.PrimitiveAtom<string>;
         }) as jotai.PrimitiveAtom<string>;
         this.terminal = new Terminal(options);
@@ -1522,6 +1548,7 @@ export class TermWrap {
                 this.dataBytesProcessed += data.length;
             }
             this.lastUpdated = Date.now();
+            this.refreshDisplayCwdFromBuffer();
             resolve();
         });
         return prtn;
@@ -1578,6 +1605,16 @@ export class TermWrap {
     }
 
     handleResize() {
+        const parentRect = this.connectElem?.getBoundingClientRect();
+        if (
+            parentRect == null ||
+            !Number.isFinite(parentRect.width) ||
+            !Number.isFinite(parentRect.height) ||
+            parentRect.width <= 1 ||
+            parentRect.height <= 1
+        ) {
+            return;
+        }
         const bufferBeforeResize = this.terminal?.buffer?.active;
         const wasAtBottomBeforeResize =
             bufferBeforeResize != null &&
@@ -1715,6 +1752,14 @@ export class TermWrap {
             lines.push(line ? line.translateToString(true) : "");
         }
         return lines;
+    }
+
+    private refreshDisplayCwdFromBuffer() {
+        const nextDisplayCwd = extractTerminalDisplayCwdFromBufferLines(this.getRawBufferLines());
+        const prevDisplayCwd = globalStore.get(this.displayCwdAtom) ?? "";
+        if (prevDisplayCwd !== nextDisplayCwd) {
+            globalStore.set(this.displayCwdAtom, nextDisplayCwd);
+        }
     }
 
     getScrollbackContent(): string {
