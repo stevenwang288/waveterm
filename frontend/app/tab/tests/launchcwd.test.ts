@@ -71,4 +71,15 @@ describe("launchcwd helpers", () => {
 
         expect(getTerminalInheritableCwd({ "cmd:cwd": "  /home/ubuntu/project/  " })).toBe("/home/ubuntu/project/");
     });
+
+    it("falls back to persisted display cwd for local terminals when cmd:cwd is missing", async () => {
+        const { getTerminalInheritableCwd } = await import("@/util/launchcwd");
+
+        expect(
+            getTerminalInheritableCwd({
+                connection: "local",
+                "display:launchcwd": "D:/OneDrive/steven/code/ai/12CLI/waveterm-main",
+            })
+        ).toBe("D:/OneDrive/steven/code/ai/12CLI/waveterm-main");
+    });
 });

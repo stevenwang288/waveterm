@@ -10,7 +10,6 @@ import {
     SubBlockProps,
 } from "@/app/block/blocktypes";
 import { AiFileDiffViewModel } from "@/app/view/aifilediff/aifilediff";
-import { ClawXViewModel } from "@/app/view/clawx/clawx";
 import { LauncherViewModel } from "@/app/view/launcher/launcher";
 import { PveVncViewModel } from "@/app/view/pvevnc/pvevnc";
 import { PreviewModel } from "@/app/view/preview/preview-model";
@@ -53,7 +52,6 @@ BlockRegistry.set("term", TermViewModel);
 BlockRegistry.set("preview", PreviewModel);
 BlockRegistry.set("web", WebViewModel);
 BlockRegistry.set("pvevnc", PveVncViewModel);
-BlockRegistry.set("clawx", ClawXViewModel);
 BlockRegistry.set("waveai", WaveAiModel);
 BlockRegistry.set("cpuplot", SysinfoViewModel);
 BlockRegistry.set("sysinfo", SysinfoViewModel);

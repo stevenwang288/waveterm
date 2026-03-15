@@ -1,6 +1,7 @@
 import {
     captureTerminalScrollRestoreState,
     isTerminalViewportNearBottom,
+    resolveTerminalFollowLatestState,
     resolveTerminalScrollRestoreTarget,
 } from "../term-scroll";
 import { describe, expect, it } from "vitest";
@@ -31,5 +32,16 @@ describe("term scroll follow logic", () => {
         });
         expect(resolveTerminalScrollRestoreTarget(snapshot.savedScrollPosition, snapshot.restoreBottom, 30)).toBe(30);
         expect(resolveTerminalScrollRestoreTarget(snapshot.savedScrollPosition, snapshot.restoreBottom, 100)).toBe(42);
+    });
+
+    it("keeps manual upward scrolling detached until the viewport returns to the exact bottom", () => {
+        expect(resolveTerminalFollowLatestState(120, 119, true)).toEqual({
+            followLatestOutput: false,
+            manuallyDetached: true,
+        });
+        expect(resolveTerminalFollowLatestState(120, 120, true)).toEqual({
+            followLatestOutput: true,
+            manuallyDetached: false,
+        });
     });
 });

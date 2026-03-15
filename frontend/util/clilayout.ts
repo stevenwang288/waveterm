@@ -13,6 +13,7 @@ import {
     WOS,
 } from "@/store/global";
 import { ObjectService, WorkspaceService } from "@/store/services";
+import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import { fireAndForget, isBlank } from "@/util/util";
 
 export type CliLayoutSlot = {
@@ -129,7 +130,7 @@ async function applyCliLayoutStateToCurrentTab(state: CliLayoutState, tabName?: 
 
     const targetBlockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", targetBlockId));
     const targetBlock = globalStore.get(targetBlockAtom);
-    const fallbackPath = normalizePath(String(targetBlock?.meta?.["cmd:cwd"] ?? "~")) || "~";
+    const fallbackPath = normalizePath(getTerminalInheritableCwd(targetBlock?.meta)) || "~";
     const fallbackConn = typeof targetBlock?.meta?.connection === "string" ? targetBlock.meta.connection : "";
 
     const resolvedPaths = Array.from({ length: totalSlots }, (_, index) => {

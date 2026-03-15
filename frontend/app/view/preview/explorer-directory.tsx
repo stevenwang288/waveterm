@@ -16,6 +16,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { openCliLayoutInNewTab } from "@/util/clilayout";
+import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import { PLATFORM, PlatformWindows } from "@/util/platformutil";
 import { base64ToString, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import clsx from "clsx";
@@ -53,7 +54,6 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Amp", command: "amp" },
     { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
-    { label: "ClawX", command: "clawx" },
 ];
 
 type CliLayoutPreset = {
@@ -893,7 +893,7 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
 
         for (const blockId of blockIds) {
             const blockData = getBlockById(blockId);
-            const cmdCwd = normalizeExplorerPath((blockData?.meta?.["cmd:cwd"] as string) ?? "");
+            const cmdCwd = normalizeExplorerPath(getTerminalInheritableCwd(blockData?.meta));
             paths.push(cmdCwd || currentPath || "");
             const autoCmd = typeof blockData?.meta?.["term:autoCmd"] === "string" ? blockData.meta["term:autoCmd"] : "";
             commands.push(autoCmd.trim());

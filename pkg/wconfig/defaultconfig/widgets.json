@@ -43,17 +43,6 @@
             }
         }
     },
-    "defwidget@clawx": {
-        "display:order": -2.5,
-        "icon": "rocket",
-        "label": "clawx",
-        "blockdef": {
-            "meta": {
-                "view": "clawx",
-                "url": "http://127.0.0.1:5173"
-            }
-        }
-    },
     "defwidget@ai": {
         "display:order": -2,
         "icon": "sparkles",

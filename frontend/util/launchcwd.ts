@@ -31,7 +31,15 @@ function isLikelyDisplayPath(value: string): boolean {
 
 export function getTerminalInheritableCwd(meta?: Record<string, any>): string {
     const cwd = typeof meta?.["cmd:cwd"] === "string" ? String(meta["cmd:cwd"]).trim() : "";
-    return isBlank(cwd) ? "" : cwd;
+    if (!isBlank(cwd)) {
+        return cwd;
+    }
+    const connName = typeof meta?.connection === "string" ? meta.connection.trim() : "";
+    if (!isLocalConnName(connName)) {
+        return "";
+    }
+    const displayCwd = typeof meta?.["display:launchcwd"] === "string" ? String(meta["display:launchcwd"]).trim() : "";
+    return isBlank(displayCwd) ? "" : formatCwdForDisplay(displayCwd);
 }
 
 export function getTerminalDisplayCwd(meta?: Record<string, any>): string {

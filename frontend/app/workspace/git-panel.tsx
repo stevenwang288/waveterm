@@ -3,6 +3,7 @@
 
 import { FocusManager } from "@/app/store/focusManager";
 import { WOS, getApi } from "@/store/global";
+import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import clsx from "clsx";
 import { useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -251,7 +252,7 @@ const GitPanel = memo(() => {
 
     const [focusedBlockData] = WOS.useWaveObjectValue<Block>(focusedBlockId ? WOS.makeORef("block", focusedBlockId) : null);
 
-    const cwd = useMemo(() => normalizeCwd(focusedBlockData?.meta?.["cmd:cwd"] ?? ""), [focusedBlockData?.meta]);
+    const cwd = useMemo(() => normalizeCwd(getTerminalInheritableCwd(focusedBlockData?.meta) ?? ""), [focusedBlockData?.meta]);
 
     const stagedFiles = useMemo(() => state.files.filter(hasStagedChange), [state.files]);
     const unstagedFiles = useMemo(() => state.files.filter(hasUnstagedChange), [state.files]);

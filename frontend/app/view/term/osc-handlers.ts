@@ -77,7 +77,6 @@ const AITermCommandPrefixes = [
     "amp",
     "iflow",
     "opencode",
-    "clawx",
 ];
 
 function isAITermCommand(decodedCmd: string): boolean {

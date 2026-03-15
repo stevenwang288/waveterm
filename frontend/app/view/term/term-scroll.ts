@@ -4,6 +4,34 @@ export function isTerminalViewportNearBottom(baseY: number, viewportY: number, t
     return baseY - viewportY <= threshold;
 }
 
+export function isTerminalViewportAtBottom(baseY: number, viewportY: number) {
+    return baseY - viewportY <= 0;
+}
+
+export function resolveTerminalFollowLatestState(
+    baseY: number,
+    viewportY: number,
+    manuallyDetached: boolean,
+    threshold = TerminalBottomFollowThreshold
+) {
+    if (!manuallyDetached) {
+        return {
+            followLatestOutput: isTerminalViewportNearBottom(baseY, viewportY, threshold),
+            manuallyDetached: false,
+        };
+    }
+    if (isTerminalViewportAtBottom(baseY, viewportY)) {
+        return {
+            followLatestOutput: true,
+            manuallyDetached: false,
+        };
+    }
+    return {
+        followLatestOutput: false,
+        manuallyDetached: true,
+    };
+}
+
 export function captureTerminalScrollRestoreState(
     baseY: number,
     viewportY: number,

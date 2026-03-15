@@ -12,6 +12,7 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { openCliLayoutInNewTab } from "@/util/clilayout";
+import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import { base64ToString, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -95,7 +96,7 @@ const LayoutsPanel = memo(() => {
     const getFallbackFromFocus = useCallback(() => {
         const focusedBlockId = getFocusedBlockId();
         const focusedBlock = getBlockById(focusedBlockId);
-        const path = typeof focusedBlock?.meta?.["cmd:cwd"] === "string" ? normalizePath(focusedBlock.meta["cmd:cwd"]) : "";
+        const path = normalizePath(getTerminalInheritableCwd(focusedBlock?.meta));
         const connection = typeof focusedBlock?.meta?.connection === "string" ? focusedBlock.meta.connection : "";
         return { path, connection };
     }, [getBlockById]);
@@ -218,7 +219,7 @@ const LayoutsPanel = memo(() => {
 
         for (const leaf of leafOrder) {
             const blockData = getBlockById(leaf.blockid);
-            const path = typeof blockData?.meta?.["cmd:cwd"] === "string" ? normalizePath(blockData.meta["cmd:cwd"]) : "";
+            const path = normalizePath(getTerminalInheritableCwd(blockData?.meta));
             const autoCmd = typeof blockData?.meta?.["term:autoCmd"] === "string" ? String(blockData.meta["term:autoCmd"]).trim() : "";
             paths.push(path);
             commands.push(autoCmd);

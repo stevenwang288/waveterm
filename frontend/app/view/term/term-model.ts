@@ -68,7 +68,6 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Amp", command: "amp" },
     { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
-    { label: "ClawX", command: "clawx" },
 ];
 
 const DEFAULT_PVE_NODE = "VUModule";
@@ -1448,7 +1447,7 @@ export class TermViewModel implements ViewModel {
         }
 
         const blockData = globalStore.get(this.blockAtom);
-        const currentPath = normalizePath(String(blockData?.meta?.["cmd:cwd"] ?? "~")) || "~";
+        const currentPath = normalizePath(getTerminalInheritableCwd(blockData?.meta)) || "~";
         const currentConn = normalizeConnectionName(blockData?.meta?.connection);
         const cliLayoutConfigPath = `${getApi().getConfigDir()}/cli-layout-presets.json`;
 
@@ -1838,7 +1837,7 @@ export class TermViewModel implements ViewModel {
 
         const favoritesModel = FavoritesModel.getInstance();
         const blockData = globalStore.get(this.blockAtom);
-        const currentPath = blockData?.meta?.["cmd:cwd"] || "~";
+        const currentPath = getTerminalInheritableCwd(blockData?.meta) || "~";
         const connection = blockData?.meta?.connection;
 
         menu.push({
@@ -2003,7 +2002,7 @@ export class TermViewModel implements ViewModel {
                 click: () => {
                     const blockData = globalStore.get(this.blockAtom);
                     const connection = blockData?.meta?.connection;
-                    const cwd = blockData?.meta?.["cmd:cwd"];
+                    const cwd = getTerminalInheritableCwd(blockData?.meta);
                     const meta: Record<string, any> = {
                         view: "preview",
                         file: cwd,

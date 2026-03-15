@@ -23,6 +23,7 @@ import {
 import { getActiveTabModel } from "@/app/store/tab-model";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { deleteLayoutModelForTab, getLayoutModelForStaticTab, LayoutTreeActionType, NavigateDirection } from "@/layout/index";
+import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import type { LayoutModel, LayoutTreeSwapNodeAction } from "@/layout/index";
 import * as keyutil from "@/util/keyutil";
 import { isWindows } from "@/util/platformutil";
@@ -521,8 +522,9 @@ function getDefaultNewBlockDef(): BlockDef {
         const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", focusedNode.data?.blockId));
         const blockData = globalStore.get(blockAtom);
         if (blockData?.meta?.view == "term") {
-            if (blockData?.meta?.["cmd:cwd"] != null) {
-                termBlockDef.meta["cmd:cwd"] = blockData.meta["cmd:cwd"];
+            const inheritableCwd = getTerminalInheritableCwd(blockData.meta);
+            if (!isBlank(inheritableCwd)) {
+                termBlockDef.meta["cmd:cwd"] = inheritableCwd;
             }
         }
         if (blockData?.meta?.connection != null) {

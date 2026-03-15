@@ -13,6 +13,7 @@ import { shouldIncludeWidgetForWorkspace } from "@/app/workspace/widgetfilter";
 import { GitPanel } from "@/app/workspace/git-panel";
 import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
+import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
 import {
     FloatingPortal,
@@ -496,7 +497,7 @@ const Widgets = memo(() => {
                 controller: "shell",
                 view: "term",
             };
-            const cwd = focusedBlockData?.meta?.["cmd:cwd"];
+            const cwd = getTerminalInheritableCwd(focusedBlockData?.meta);
             const connection = focusedBlockData?.meta?.connection;
             if (!isBlank(cwd)) {
                 meta["cmd:cwd"] = cwd;

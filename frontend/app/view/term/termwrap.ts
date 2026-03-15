@@ -22,7 +22,7 @@ import {
     WOS,
 } from "@/store/global";
 import * as services from "@/store/services";
-import { extractTerminalDisplayCwdFromBufferLines, getTerminalDisplayCwd } from "@/util/launchcwd";
+import { extractTerminalDisplayCwdFromBufferLines, getTerminalDisplayCwd, getTerminalInheritableCwd } from "@/util/launchcwd";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
 import { base64ToArray, base64ToString, fireAndForget, isBlank, isLocalConnName, stringToBase64 } from "@/util/util";
 import { SearchAddon } from "@xterm/addon-search";
@@ -37,6 +37,7 @@ import { debounce } from "throttle-debounce";
 import { FitAddon } from "./fitaddon";
 import {
     captureTerminalScrollRestoreState,
+    resolveTerminalFollowLatestState,
     isTerminalViewportNearBottom,
     resolveTerminalScrollRestoreTarget,
 } from "./term-scroll";
@@ -325,7 +326,6 @@ const AITermCommandPrefixes = [
     "amp",
     "iflow",
     "opencode",
-    "clawx",
 ];
 
 function isAITermCommand(decodedCmd: string): boolean {
@@ -603,8 +603,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                         checkCommandForTelemetry(decodedCmd);
                         const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
                         const blockData = globalStore.get(blockAtom);
-                        const currentCwd =
-                            typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]).trim() : "";
+                        const currentCwd = getTerminalInheritableCwd(blockData?.meta);
                         if (isAITermCommand(decodedCmd)) {
                             const virtualCwd = resolveVirtualCwdFromCdFlag(decodedCmd, currentCwd);
                             globalStore.set(termWrap.virtualCwdAtom, virtualCwd);
@@ -657,8 +656,7 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
                     termWrap.pendingInferredCwd = "";
                     const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
                     const blockData = globalStore.get(blockAtom);
-                    const currentCwd =
-                        typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]).trim() : "";
+                    const currentCwd = getTerminalInheritableCwd(blockData?.meta);
                     if (inferredCwd !== currentCwd) {
                         console.log("Inferred cwd apply on success", {
                             blockId,
@@ -776,6 +774,7 @@ export class TermWrap {
     private savedScrollPosition: number | null = null; // preserved scroll position for reflow reloads
     private restoreBottomOnNextReflow: boolean = false;
     private followLatestOutput: boolean = true;
+    private manuallyDetachedFromLatestOutput: boolean = false;
     private pendingWriteChunks: Uint8Array[] = [];
     private pendingWriteHead: number = 0;
     private pendingWriteBytes: number = 0;
@@ -987,7 +986,7 @@ export class TermWrap {
         const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", this.blockId));
         const blockData = globalStore.get(blockAtom);
         const connName = typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
-        const cwdRaw = typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]) : "";
+        const cwdRaw = getTerminalInheritableCwd(blockData?.meta);
 
         let cwd = cwdRaw.trim();
         if (!isBlank(cwd)) {
@@ -1055,7 +1054,7 @@ export class TermWrap {
         const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", this.blockId));
         const blockData = globalStore.get(blockAtom);
         const connName = typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
-        const cwdRaw = typeof blockData?.meta?.["cmd:cwd"] === "string" ? String(blockData.meta["cmd:cwd"]) : "";
+        const cwdRaw = getTerminalInheritableCwd(blockData?.meta);
 
         let cwd = cwdRaw.trim();
         if (!isBlank(cwd)) {
@@ -1149,6 +1148,21 @@ export class TermWrap {
         );
         if (this.onSearchResultsDidChange != null) {
             this.toDispose.push(this.searchAddon.onDidChangeResults(this.onSearchResultsDidChange.bind(this)));
+        }
+
+        const viewportElem = this.connectElem.querySelector(".xterm-viewport");
+        if (viewportElem instanceof HTMLElement) {
+            const wheelHandler = (event: WheelEvent) => {
+                if (event.deltaY < 0) {
+                    this.detachFromLatestOutput();
+                }
+            };
+            viewportElem.addEventListener("wheel", wheelHandler, { passive: true });
+            this.toDispose.push({
+                dispose: () => {
+                    viewportElem.removeEventListener("wheel", wheelHandler);
+                },
+            });
         }
 
         // Register IME composition event listeners on the xterm.js textarea
@@ -1449,12 +1463,14 @@ export class TermWrap {
             );
             if (target === "bottom") {
                 this.followLatestOutput = true;
+                this.manuallyDetachedFromLatestOutput = false;
                 this.scrollToBottom();
                 window.requestAnimationFrame(() => {
                     this.scrollToBottom();
                 });
             } else if (target != null) {
                 this.followLatestOutput = false;
+                this.manuallyDetachedFromLatestOutput = true;
                 const targetY = target;
                 this.terminal.scrollToLine(targetY);
             }
@@ -1469,7 +1485,13 @@ export class TermWrap {
             return;
         }
         this.followLatestOutput = true;
+        this.manuallyDetachedFromLatestOutput = false;
         this.terminal.scrollToBottom();
+    }
+
+    private detachFromLatestOutput(): void {
+        this.followLatestOutput = false;
+        this.manuallyDetachedFromLatestOutput = true;
     }
 
     private syncFollowLatestOutputFromViewport(): void {
@@ -1480,7 +1502,13 @@ export class TermWrap {
         if (!buffer || buffer.type === "alternate") {
             return;
         }
-        this.followLatestOutput = isTerminalViewportNearBottom(buffer.baseY, buffer.viewportY);
+        const nextState = resolveTerminalFollowLatestState(
+            buffer.baseY,
+            buffer.viewportY,
+            this.manuallyDetachedFromLatestOutput
+        );
+        this.followLatestOutput = nextState.followLatestOutput;
+        this.manuallyDetachedFromLatestOutput = nextState.manuallyDetached;
     }
 
     async reflowHistoryToCurrentWidth(reason: string) {
@@ -1801,6 +1829,23 @@ export class TermWrap {
         const prevDisplayCwd = globalStore.get(this.displayCwdAtom) ?? "";
         if (prevDisplayCwd !== nextDisplayCwd) {
             globalStore.set(this.displayCwdAtom, nextDisplayCwd);
+            const blockData = globalStore.get(this.blockAtom);
+            const connName = typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
+            const persistedDisplayCwd =
+                typeof blockData?.meta?.["display:launchcwd"] === "string"
+                    ? String(blockData.meta["display:launchcwd"]).trim()
+                    : "";
+            if (isLocalConnName(connName) && !isBlank(nextDisplayCwd) && persistedDisplayCwd !== nextDisplayCwd) {
+                fireAndForget(async () => {
+                    try {
+                        await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", this.blockId), {
+                            "display:launchcwd": nextDisplayCwd,
+                        });
+                    } catch (e) {
+                        console.log("Persist display cwd failed", { blockId: this.blockId, cwd: nextDisplayCwd, error: e });
+                    }
+                });
+            }
         }
     }
 
