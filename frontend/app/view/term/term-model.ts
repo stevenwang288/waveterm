@@ -48,6 +48,7 @@ import * as React from "react";
 import { getBlockingCommand } from "./shellblocking";
 import { computeTheme, DefaultTermTheme } from "./termutil";
 import { TermWrap } from "./termwrap";
+import { isTerminalViewportNearBottom } from "./term-scroll";
 import {
     DEFAULT_PVE_ORIGIN,
     RemoteGuiSplitPane,
@@ -1279,7 +1280,7 @@ export class TermViewModel implements ViewModel {
             const terminal = termWrap?.terminal;
             const buffer = terminal?.buffer?.active;
             if (terminal && buffer && buffer.type !== "alternate") {
-                const isAtBottom = buffer.baseY === buffer.viewportY;
+                const isAtBottom = isTerminalViewportNearBottom(buffer.baseY, buffer.viewportY);
                 const shouldScroll = !isAtBottom;
                 if (shouldScroll) {
                     terminal.scrollLines(waveEvent.key === "ArrowUp" ? -1 : 1);

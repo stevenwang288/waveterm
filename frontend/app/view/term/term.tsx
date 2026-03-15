@@ -22,6 +22,7 @@ import * as React from "react";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
 import { clampRemoteGuiSplitPct } from "./remote-gui";
+import { isTerminalViewportNearBottom } from "./term-scroll";
 import { computeTheme } from "./termutil";
 import { TermWrap } from "./termwrap";
 import "./xterm.css";
@@ -417,7 +418,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         }
         const bufferBeforeResize = termWrap.terminal?.buffer?.active;
         const wasAtBottomBeforeResize =
-            bufferBeforeResize != null && bufferBeforeResize.baseY === bufferBeforeResize.viewportY;
+            bufferBeforeResize != null && isTerminalViewportNearBottom(bufferBeforeResize.baseY, bufferBeforeResize.viewportY);
         termWrap.handleResize_debounced();
         const timeouts = [100, 250, 500].map((delayMs) =>
             setTimeout(() => {

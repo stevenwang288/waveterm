@@ -35,6 +35,11 @@ import debug from "debug";
 import * as jotai from "jotai";
 import { debounce } from "throttle-debounce";
 import { FitAddon } from "./fitaddon";
+import {
+    captureTerminalScrollRestoreState,
+    isTerminalViewportNearBottom,
+    resolveTerminalScrollRestoreTarget,
+} from "./term-scroll";
 import { bufferLinesToText, createTempFileFromBlob, extractAllClipboardData } from "./termutil";
 
 const dlog = debug("wave:termwrap");
@@ -769,6 +774,8 @@ export class TermWrap {
     private lastReflowReloadTermSize: TermSize | null = null;
     private lastBellNotifyTs: number = 0;
     private savedScrollPosition: number | null = null; // preserved scroll position for reflow reloads
+    private restoreBottomOnNextReflow: boolean = false;
+    private followLatestOutput: boolean = true;
     private pendingWriteChunks: Uint8Array[] = [];
     private pendingWriteHead: number = 0;
     private pendingWriteBytes: number = 0;
@@ -1123,6 +1130,11 @@ export class TermWrap {
         this.toDispose.push(this.terminal.onData(this.handleTermData.bind(this)));
         this.toDispose.push(this.terminal.onKey(this.onKeyHandler.bind(this)));
         this.toDispose.push(
+            this.terminal.onScroll(() => {
+                this.syncFollowLatestOutputFromViewport();
+            })
+        );
+        this.toDispose.push(
             this.terminal.onSelectionChange(
                 debounce(50, () => {
                     if (!globalStore.get(copyOnSelectAtom)) {
@@ -1416,24 +1428,39 @@ export class TermWrap {
             return;
         }
         const buffer = this.terminal.buffer.active;
-        if (buffer) {
-            this.savedScrollPosition = buffer.viewportY;
+        if (buffer && buffer.type !== "alternate") {
+            const snapshot = captureTerminalScrollRestoreState(buffer.baseY, buffer.viewportY);
+            this.restoreBottomOnNextReflow = snapshot.restoreBottom;
+            this.savedScrollPosition = snapshot.savedScrollPosition;
         }
     }
 
     // Restore the previously preserved scroll position (best-effort).
     restoreScrollPosition(): void {
-        if (!this.terminal || this.savedScrollPosition == null) {
+        if (!this.terminal) {
             return;
         }
         const buffer = this.terminal.buffer.active;
-        if (buffer) {
-            // 确保目标位置在有效范围内
-            const maxScroll = Math.max(0, buffer.baseY);
-            const targetY = Math.min(Math.max(this.savedScrollPosition, 0), maxScroll);
-            this.terminal.scrollToLine(targetY);
+        if (buffer && buffer.type !== "alternate") {
+            const target = resolveTerminalScrollRestoreTarget(
+                this.savedScrollPosition,
+                this.restoreBottomOnNextReflow,
+                buffer.baseY
+            );
+            if (target === "bottom") {
+                this.followLatestOutput = true;
+                this.scrollToBottom();
+                window.requestAnimationFrame(() => {
+                    this.scrollToBottom();
+                });
+            } else if (target != null) {
+                this.followLatestOutput = false;
+                const targetY = target;
+                this.terminal.scrollToLine(targetY);
+            }
         }
         this.savedScrollPosition = null;
+        this.restoreBottomOnNextReflow = false;
     }
 
     // Scroll to the bottom (latest output).
@@ -1441,7 +1468,19 @@ export class TermWrap {
         if (!this.terminal) {
             return;
         }
+        this.followLatestOutput = true;
         this.terminal.scrollToBottom();
+    }
+
+    private syncFollowLatestOutputFromViewport(): void {
+        if (!this.terminal) {
+            return;
+        }
+        const buffer = this.terminal.buffer.active;
+        if (!buffer || buffer.type === "alternate") {
+            return;
+        }
+        this.followLatestOutput = isTerminalViewportNearBottom(buffer.baseY, buffer.viewportY);
     }
 
     async reflowHistoryToCurrentWidth(reason: string) {
@@ -1549,6 +1588,9 @@ export class TermWrap {
             }
             this.lastUpdated = Date.now();
             this.refreshDisplayCwdFromBuffer();
+            if (this.terminal.buffer.active.type !== "alternate" && this.followLatestOutput) {
+                this.terminal.scrollToBottom();
+            }
             resolve();
         });
         return prtn;
@@ -1619,7 +1661,7 @@ export class TermWrap {
         const wasAtBottomBeforeResize =
             bufferBeforeResize != null &&
             bufferBeforeResize.type !== "alternate" &&
-            bufferBeforeResize.baseY - bufferBeforeResize.viewportY <= 1;
+            isTerminalViewportNearBottom(bufferBeforeResize.baseY, bufferBeforeResize.viewportY);
         const oldRows = this.terminal.rows;
         const oldCols = this.terminal.cols;
         this.fitAddon.fit();
