@@ -117,6 +117,12 @@ try {
   $env:CGO_ENABLED = "0"
   $env:GOARCH = "amd64"
 
+  Get-ChildItem "dist\\bin" -Filter "wsh-*-windows.x64.exe" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne "wsh-$version-windows.x64.exe" } |
+    ForEach-Object {
+      Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue
+    }
+
   go build `
     -ldflags "-s -w -X main.BuildTime=$buildTime -X main.WaveVersion=$version" `
     -o "dist\\bin\\wsh-$version-windows.x64.exe" `
