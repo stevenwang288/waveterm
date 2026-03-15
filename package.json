@@ -31,6 +31,8 @@
         "build:prod": "electron-vite build --mode production",
         "package:win": "electron-builder --config electron-builder.config.cjs --win --x64",
         "package:win:allow-dirty": "set WAVETERM_ALLOW_DIRTY_PACKAGE=1&& electron-builder --config electron-builder.config.cjs --win --x64",
+        "release:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1",
+        "release:win:allow-dirty": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1 -AllowDirty",
         "coverage": "vitest run --coverage",
         "test": "vitest",
         "postinstall": "electron-builder install-app-deps"

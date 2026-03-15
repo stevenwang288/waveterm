@@ -10,83 +10,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-
-function Get-RepoRoot {
-  return (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-}
-
-function Get-PackageVersion {
-  $pkgPath = Join-Path (Get-RepoRoot) "package.json"
-  $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
-  return [string]$pkg.version
-}
-
-function Get-NodeArchTag {
-  $arch = [string]$env:PROCESSOR_ARCHITECTURE
-  if ($null -eq $arch) {
-    $arch = ""
-  }
-  $arch = $arch.ToUpperInvariant()
-  if ($arch -eq "ARM64") { return "arm64" }
-  if ($arch -eq "X86") { return "ia32" }
-  return "x64"
-}
-
-function Get-GoLdflagsLine {
-  param([string]$ExePath)
-  if (-not (Test-Path -LiteralPath $ExePath)) {
-    return ""
-  }
-  try {
-    $out = & go version -m $ExePath 2>$null
-    if (-not $out) {
-      return ""
-    }
-    $match = $out | Select-String -Pattern "main\.WaveVersion|main\.BuildTime" | Select-Object -First 1
-    if (-not $match) {
-      return ""
-    }
-    return [string]$match.Line
-  } catch {
-    return ""
-  }
-}
-
-function Get-WaveVersionFromLdflags {
-  param([string]$LdflagsLine)
-  if (-not $LdflagsLine) {
-    return ""
-  }
-  $m = [regex]::Match($LdflagsLine, 'main\.WaveVersion=([^\s]+)')
-  if (-not $m.Success) {
-    return ""
-  }
-  return ([string]$m.Groups[1].Value).Trim('"').Trim("'")
-}
-
-function Ensure-BackendBins {
-  $repoRoot = Get-RepoRoot
-  $version = Get-PackageVersion
-  $archTag = Get-NodeArchTag
-  $wavesrvPath = Join-Path $repoRoot "dist\bin\wavesrv.$archTag.exe"
-  $wshPath = Join-Path $repoRoot "dist\bin\wsh-$version-windows.x64.exe"
-
-  $needBuild = $false
-  if (-not (Test-Path -LiteralPath $wavesrvPath)) { $needBuild = $true }
-  if (-not (Test-Path -LiteralPath $wshPath)) { $needBuild = $true }
-
-  if (-not $needBuild) {
-    $wavesrvLdflags = Get-GoLdflagsLine -ExePath $wavesrvPath
-    $wavesrvVersion = Get-WaveVersionFromLdflags -LdflagsLine $wavesrvLdflags
-    if ($wavesrvVersion -ne $version) {
-      $needBuild = $true
-    }
-  }
-
-  if ($needBuild) {
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build-backend-windows.ps1")
-  }
-}
+. (Join-Path $PSScriptRoot "wave-windows-common.ps1")
 
 function Get-StateRoot {
   return Join-Path (Get-RepoRoot) ".tmp\dev-linked\current"
@@ -226,7 +150,7 @@ function Stop-ExistingDevInstance {
 
 function Start-DevInstance {
   if (-not $NoBuild) {
-    Ensure-BackendBins
+    Ensure-WaveBackendBins
   }
 
   Stop-ExistingDevInstance
@@ -259,7 +183,7 @@ function Start-DevInstance {
 `$env:WAVETERM_ELECTRON_USER_DATA_HOME = '$electronEsc'
 $debugFlag
 Set-Location '$repoRootEsc'
-npm run dev *>> '$logEsc'
+& npm.cmd run dev *>> '$logEsc'
 "@
 
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))

@@ -112,7 +112,7 @@ On this Windows setup there are currently two practical local development routes
 - `npm run dev:linked` — recommended daily driver. Reuses the stable local Wave config at `C:\Users\baba1\.config\wave`, keeps runtime data under `.tmp/dev-linked/current`, and enforces a single managed dev instance.
 - `npm run dev:fresh` — isolated troubleshooting route. Creates a brand new config/data/electron-userdata sandbox under `.tmp/dev-fresh/<runId>` so you can debug startup, config, or migration issues without touching the normal dev state.
 
-`npm run dev` is still the raw low-level Electron/Vite entrypoint underneath both flows, but for day-to-day work on this machine it is better to use one of the wrappers above so state handling stays explicit.
+`npm run dev` is still the raw low-level Electron/Vite entrypoint underneath both flows, but for day-to-day work on this machine it is better to use one of the wrappers above so state handling stays explicit. The Windows wrappers now share one common helper script for backend-bin checks and `npm.cmd` invocation, so dev startup and Windows packaging use the same lower-level path instead of each keeping their own copy.
 
 ### Standalone
 
@@ -140,8 +140,8 @@ USE_SYSTEM_FPM=1 task package
 
 On Windows, if you want the packaged installer copied to a local handoff directory, use:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1
+```sh
+npm run release:win
 ```
 
 This script will:
@@ -152,11 +152,11 @@ This script will:
 
 If the working tree is intentionally dirty during local packaging, use:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1 -AllowDirty
+```sh
+npm run release:win:allow-dirty
 ```
 
-You can override the copy target with `-DeskDir <path>`.
+If you need a custom copy target, you can still call the PowerShell script directly with `-DeskDir <path>`.
 
 ## Debugging
 

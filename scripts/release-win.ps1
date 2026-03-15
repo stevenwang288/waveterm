@@ -7,28 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-
-function Get-PackageVersion {
-  $pkgPath = Join-Path $PSScriptRoot "..\\package.json"
-  $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
-  return [string]$pkg.version
-}
-
-function Ensure-DeskDir {
-  param([string]$Path)
-  if (-not (Test-Path $Path)) {
-    New-Item -ItemType Directory -Force -Path $Path | Out-Null
-  }
-}
-
-function Invoke-Npm {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string[]]$Args
-  )
-
-  & npm.cmd @Args
-}
+. (Join-Path $PSScriptRoot "wave-windows-common.ps1")
 
 function Assert-CleanGit {
   param([switch]$AllowDirty)
@@ -44,7 +23,7 @@ function Assert-CleanGit {
   }
 }
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$repoRoot = Get-RepoRoot
 Push-Location $repoRoot
 try {
   Assert-CleanGit -AllowDirty:$AllowDirty
@@ -58,17 +37,17 @@ try {
   Write-Host "[release:win] version=$version sha=$sha"
 
   Write-Host "[release:win] build:prod"
-  Invoke-Npm -Args @("run", "build:prod")
+  Invoke-NpmCmd -Args @("run", "build:prod")
   if ($LASTEXITCODE -ne 0) {
     throw "npm run build:prod failed"
   }
 
   if ($AllowDirty) {
     Write-Host "[release:win] package:win (allow dirty)"
-    Invoke-Npm -Args @("run", "package:win:allow-dirty")
+    Invoke-NpmCmd -Args @("run", "package:win:allow-dirty")
   } else {
     Write-Host "[release:win] package:win"
-    Invoke-Npm -Args @("run", "package:win")
+    Invoke-NpmCmd -Args @("run", "package:win")
   }
   if ($LASTEXITCODE -ne 0) {
     throw "npm run package:win failed"
@@ -79,11 +58,11 @@ try {
     throw "installer not found: $src"
   }
 
-  Ensure-DeskDir -Path $DeskDir
+  Ensure-Directory -Path $DeskDir
   $dst = Join-Path $DeskDir ("WAVE-win32-x64-{0}-fix-{1}.exe" -f $version, $sha)
   Copy-Item -Force $src $dst
 
-  $hash = (Get-FileHash -Algorithm SHA256 $dst).Hash
+  $hash = Get-FileSha256 -Path $dst
   Write-Host "[release:win] out=$dst"
   Write-Host "[release:win] sha256=$hash"
 } finally {
