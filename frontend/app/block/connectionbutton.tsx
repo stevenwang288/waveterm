@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { computeConnColorNum } from "@/app/block/blockutil";
-import { getTerminalConnectionDisplayLabel } from "@/app/block/connectionbutton-label";
+import {
+    getTerminalConnectionDisplayLabel,
+    getTerminalConnectionLabelPresentation,
+} from "@/app/block/connectionbutton-label";
 import { buildTerminalLabelContextMenu } from "@/app/block/connectionbutton-menu";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { createBlock, getConnStatusAtom, getLocalHostDisplayNameAtom, pushNotification, recordTEvent } from "@/app/store/global";
@@ -45,6 +48,7 @@ export const ConnectionButton = React.memo(
             const localName = jotai.useAtomValue(getLocalHostDisplayNameAtom());
             const terminalLabelTrimmed = isTerminalBlock && typeof terminalLabel === "string" ? terminalLabel.trim() : "";
             const terminalCwdTrimmed = isTerminalBlock && typeof terminalCwd === "string" ? terminalCwd.trim() : "";
+            const terminalLabelPresentation = isTerminalBlock ? getTerminalConnectionLabelPresentation(isLocal) : null;
             let showDisconnectedSlash = false;
             let connIconElem: React.ReactNode = null;
             const connColorNum = computeConnColorNum(connStatus);
@@ -201,10 +205,8 @@ export const ConnectionButton = React.memo(
                     terminalLabel: terminalLabelTrimmed,
                 });
                 titleText = terminalDisplayLabel || titleText;
-                connDisplayName = terminalDisplayLabel || connDisplayName || connection;
-                if (isLocal) {
-                    extraDisplayNameClassName = "text-muted group-hover:text-secondary";
-                }
+                connDisplayName = terminalDisplayLabel;
+                extraDisplayNameClassName = terminalLabelPresentation?.className ?? "";
             }
 
             const wshProblem = connection && !connStatus?.wshenabled && connStatus?.status == "connected";
@@ -238,6 +240,7 @@ export const ConnectionButton = React.memo(
                             "group flex items-center flex-nowrap overflow-hidden text-ellipsis min-w-0 font-normal text-primary rounded-sm",
                             "hover:bg-highlightbg cursor-pointer",
                             unread && "connection-unread",
+                            isTerminalBlock && !compact && "flex-1",
                             compact && "w-7 h-7 justify-center"
                         )}
                         onClick={clickHandler}
@@ -247,7 +250,7 @@ export const ConnectionButton = React.memo(
                         {connIconElem != null && (
                             <span
                                 className={util.cn(
-                                    "fa-stack flex-[1_1_auto] overflow-hidden",
+                                    "fa-stack shrink-0 overflow-hidden",
                                     shouldSpin ? "fa-spin" : null
                                 )}
                             >
@@ -263,30 +266,56 @@ export const ConnectionButton = React.memo(
                         )}
                         {!compact &&
                             (connDisplayName ? (
+                                isTerminalBlock && terminalLabelPresentation?.align === "right" ? (
+                                    <div
+                                        className={util.cn(
+                                            "flex flex-1 min-w-0 justify-end pr-1",
+                                            extraDisplayNameClassName
+                                        )}
+                                    >
+                                        <div
+                                            className="connection-terminal-label ellipsis max-w-full cursor-copy"
+                                            onClick={handleTerminalLabelClick}
+                                            onDoubleClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                onTerminalLabelDoubleClick?.();
+                                            }}
+                                            onContextMenu={handleTerminalLabelContextMenu}
+                                        >
+                                            {connDisplayName}
+                                        </div>
+                                    </div>
+                                ) : isTerminalBlock ? (
+                                    <div
+                                        className={util.cn(
+                                            "flex-1 min-w-0 overflow-hidden pr-1 ellipsis cursor-copy",
+                                            extraDisplayNameClassName
+                                        )}
+                                        onClick={handleTerminalLabelClick}
+                                        onDoubleClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            onTerminalLabelDoubleClick?.();
+                                        }}
+                                        onContextMenu={handleTerminalLabelContextMenu}
+                                    >
+                                        {connDisplayName}
+                                    </div>
+                                ) : (
+                                    <div
+                                        className={util.cn(
+                                            "flex-1 min-w-0 overflow-hidden pr-1 ellipsis",
+                                            extraDisplayNameClassName
+                                        )}
+                                    >
+                                        {connDisplayName}
+                                    </div>
+                                )
+                            ) : isLocal || isTerminalBlock ? null : (
                                 <div
                                     className={util.cn(
-                                        "flex-[1_2_auto] overflow-hidden pr-1 ellipsis",
-                                        extraDisplayNameClassName,
-                                        isTerminalBlock && "connection-terminal-label cursor-copy"
-                                    )}
-                                    onClick={isTerminalBlock ? handleTerminalLabelClick : undefined}
-                                    onDoubleClick={
-                                        isTerminalBlock
-                                            ? (e) => {
-                                                  e.preventDefault();
-                                                  e.stopPropagation();
-                                                  onTerminalLabelDoubleClick?.();
-                                              }
-                                            : undefined
-                                    }
-                                    onContextMenu={handleTerminalLabelContextMenu}
-                                >
-                                    {connDisplayName}
-                                </div>
-                            ) : isLocal ? null : (
-                                <div
-                                    className={util.cn(
-                                        "flex-[1_2_auto] overflow-hidden pr-1 ellipsis",
+                                        "flex-1 min-w-0 overflow-hidden pr-1 ellipsis",
                                         isTerminalBlock && "connection-terminal-label cursor-copy"
                                     )}
                                     onClick={isTerminalBlock ? handleTerminalLabelClick : undefined}
@@ -319,4 +348,3 @@ export const ConnectionButton = React.memo(
     )
 );
 ConnectionButton.displayName = "ConnectionButton";
-

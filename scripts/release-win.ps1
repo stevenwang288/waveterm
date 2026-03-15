@@ -3,7 +3,7 @@ param(
   [switch]$AllowDirty,
 
   [Parameter(Mandatory = $false)]
-  [string]$DeskDir = "D:\\DESK"
+  [string]$DeskDir = "D:\\DeSK"
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +19,15 @@ function Ensure-DeskDir {
   if (-not (Test-Path $Path)) {
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
   }
+}
+
+function Invoke-Npm {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Args
+  )
+
+  & npm.cmd @Args
 }
 
 function Assert-CleanGit {
@@ -49,17 +58,17 @@ try {
   Write-Host "[release:win] version=$version sha=$sha"
 
   Write-Host "[release:win] build:prod"
-  & npm run build:prod
+  Invoke-Npm -Args @("run", "build:prod")
   if ($LASTEXITCODE -ne 0) {
     throw "npm run build:prod failed"
   }
 
   if ($AllowDirty) {
     Write-Host "[release:win] package:win (allow dirty)"
-    & npm run package:win:allow-dirty
+    Invoke-Npm -Args @("run", "package:win:allow-dirty")
   } else {
     Write-Host "[release:win] package:win"
-    & npm run package:win
+    Invoke-Npm -Args @("run", "package:win")
   }
   if ($LASTEXITCODE -ne 0) {
     throw "npm run package:win failed"
@@ -80,4 +89,3 @@ try {
 } finally {
   Pop-Location
 }
-

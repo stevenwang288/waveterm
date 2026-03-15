@@ -1,7 +1,21 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import * as util from "@/util/util";
+export function getTerminalConnectionLabelPresentation(isLocal: boolean): {
+    align: "left" | "right";
+    className: string;
+} {
+    if (isLocal) {
+        return {
+            align: "right",
+            className: "text-muted group-hover:text-secondary",
+        };
+    }
+    return {
+        align: "left",
+        className: "text-green-500 group-hover:text-green-400",
+    };
+}
 
 export function getTerminalConnectionDisplayLabel({
     isLocal,
@@ -14,16 +28,10 @@ export function getTerminalConnectionDisplayLabel({
     connectionDisplayName?: string;
     terminalLabel?: string;
 }): string {
-    const baseLabel = String(connectionDisplayName ?? "").trim() || String(connection ?? "").trim();
     const pathLabel = String(terminalLabel ?? "").trim();
     if (isLocal) {
-        return pathLabel || baseLabel;
-    }
-    if (util.isBlank(baseLabel)) {
         return pathLabel;
     }
-    if (util.isBlank(pathLabel) || pathLabel === baseLabel) {
-        return baseLabel;
-    }
-    return `${baseLabel} · ${pathLabel}`;
+    const baseLabel = String(connectionDisplayName ?? "").trim() || String(connection ?? "").trim();
+    return pathLabel || baseLabel;
 }

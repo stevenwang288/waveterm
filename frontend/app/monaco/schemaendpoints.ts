@@ -1,12 +1,12 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import settingsSchema from "../../../schema/settings.json";
-import connectionsSchema from "../../../schema/connections.json";
-import aipresetsSchema from "../../../schema/aipresets.json";
-import bgpresetsSchema from "../../../schema/bgpresets.json";
-import waveaiSchema from "../../../schema/waveai.json";
-import widgetsSchema from "../../../schema/widgets.json";
+import settingsSchema from "../../../.tmp/dev-schema/settings.json";
+import connectionsSchema from "../../../.tmp/dev-schema/connections.json";
+import aipresetsSchema from "../../../.tmp/dev-schema/aipresets.json";
+import bgpresetsSchema from "../../../.tmp/dev-schema/bgpresets.json";
+import waveaiSchema from "../../../.tmp/dev-schema/waveai.json";
+import widgetsSchema from "../../../.tmp/dev-schema/widgets.json";
 
 type SchemaInfo = {
     uri: string;

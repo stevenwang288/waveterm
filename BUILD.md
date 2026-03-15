@@ -105,6 +105,15 @@ Run the following command to build the app and run it via Vite's development ser
 task dev
 ```
 
+#### Windows local development routes
+
+On this Windows setup there are currently two practical local development routes:
+
+- `npm run dev:linked` — recommended daily driver. Reuses the stable local Wave config at `C:\Users\baba1\.config\wave`, keeps runtime data under `.tmp/dev-linked/current`, and enforces a single managed dev instance.
+- `npm run dev:fresh` — isolated troubleshooting route. Creates a brand new config/data/electron-userdata sandbox under `.tmp/dev-fresh/<runId>` so you can debug startup, config, or migration issues without touching the normal dev state.
+
+`npm run dev` is still the raw low-level Electron/Vite entrypoint underneath both flows, but for day-to-day work on this machine it is better to use one of the wrappers above so state handling stays explicit.
+
 ### Standalone
 
 Run the following command to build the app and run it standalone, without the development server. This will not reload on change:
@@ -126,6 +135,28 @@ If you're on Linux ARM64, run the following:
 ```sh
 USE_SYSTEM_FPM=1 task package
 ```
+
+### Windows installer copy
+
+On Windows, if you want the packaged installer copied to a local handoff directory, use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1
+```
+
+This script will:
+
+- run `npm run build:prod`
+- run the Windows packaging step
+- copy the generated installer from `make/<version>/` to `D:\DeSK`
+
+If the working tree is intentionally dirty during local packaging, use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-win.ps1 -AllowDirty
+```
+
+You can override the copy target with `-DeskDir <path>`.
 
 ## Debugging
 

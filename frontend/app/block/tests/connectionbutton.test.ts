@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getTerminalConnectionDisplayLabel } from "../connectionbutton-label";
+import { getTerminalConnectionDisplayLabel, getTerminalConnectionLabelPresentation } from "../connectionbutton-label";
 import { buildTerminalLabelContextMenu } from "../connectionbutton-menu";
 
 describe("buildTerminalLabelContextMenu", () => {
@@ -53,7 +53,18 @@ describe("buildTerminalLabelContextMenu", () => {
 });
 
 describe("connection button terminal label", () => {
-    it("shows the remote connection name before the cwd so servers stay distinguishable", () => {
+    it("right-aligns local terminal paths and left-aligns remote terminal paths", () => {
+        expect(getTerminalConnectionLabelPresentation(true)).toEqual({
+            align: "right",
+            className: "text-muted group-hover:text-secondary",
+        });
+        expect(getTerminalConnectionLabelPresentation(false)).toEqual({
+            align: "left",
+            className: "text-green-500 group-hover:text-green-400",
+        });
+    });
+
+    it("shows only the cwd for remote terminals", () => {
         expect(
             getTerminalConnectionDisplayLabel({
                 isLocal: false,
@@ -61,6 +72,28 @@ describe("connection button terminal label", () => {
                 connectionDisplayName: "ubuntu@F2-10.20.0.162",
                 terminalLabel: "/home/ubuntu/project",
             })
-        ).toBe("ubuntu@F2-10.20.0.162 · /home/ubuntu/project");
+        ).toBe("/home/ubuntu/project");
+    });
+
+    it("falls back to the connection name when a remote terminal cwd is unavailable", () => {
+        expect(
+            getTerminalConnectionDisplayLabel({
+                isLocal: false,
+                connection: "ubuntu@F2-10.20.0.162",
+                connectionDisplayName: "ubuntu@F2-10.20.0.162",
+                terminalLabel: "",
+            })
+        ).toBe("ubuntu@F2-10.20.0.162");
+    });
+
+    it("does not fall back to a local connection name when the local cwd is unavailable", () => {
+        expect(
+            getTerminalConnectionDisplayLabel({
+                isLocal: true,
+                connection: "local",
+                connectionDisplayName: "local",
+                terminalLabel: "",
+            })
+        ).toBe("");
     });
 });

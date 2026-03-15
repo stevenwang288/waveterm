@@ -159,6 +159,10 @@ const HeaderTextElems = React.memo(({ viewModel, blockData, preview, error, onDo
         );
     }
 
+    if (headerTextElems.length === 0) {
+        return null;
+    }
+
     return (
         <div className="block-frame-textelems-wrapper" onDoubleClick={onDoubleClick}>
             {headerTextElems}
@@ -1029,4 +1033,3 @@ const BlockFrame_Header = ({
 };
 
 export { BlockFrame_Header };
-

@@ -8,6 +8,7 @@ import { ContextMenuModel } from "@/app/store/contextmenu";
 import { FocusManager } from "@/app/store/focusManager";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { getUtilityWidgetCount, getWidgetBarMode, type WidgetBarMode } from "@/app/workspace/widgets-layout";
 import { shouldIncludeWidgetForWorkspace } from "@/app/workspace/widgetfilter";
 import { GitPanel } from "@/app/workspace/git-panel";
 import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
@@ -57,7 +58,7 @@ async function handleWidgetSelect(widget: WidgetConfigType) {
     createBlock(blockDef, widget.magnified);
 }
 
-const Widget = memo(({ widget, mode }: { widget: WidgetConfigType; mode: "normal" | "compact" | "supercompact" }) => {
+const Widget = memo(({ widget, mode }: { widget: WidgetConfigType; mode: WidgetBarMode }) => {
     const [isTruncated, setIsTruncated] = useState(false);
     const labelRef = useRef<HTMLDivElement>(null);
 
@@ -97,7 +98,7 @@ const Widget = memo(({ widget, mode }: { widget: WidgetConfigType; mode: "normal
     );
 });
 
-const ExplorerConnectionButton = memo(({ mode }: { mode: "normal" | "compact" | "supercompact" }) => {
+const ExplorerConnectionButton = memo(({ mode }: { mode: WidgetBarMode }) => {
     const focusedBlockId = useAtomValue(FocusManager.getInstance().blockFocusAtom);
     if (!focusedBlockId) {
         return null;
@@ -108,7 +109,7 @@ const ExplorerConnectionButton = memo(({ mode }: { mode: "normal" | "compact" | 
 ExplorerConnectionButton.displayName = "ExplorerConnectionButton";
 
 const ExplorerConnectionButtonInner = memo(
-    ({ blockId, mode }: { blockId: string; mode: "normal" | "compact" | "supercompact" }) => {
+    ({ blockId, mode }: { blockId: string; mode: WidgetBarMode }) => {
         const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
         const isExplorerMode = blockData?.meta?.view === "preview" && !!blockData?.meta?.["preview:explorer"];
         const connection = blockData?.meta?.connection ?? "";
@@ -443,7 +444,7 @@ const Widgets = memo(() => {
     const fullConfig = useAtomValue(atoms?.fullConfigAtom ?? fallbackFullConfigAtom);
     const workspace = useAtomValue(atoms?.workspace ?? fallbackWorkspaceAtom);
     const hasCustomAIPresets = useAtomValue(atoms?.hasCustomAIPresetsAtom ?? fallbackHasCustomAIPresetsAtom);
-    const [mode, setMode] = useState<"normal" | "compact" | "supercompact">("normal");
+    const [mode, setMode] = useState<WidgetBarMode>("normal");
     const containerRef = useRef<HTMLDivElement>(null);
     const measurementRef = useRef<HTMLDivElement>(null);
 
@@ -468,6 +469,10 @@ const Widgets = memo(() => {
     const appsButtonRef = useRef<HTMLDivElement>(null);
     const focusedBlockId = useAtomValue(FocusManager.getInstance().blockFocusAtom);
     const [focusedBlockData] = WOS.useWaveObjectValue<Block>(focusedBlockId ? WOS.makeORef("block", focusedBlockId) : null);
+    const showAppsButton = isDev() || featureWaveAppBuilder;
+    const showExplorerConnectionButton =
+        focusedBlockData?.meta?.view === "preview" && !!focusedBlockData?.meta?.["preview:explorer"];
+    const showDevBadge = isDev();
 
     const launchAiCommand = useCallback(
         (command: string) => {
@@ -543,28 +548,22 @@ const Widgets = memo(() => {
 
         const containerHeight = containerRef.current.clientHeight;
         const normalHeight = measurementRef.current.scrollHeight;
-        const gracePeriod = 10;
-
-        let newMode: "normal" | "compact" | "supercompact" = "normal";
-
-        if (normalHeight > containerHeight - gracePeriod) {
-            newMode = "compact";
-
-            // Calculate total widget count for supercompact check
-            const utilityWidgets = (isDev() || featureWaveAppBuilder) ? 7 : 6;
-            const totalWidgets = (widgets?.length || 0) + utilityWidgets;
-            const minHeightPerWidget = 32;
-            const requiredHeight = totalWidgets * minHeightPerWidget;
-
-            if (requiredHeight > containerHeight) {
-                newMode = "supercompact";
-            }
-        }
+        const utilityWidgets = getUtilityWidgetCount({
+            showAppsButton,
+            showDevIndicator: showDevBadge,
+            showExplorerConnection: showExplorerConnectionButton,
+        });
+        const newMode = getWidgetBarMode({
+            containerHeight,
+            normalHeight,
+            widgetCount: widgets?.length || 0,
+            utilityWidgetCount: utilityWidgets,
+        });
 
         if (newMode !== mode) {
             setMode(newMode);
         }
-    }, [featureWaveAppBuilder, mode, widgets]);
+    }, [mode, showAppsButton, showDevBadge, showExplorerConnectionButton, widgets]);
 
     useEffect(() => {
         const resizeObserver = new ResizeObserver(() => {
@@ -609,20 +608,23 @@ const Widgets = memo(() => {
         <>
             <div
                 ref={containerRef}
-                className="flex flex-col w-12 overflow-hidden py-1 -ml-1 select-none"
+                className={clsx(
+                    "flex flex-col w-12 overflow-x-hidden py-1 -ml-1 select-none",
+                    mode === "supercompact" ? "overflow-y-auto" : "overflow-hidden"
+                )}
                 onContextMenu={handleWidgetsBarContextMenu}
             >
                 {mode === "supercompact" ? (
                     <>
-                        <div className="grid grid-cols-2 gap-0 w-full">
+                        <div className="flex flex-col w-full">
                             {widgets?.map((data, idx) => (
                                 <Widget key={`widget-${idx}`} widget={data} mode={mode} />
                             ))}
                         </div>
                         <div className="flex-grow" />
-                        <div className="grid grid-cols-2 gap-0 w-full">
+                        <div className="flex flex-col w-full">
                             <ExplorerConnectionButton mode={mode} />
-                            {isDev() || featureWaveAppBuilder ? (
+                            {showAppsButton ? (
                                 <div
                                     ref={appsButtonRef}
                                     className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
@@ -690,7 +692,7 @@ const Widgets = memo(() => {
                         ))}
                         <div className="flex-grow" />
                         <ExplorerConnectionButton mode={mode} />
-                        {isDev() || featureWaveAppBuilder ? (
+                        {showAppsButton ? (
                             <div
                                 ref={appsButtonRef}
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
@@ -764,7 +766,7 @@ const Widgets = memo(() => {
                         </div>
                     </>
                 )}
-                {isDev() ? (
+                {showDevBadge ? (
                     <div
                         className="flex justify-center items-center w-full py-1 text-accent text-[30px]"
                         title={t("workspace.runningDevBuild")}
@@ -773,7 +775,7 @@ const Widgets = memo(() => {
                     </div>
                 ) : null}
             </div>
-            {(isDev() || featureWaveAppBuilder) && appsButtonRef.current && (
+            {showAppsButton && appsButtonRef.current && (
                 <AppsFloatingWindow
                     isOpen={isAppsOpen}
                     onClose={() => setIsAppsOpen(false)}
@@ -790,6 +792,14 @@ const Widgets = memo(() => {
                 ))}
                 <div className="flex-grow" />
                 <ExplorerConnectionButton mode="normal" />
+                {showAppsButton ? (
+                    <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                        <div>
+                            <i className={makeIconClass("cube", true)}></i>
+                        </div>
+                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.apps")}</div>
+                    </div>
+                ) : null}
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>
                         <i className={makeIconClass("code-branch", true)}></i>
@@ -808,15 +818,7 @@ const Widgets = memo(() => {
                     </div>
                     <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.menu.settings")}</div>
                 </div>
-                {isDev() ? (
-                    <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
-                        <div>
-                            <i className={makeIconClass("cube", true)}></i>
-                        </div>
-                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.apps")}</div>
-                    </div>
-                ) : null}
-                {isDev() ? (
+                {showDevBadge ? (
                     <div
                         className="flex justify-center items-center w-full py-1 text-accent text-[30px]"
                         title={t("workspace.runningDevBuild")}
