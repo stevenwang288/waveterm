@@ -301,20 +301,21 @@ export const ConnectionButton = React.memo(
                                 isTerminalBlock ? (
                                     <div
                                         className={util.cn(
-                                            "connection-terminal-label header-tail-container flex-1 min-w-0 overflow-hidden pr-1 cursor-copy",
+                                            "connection-terminal-label header-tail-container flex-1 min-w-0 overflow-hidden pr-1",
                                             extraDisplayNameClassName
                                         )}
-                                        onClick={handleTerminalLabelClick}
-                                        onDoubleClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            onTerminalLabelDoubleClick?.();
-                                        }}
-                                        onContextMenu={handleTerminalLabelContextMenu}
                                     >
                                         <div
                                             ref={terminalPathRef}
-                                            className="connection-terminal-path header-tail-value"
+                                            className="connection-terminal-path header-tail-value cursor-copy"
+                                            onClick={handleTerminalLabelClick}
+                                            onDoubleClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                onTerminalLabelDoubleClick?.();
+                                            }}
+                                            onContextMenu={handleTerminalLabelContextMenu}
+                                            title={connDisplayName}
                                         >
                                             <span className="connection-terminal-path-content header-tail-content">
                                                 {connDisplayName}
