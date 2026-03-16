@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { BlockNodeModel } from "@/app/block/blocktypes";
+import { syncHeaderTailInput } from "@/app/block/header-tail";
 import i18next from "@/app/i18n";
 import type { TabModel } from "@/app/store/tab-model";
 import { Search, useSearch } from "@/app/element/search";
@@ -176,7 +177,7 @@ export class WebViewModel implements ViewModel {
                 elemtype: "input",
                 value: url,
                 ref: this.urlInputRef,
-                className: "url-input",
+                className: "url-input header-tail-input",
                 onChange: this.handleUrlChange.bind(this),
                 onKeyDown: this.handleKeyDown.bind(this),
                 onFocus: this.handleFocus.bind(this),
@@ -852,6 +853,8 @@ interface WebViewProps {
 const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps) => {
     const blockData = useAtomValue(model.blockAtom);
     const isNodeFocused = useAtomValue(model.nodeModel.isFocused);
+    const currentUrl = useAtomValue(model.url);
+    const urlInputFocused = useAtomValue(model.urlInputFocused);
     const defaultUrl = useAtomValue(model.homepageUrl);
     const defaultSearchAtom = getSettingsKeyAtom("web:defaultsearch");
     const defaultSearch = useAtomValue(defaultSearchAtom);
@@ -991,6 +994,21 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
             model.loadUrl(metaUrl, "meta");
         }
     }, [metaUrl, initialSrc]);
+
+    useEffect(() => {
+        if (urlInputFocused) {
+            return;
+        }
+        const input = model.urlInputRef.current;
+        if (input == null) {
+            return;
+        }
+        syncHeaderTailInput(input);
+        const raf = window.requestAnimationFrame(() => syncHeaderTailInput(input));
+        return () => {
+            window.cancelAnimationFrame(raf);
+        };
+    }, [currentUrl, model, urlInputFocused]);
 
     // Reload webview when user agent type changes
     useEffect(() => {

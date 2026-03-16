@@ -2,7 +2,7 @@
 import i18next from "@/app/i18n";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { makeNativeLabel } from "./platformutil";
+import { isWindows, makeNativeLabel } from "./platformutil";
 import { fireAndForget, isBlank, stringToBase64 } from "./util";
 import { formatRemoteUri } from "./waveutil";
 
@@ -38,7 +38,7 @@ function runCliInExistingTerminal(cliCommand: string): boolean {
 }
 
 const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
-    { label: "Codex", command: "codex" },
+    { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
     { label: "Claude", command: "claude" },
     { label: "Gemini", command: "gemini" },
     { label: "Amp", command: "amp" },

@@ -22,7 +22,6 @@ import * as React from "react";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
 import { clampRemoteGuiSplitPct } from "./remote-gui";
-import { isTerminalViewportNearBottom } from "./term-scroll";
 import { computeTheme } from "./termutil";
 import { TermWrap } from "./termwrap";
 import "./xterm.css";
@@ -266,6 +265,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     const isFocused = jotai.useAtomValue(model.nodeModel.isFocused);
     const activeSplitPane = jotai.useAtomValue(model.activeSplitPane);
     const isMagnified = jotai.useAtomValue(model.nodeModel.isMagnified);
+    const prevMagnifiedRef = React.useRef<boolean | null>(null);
     const isMI = jotai.useAtomValue(tabModel.isTermMultiInput);
     const isBasicTerm = termMode != "vdom" && blockData?.meta?.controller != "cmd"; // needs to match isBasicTerm
 
@@ -416,21 +416,19 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
         if (!termWrap) {
             return;
         }
-        const bufferBeforeResize = termWrap.terminal?.buffer?.active;
-        const wasAtBottomBeforeResize =
-            bufferBeforeResize != null && isTerminalViewportNearBottom(bufferBeforeResize.baseY, bufferBeforeResize.viewportY);
+        const prevIsMagnified = prevMagnifiedRef.current;
+        prevMagnifiedRef.current = isMagnified;
+        if (prevIsMagnified == null || prevIsMagnified === isMagnified) {
+            return;
+        }
         termWrap.handleResize_debounced();
         const timeouts = [100, 250, 500].map((delayMs) =>
             setTimeout(() => {
                 termWrap.handleResize_debounced();
                 if (delayMs === 500) {
                     fireAndForget(() => termWrap.resyncController("magnify resize"));
-                    if (wasAtBottomBeforeResize) {
-                        termWrap.scrollToBottom();
-                    }
-                    if (isMagnified && wasAtBottomBeforeResize) {
-                        fireAndForget(() => termWrap.reflowHistoryToCurrentWidth("magnify-auto"));
-                    }
+                    termWrap.scrollToBottomIfFollowingLatest();
+                    fireAndForget(() => termWrap.reflowHistoryToCurrentWidth("magnify-auto"));
                 }
             }, delayMs)
         );

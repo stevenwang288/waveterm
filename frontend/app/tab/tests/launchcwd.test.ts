@@ -52,6 +52,23 @@ describe("launchcwd helpers", () => {
         ).toBe("D:\\OneDrive\\steven\\code\\ai\\12CLI\\goose");
     });
 
+    it("reconstructs a wrapped status footer path instead of persisting only the visible tail", async () => {
+        const { extractTerminalDisplayCwdFromBufferLines } = await import("@/util/launchcwd");
+
+        expect(
+            extractTerminalDisplayCwdFromBufferLines([
+                {
+                    text: "gpt-5.4 xhigh · 70% left · D:\\OneDrive\\steven\\code\\ai\\12CLI\\",
+                    wrapped: false,
+                },
+                {
+                    text: "waveterm-main",
+                    wrapped: true,
+                },
+            ])
+        ).toBe("D:\\OneDrive\\steven\\code\\ai\\12CLI\\waveterm-main");
+    });
+
     it("extracts a remote path from a directory hint line", async () => {
         const { extractTerminalDisplayCwdFromBufferLines } = await import("@/util/launchcwd");
 

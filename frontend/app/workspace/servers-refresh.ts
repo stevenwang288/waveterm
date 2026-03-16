@@ -20,6 +20,7 @@ type ReconcilePveConnectionsParams = {
     fullConfig: FullConfigType | null;
     managedConnectionSet: Set<string>;
     connections: string[];
+    managedKnownHostsFile?: string;
     setConnectionConfig: (host: string, metamaptype: Record<string, any>) => Promise<void>;
 };
 
@@ -225,6 +226,7 @@ export async function reconcilePveConnections({
     fullConfig,
     managedConnectionSet,
     connections,
+    managedKnownHostsFile,
     setConnectionConfig,
 }: ReconcilePveConnectionsParams): Promise<ReconcilePveConnectionsResult> {
     const existingConfigs = fullConfig?.connections ?? {};
@@ -280,6 +282,9 @@ export async function reconcilePveConnections({
         };
         if (!isBlank(sshHost)) {
             nextMeta["ssh:hostname"] = sshHost;
+        }
+        if (!isBlank(managedKnownHostsFile)) {
+            nextMeta["ssh:userknownhostsfile"] = [managedKnownHostsFile];
         }
         await setConnectionConfig(connectionName, nextMeta);
         if (matchedConnName) {

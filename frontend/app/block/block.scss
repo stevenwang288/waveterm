@@ -84,10 +84,14 @@
                 font: var(--header-font);
                 border-bottom: 1px solid var(--border-color);
                 border-radius: var(--block-border-radius) var(--block-border-radius) 0 0;
+                background-color: rgb(from var(--block-bg-color) r g b / 72%);
+                transition:
+                    background-color 120ms ease,
+                    border-bottom-color 120ms ease,
+                    box-shadow 120ms ease;
 
                 &.term-unread {
                     border-bottom-color: rgb(from var(--warning-color) r g b / 60%);
-                    background-color: rgb(from var(--warning-color) r g b / 12%);
                 }
 
                 .block-frame-default-header-iconview {
@@ -131,12 +135,14 @@
                     }
 
                     &.term-cwd {
-                        color: var(--accent-color);
+                        color: #b85c4b;
                         opacity: 0.9;
                         font-weight: 500;
                     }
 
                     &.preview-filename {
+                        color: #b85c4b;
+                        opacity: 0.92;
                         direction: rtl;
                         text-align: left;
                         span {
@@ -149,16 +155,63 @@
                     }
 
                     &.preview-filename-input {
+                        color: #b85c4b;
+                        opacity: 0.92;
                         direction: ltr;
                         text-align: left;
                         width: 100%;
                         min-width: 0;
                     }
                 }
-                & .connection-terminal-label {
-                    direction: rtl;
-                    text-align: left;
-                    unicode-bidi: isolate;
+                & .connection-terminal-label,
+                & .header-tail-container {
+                    display: flex;
+                    justify-content: flex-end;
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    overflow: hidden;
+                    text-overflow: clip !important;
+                }
+
+                & .connection-terminal-path,
+                & .header-tail-value {
+                    color: #b85c4b;
+                    display: flex;
+                    justify-content: flex-end;
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    width: 100%;
+                    overflow-x: auto !important;
+                    overflow-y: hidden !important;
+                    text-overflow: clip !important;
+                    direction: ltr;
+                    unicode-bidi: plaintext;
+                    scrollbar-width: none;
+
+                    &::-webkit-scrollbar {
+                        display: none;
+                    }
+                }
+
+                & .connection-terminal-path-content,
+                & .header-tail-content {
+                    display: inline-block;
+                    flex: 0 0 auto;
+                    margin-left: auto;
+                    min-width: max-content;
+                    width: max-content;
+                    max-width: none;
+                    white-space: nowrap;
+                    overflow: visible !important;
+                    text-overflow: clip !important;
+                    direction: ltr;
+                    unicode-bidi: plaintext;
+                }
+
+                & .header-tail-input {
+                    color: #b85c4b;
+                    opacity: 0.92;
+                    text-overflow: clip;
                 }
 
                 .connection-button {
@@ -230,6 +283,7 @@
                             }
 
                             input.preview-filename-input {
+                                color: #b85c4b;
                                 opacity: 1;
                                 border: 1px solid var(--border-color);
                                 border-radius: 4px;
@@ -477,6 +531,17 @@
         }
 
         &.block-focused {
+            .block-frame-default-inner .block-frame-default-header {
+                background:
+                    linear-gradient(
+                        180deg,
+                        rgb(from var(--accent-color) r g b / 34%),
+                        rgb(from var(--accent-color) r g b / 22%)
+                    );
+                border-bottom-color: rgb(from var(--accent-color) r g b / 62%);
+                box-shadow: inset 0 -1px 0 rgb(from var(--accent-color) r g b / 32%);
+            }
+
             .block-mask {
                 border: 4px solid rgb(from var(--accent-color) r g b / 96%);
                 box-shadow:

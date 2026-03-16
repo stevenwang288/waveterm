@@ -202,6 +202,35 @@ declare global {
             name?: string;
             error?: string;
         }>; // pve-create-console-session
+        pveControlMachine: (req: {
+            origin?: string;
+            node: string;
+            vmid: number;
+            type: "qemu" | "lxc";
+            action: "start" | "shutdown" | "stop" | "reboot";
+            timeoutMs?: number;
+        }) => Promise<{
+            ok: boolean;
+            taskId?: string;
+            action?: "start" | "shutdown" | "stop" | "reboot";
+            error?: string;
+        }>; // pve-control-machine
+        pveGetManagedKnownHostsFile: () => Promise<{
+            ok: boolean;
+            filePath?: string;
+            error?: string;
+        }>; // pve-get-managed-known-hosts-file
+        pveRepairSshHostKey: (req: {
+            host: string;
+            port?: number;
+            timeoutMs?: number;
+        }) => Promise<{
+            ok: boolean;
+            knownHostsFile?: string;
+            removedHosts?: string[];
+            scanned?: boolean;
+            error?: string;
+        }>; // pve-repair-ssh-host-key
         openBuilder: (appId?: string) => void; // open-builder
         setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh

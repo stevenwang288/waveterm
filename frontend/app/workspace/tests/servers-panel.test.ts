@@ -38,6 +38,7 @@ test("reconcilePveConnections updates matched managed connections and creates mi
         } as unknown) as FullConfigType,
         managedConnectionSet: new Set(["ubuntu@10.20.0.166"]),
         connections: ["ubuntu@10.20.0.166"],
+        managedKnownHostsFile: "C:/Users/test/.config/wave/pve-managed-known_hosts",
         setConnectionConfig: async (host, meta) => {
             writes.push({ host, meta });
         },
@@ -54,6 +55,7 @@ test("reconcilePveConnections updates matched managed connections and creates mi
     );
     assert.equal(writes[0]?.meta["display:name"], "GUI-NO-ubuntu24");
     assert.equal(writes[0]?.meta["pve:name"], "GUI-NO-ubuntu24");
+    assert.deepEqual(writes[0]?.meta["ssh:userknownhostsfile"], ["C:/Users/test/.config/wave/pve-managed-known_hosts"]);
     assert.equal(writes[1]?.meta["display:name"], "GUI-NO-win11");
     assert.equal(writes[1]?.meta["pve:name"], "GUI-NO-win11");
     assert.equal(writes[1]?.meta["ssh:hostname"], "10.20.0.167");

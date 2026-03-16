@@ -17,7 +17,7 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { openCliLayoutInNewTab } from "@/util/clilayout";
 import { getTerminalInheritableCwd } from "@/util/launchcwd";
-import { PLATFORM, PlatformWindows } from "@/util/platformutil";
+import { isWindows, PLATFORM, PlatformWindows } from "@/util/platformutil";
 import { base64ToString, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import clsx from "clsx";
 import { useAtom, useAtomValue } from "jotai";
@@ -48,7 +48,7 @@ type TreeNodeState = {
 };
 
 const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
-    { label: "Codex", command: "codex" },
+    { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
     { label: "Claude", command: "claude" },
     { label: "Gemini", command: "gemini" },
     { label: "Amp", command: "amp" },

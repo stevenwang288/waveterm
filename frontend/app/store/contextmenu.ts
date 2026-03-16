@@ -5,9 +5,22 @@ import { atoms, getApi, globalStore } from "./global";
 
 class ContextMenuModelType {
     handlers: Map<string, () => void> = new Map(); // id -> handler
+    private registered = false;
 
     constructor() {
-        getApi().onContextMenuClick(this.handleContextMenuClick.bind(this));
+        this.ensureRegistered();
+    }
+
+    private ensureRegistered(): void {
+        if (this.registered) {
+            return;
+        }
+        const api = getApi();
+        if (api == null || typeof api.onContextMenuClick !== "function") {
+            return;
+        }
+        api.onContextMenuClick(this.handleContextMenuClick.bind(this));
+        this.registered = true;
     }
 
     handleContextMenuClick(id: string): void {
@@ -47,6 +60,7 @@ class ContextMenuModelType {
 
     showContextMenu(menu: ContextMenuItem[], ev: React.MouseEvent<any>): void {
         ev.stopPropagation();
+        this.ensureRegistered();
         this.handlers.clear();
         const electronMenuItems = this._convertAndRegisterMenu(menu);
         
@@ -59,7 +73,11 @@ class ContextMenuModelType {
             oid = globalStore.get(atoms.builderId);
         }
         
-        getApi().showContextMenu(oid, electronMenuItems);
+        const api = getApi();
+        if (api == null || typeof api.showContextMenu !== "function") {
+            return;
+        }
+        api.showContextMenu(oid, electronMenuItems);
     }
 }
 

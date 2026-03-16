@@ -31,10 +31,15 @@ import { createNewWaveWindow, getWaveWindowByWebContentsId } from "./emain-windo
 import { ElectronWshClient } from "./emain-wsh";
 import { synthesizeEdgeTtsToMp3Base64 } from "./local-tts-edge";
 import {
+    controlPveMachine,
     createPveConsoleSession,
     PveCreateConsoleSessionRequest,
+    PveControlMachineRequest,
     listPveMachines,
     PveListMachinesRequest,
+    getManagedPveKnownHostsFilePath,
+    repairPveSshHostKey,
+    PveRepairSshHostKeyRequest,
 } from "./pve-auth";
 
 const electronApp = electron.app;
@@ -1028,6 +1033,15 @@ export function initIpcHandlers() {
     });
     electron.ipcMain.handle("pve-create-console-session", async (_event, req: PveCreateConsoleSessionRequest) => {
         return await createPveConsoleSession(req);
+    });
+    electron.ipcMain.handle("pve-control-machine", async (_event, req: PveControlMachineRequest) => {
+        return await controlPveMachine(req);
+    });
+    electron.ipcMain.handle("pve-get-managed-known-hosts-file", async () => {
+        return { ok: true, filePath: getManagedPveKnownHostsFilePath() };
+    });
+    electron.ipcMain.handle("pve-repair-ssh-host-key", async (_event, req: PveRepairSshHostKeyRequest) => {
+        return await repairPveSshHostKey(req);
     });
 
     electron.ipcMain.on("open-native-path", (event, filePath: string) => {

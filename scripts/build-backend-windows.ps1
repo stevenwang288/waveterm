@@ -80,6 +80,20 @@ function Get-PackageVersion {
   return [string]$pkg.version
 }
 
+function Invoke-GoBuildChecked {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Args,
+    [Parameter(Mandatory = $true)]
+    [string]$FailureMessage
+  )
+
+  & go @Args
+  if ($LASTEXITCODE -ne 0) {
+    throw $FailureMessage
+  }
+}
+
 $zigExe = Ensure-Zig -Version $ZigVersion
 $version = Get-PackageVersion
 $buildTime = Get-Date -Format "yyyyMMddHHmm"
@@ -108,11 +122,18 @@ try {
   $env:GOARCH = "amd64"
   $env:CC = "$zigExe cc -target x86_64-windows-gnu"
 
-  go build `
-    -tags "osusergo,sqlite_omit_load_extension" `
-    -ldflags " -X main.BuildTime=$buildTime -X main.WaveVersion=$version" `
-    -o "dist\\bin\\wavesrv.x64.exe" `
-    "cmd\\server\\main-server.go"
+  Invoke-GoBuildChecked `
+    -Args @(
+      "build",
+      "-tags",
+      "osusergo,sqlite_omit_load_extension",
+      "-ldflags",
+      " -X main.BuildTime=$buildTime -X main.WaveVersion=$version",
+      "-o",
+      "dist\\bin\\wavesrv.x64.exe",
+      "cmd\\server\\main-server.go"
+    ) `
+    -FailureMessage "go build failed for wavesrv.x64.exe"
 
   $env:CGO_ENABLED = "0"
   $env:GOARCH = "amd64"
@@ -123,10 +144,16 @@ try {
       Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue
     }
 
-  go build `
-    -ldflags "-s -w -X main.BuildTime=$buildTime -X main.WaveVersion=$version" `
-    -o "dist\\bin\\wsh-$version-windows.x64.exe" `
-    "cmd\\wsh\\main-wsh.go"
+  Invoke-GoBuildChecked `
+    -Args @(
+      "build",
+      "-ldflags",
+      "-s -w -X main.BuildTime=$buildTime -X main.WaveVersion=$version",
+      "-o",
+      "dist\\bin\\wsh-$version-windows.x64.exe",
+      "cmd\\wsh\\main-wsh.go"
+    ) `
+    -FailureMessage "go build failed for wsh-$version-windows.x64.exe"
 
   Write-Host "[backend] done." -ForegroundColor Green
 } finally {

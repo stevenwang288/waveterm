@@ -39,6 +39,10 @@ describe("term scroll follow logic", () => {
             followLatestOutput: false,
             manuallyDetached: true,
         });
+        expect(resolveTerminalFollowLatestState(240, 119, true)).toEqual({
+            followLatestOutput: false,
+            manuallyDetached: true,
+        });
         expect(resolveTerminalFollowLatestState(120, 120, true)).toEqual({
             followLatestOutput: true,
             manuallyDetached: false,

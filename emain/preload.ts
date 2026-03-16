@@ -101,6 +101,20 @@ contextBridge.exposeInMainWorld("api", {
         name?: string;
         timeoutMs?: number;
     }) => ipcRenderer.invoke("pve-create-console-session", req),
+    pveControlMachine: (req: {
+        origin?: string;
+        node: string;
+        vmid: number;
+        type: "qemu" | "lxc";
+        action: "start" | "shutdown" | "stop" | "reboot";
+        timeoutMs?: number;
+    }) => ipcRenderer.invoke("pve-control-machine", req),
+    pveGetManagedKnownHostsFile: () => ipcRenderer.invoke("pve-get-managed-known-hosts-file"),
+    pveRepairSshHostKey: (req: {
+        host: string;
+        port?: number;
+        timeoutMs?: number;
+    }) => ipcRenderer.invoke("pve-repair-ssh-host-key", req),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),

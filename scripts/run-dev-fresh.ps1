@@ -32,6 +32,7 @@ try {
   $env:WAVETERM_CONFIG_HOME = $configDir
   $env:WAVETERM_DATA_HOME = $dataDir
   $env:WAVETERM_ELECTRON_USER_DATA_HOME = $electronDir
+  Enable-RepoEsbuildExecutionWorkaround | Out-Null
 
   if ($DebugOpenExternal) {
     $env:WAVETERM_DEBUG_OPEN_EXTERNAL = "1"

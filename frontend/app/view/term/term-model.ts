@@ -62,7 +62,7 @@ import {
 } from "./remote-gui";
 
 const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
-    { label: "Codex", command: "codex" },
+    { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
     { label: "Claude", command: "claude" },
     { label: "Gemini", command: "gemini" },
     { label: "Amp", command: "amp" },
@@ -1165,38 +1165,38 @@ export class TermViewModel implements ViewModel {
             return true;
         }
         if (keyutil.checkKeyPressed(waveEvent, "Shift:End")) {
-            if (this.termRef?.current?.terminal) {
-                this.termRef.current.terminal.scrollToBottom();
+            if (this.termRef?.current) {
+                this.termRef.current.scrollToBottom();
             }
             return true;
         }
         if (keyutil.checkKeyPressed(waveEvent, "Shift:Home")) {
-            if (this.termRef?.current?.terminal) {
-                this.termRef.current.terminal.scrollToLine(0);
+            if (this.termRef?.current) {
+                this.termRef.current.scrollToTop();
             }
             return true;
         }
         if (isMacOS() && keyutil.checkKeyPressed(waveEvent, "Cmd:End")) {
-            if (this.termRef?.current?.terminal) {
-                this.termRef.current.terminal.scrollToBottom();
+            if (this.termRef?.current) {
+                this.termRef.current.scrollToBottom();
             }
             return true;
         }
         if (isMacOS() && keyutil.checkKeyPressed(waveEvent, "Cmd:Home")) {
-            if (this.termRef?.current?.terminal) {
-                this.termRef.current.terminal.scrollToLine(0);
+            if (this.termRef?.current) {
+                this.termRef.current.scrollToTop();
             }
             return true;
         }
         if (keyutil.checkKeyPressed(waveEvent, "Shift:PageDown")) {
-            if (this.termRef?.current?.terminal) {
-                this.termRef.current.terminal.scrollPages(1);
+            if (this.termRef?.current) {
+                this.termRef.current.scrollPages(1);
             }
             return true;
         }
         if (keyutil.checkKeyPressed(waveEvent, "Shift:PageUp")) {
-            if (this.termRef?.current?.terminal) {
-                this.termRef.current.terminal.scrollPages(-1);
+            if (this.termRef?.current) {
+                this.termRef.current.scrollPages(-1);
             }
             return true;
         }

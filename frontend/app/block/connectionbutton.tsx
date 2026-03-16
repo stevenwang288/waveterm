@@ -42,6 +42,7 @@ export const ConnectionButton = React.memo(
             const { t } = useTranslation();
             const [, setConnModalOpen] = jotai.useAtom(changeConnModalAtom);
             const clickTimeoutRef = React.useRef<number | null>(null);
+            const terminalPathRef = React.useRef<HTMLDivElement | null>(null);
             const isLocal = util.isLocalConnName(connection);
             const connStatusAtom = getConnStatusAtom(connection);
             const connStatus = jotai.useAtomValue(connStatusAtom);
@@ -125,6 +126,36 @@ export const ConnectionButton = React.memo(
                     }
                 };
             }, []);
+            const syncTerminalPathScrollToEnd = React.useCallback(() => {
+                const elem = terminalPathRef.current;
+                if (elem == null) {
+                    return;
+                }
+                elem.scrollLeft = Math.max(0, elem.scrollWidth - elem.clientWidth);
+            }, []);
+            React.useLayoutEffect(() => {
+                if (!isTerminalBlock) {
+                    return;
+                }
+                const rafId = window.requestAnimationFrame(() => {
+                    syncTerminalPathScrollToEnd();
+                });
+                return () => window.cancelAnimationFrame(rafId);
+            }, [connection, isLocal, isTerminalBlock, localName, syncTerminalPathScrollToEnd, terminalLabelTrimmed]);
+            React.useEffect(() => {
+                if (!isTerminalBlock) {
+                    return;
+                }
+                const elem = terminalPathRef.current;
+                if (elem == null || typeof ResizeObserver === "undefined") {
+                    return;
+                }
+                const observer = new ResizeObserver(() => {
+                    syncTerminalPathScrollToEnd();
+                });
+                observer.observe(elem);
+                return () => observer.disconnect();
+            }, [isTerminalBlock, syncTerminalPathScrollToEnd]);
             let titleText = null;
             let shouldSpin = false;
             let connDisplayName: string = null;
@@ -237,10 +268,11 @@ export const ConnectionButton = React.memo(
                     <div
                         ref={ref}
                         className={util.cn(
-                            "group flex items-center flex-nowrap overflow-hidden text-ellipsis min-w-0 font-normal text-primary rounded-sm",
+                            "group flex items-center flex-nowrap overflow-hidden min-w-0 font-normal text-primary rounded-sm",
+                            !isTerminalBlock && "text-ellipsis",
                             "hover:bg-highlightbg cursor-pointer",
                             unread && "connection-unread",
-                            isTerminalBlock && !compact && "flex-1",
+                            isTerminalBlock && !compact && "flex-1 basis-0",
                             compact && "w-7 h-7 justify-center"
                         )}
                         onClick={clickHandler}
@@ -266,30 +298,10 @@ export const ConnectionButton = React.memo(
                         )}
                         {!compact &&
                             (connDisplayName ? (
-                                isTerminalBlock && terminalLabelPresentation?.align === "right" ? (
+                                isTerminalBlock ? (
                                     <div
                                         className={util.cn(
-                                            "flex flex-1 min-w-0 justify-end pr-1",
-                                            extraDisplayNameClassName
-                                        )}
-                                    >
-                                        <div
-                                            className="connection-terminal-label ellipsis max-w-full cursor-copy"
-                                            onClick={handleTerminalLabelClick}
-                                            onDoubleClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                onTerminalLabelDoubleClick?.();
-                                            }}
-                                            onContextMenu={handleTerminalLabelContextMenu}
-                                        >
-                                            {connDisplayName}
-                                        </div>
-                                    </div>
-                                ) : isTerminalBlock ? (
-                                    <div
-                                        className={util.cn(
-                                            "flex-1 min-w-0 overflow-hidden pr-1 ellipsis cursor-copy",
+                                            "connection-terminal-label header-tail-container flex-1 min-w-0 overflow-hidden pr-1 cursor-copy",
                                             extraDisplayNameClassName
                                         )}
                                         onClick={handleTerminalLabelClick}
@@ -300,7 +312,14 @@ export const ConnectionButton = React.memo(
                                         }}
                                         onContextMenu={handleTerminalLabelContextMenu}
                                     >
-                                        {connDisplayName}
+                                        <div
+                                            ref={terminalPathRef}
+                                            className="connection-terminal-path header-tail-value"
+                                        >
+                                            <span className="connection-terminal-path-content header-tail-content">
+                                                {connDisplayName}
+                                            </span>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div

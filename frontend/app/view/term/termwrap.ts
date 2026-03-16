@@ -41,6 +41,7 @@ import {
     isTerminalViewportNearBottom,
     resolveTerminalScrollRestoreTarget,
 } from "./term-scroll";
+import { createTerminalCacheMeta, shouldRestoreTerminalCache, shouldSaveTerminalCache } from "./term-cache";
 import { bufferLinesToText, createTempFileFromBlob, extractAllClipboardData } from "./termutil";
 
 const dlog = debug("wave:termwrap");
@@ -740,6 +741,8 @@ function handleOsc16162Command(data: string, blockId: string, loaded: boolean, t
 export class TermWrap {
     tabId: string;
     blockId: string;
+    blockAtom: jotai.Atom<Block>;
+    connName: string;
     ptyOffset: number;
     dataBytesProcessed: number;
     terminal: Terminal;
@@ -763,6 +766,8 @@ export class TermWrap {
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     virtualCwdAtom: jotai.PrimitiveAtom<string>;
     displayCwdAtom: jotai.PrimitiveAtom<string>;
+    lastDisplayCwd: string;
+    lastPersistedDisplayCwd: string;
     nodeModel: BlockNodeModel; // this can be null
     unreadAtom: jotai.PrimitiveAtom<boolean>;
     lastOutputTsAtom: jotai.PrimitiveAtom<number>;
@@ -775,6 +780,7 @@ export class TermWrap {
     private restoreBottomOnNextReflow: boolean = false;
     private followLatestOutput: boolean = true;
     private manuallyDetachedFromLatestOutput: boolean = false;
+    private lastViewportY: number = 0;
     private pendingWriteChunks: Uint8Array[] = [];
     private pendingWriteHead: number = 0;
     private pendingWriteBytes: number = 0;
@@ -808,6 +814,7 @@ export class TermWrap {
         this.loaded = false;
         this.tabId = tabId;
         this.blockId = blockId;
+        this.blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
         this.sendDataHandler = waveOptions.sendDataHandler;
         this.nodeModel = waveOptions.nodeModel;
         this.unreadAtom = useBlockAtom(this.blockId, "term:unread", () => {
@@ -837,6 +844,24 @@ export class TermWrap {
         this.displayCwdAtom = useBlockAtom(this.blockId, "term:displaycwd", () => {
             return jotai.atom("") as jotai.PrimitiveAtom<string>;
         }) as jotai.PrimitiveAtom<string>;
+        this.connName = "";
+        this.lastDisplayCwd = "";
+        this.lastPersistedDisplayCwd = "";
+        try {
+            const blockData = globalStore.get(this.blockAtom);
+            this.connName =
+                typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
+            this.lastPersistedDisplayCwd =
+                typeof blockData?.meta?.["display:launchcwd"] === "string"
+                    ? String(blockData.meta["display:launchcwd"]).trim()
+                    : "";
+            this.lastDisplayCwd = this.lastPersistedDisplayCwd || getTerminalDisplayCwd(blockData?.meta);
+            if (this.displayCwdAtom != null && typeof this.displayCwdAtom === "object") {
+                globalStore.set(this.displayCwdAtom, this.lastDisplayCwd);
+            }
+        } catch (e) {
+            console.debug("term display cwd bootstrap skipped", this.blockId, e);
+        }
         this.terminal = new Terminal(options);
         this.fitAddon = new FitAddon();
         this.fitAddon.noScrollbar = PLATFORM === PlatformMacOS;
@@ -1487,6 +1512,40 @@ export class TermWrap {
         this.followLatestOutput = true;
         this.manuallyDetachedFromLatestOutput = false;
         this.terminal.scrollToBottom();
+        const buffer = this.terminal.buffer.active;
+        if (buffer && buffer.type !== "alternate") {
+            this.lastViewportY = buffer.viewportY;
+        }
+    }
+
+    scrollToBottomIfFollowingLatest(): void {
+        if (!this.followLatestOutput) {
+            return;
+        }
+        this.scrollToBottom();
+    }
+
+    scrollToTop(): void {
+        if (!this.terminal) {
+            return;
+        }
+        this.detachFromLatestOutput();
+        this.terminal.scrollToLine(0);
+        const buffer = this.terminal.buffer.active;
+        if (buffer && buffer.type !== "alternate") {
+            this.lastViewportY = buffer.viewportY;
+        }
+    }
+
+    scrollPages(pageCount: number): void {
+        if (!this.terminal || !Number.isFinite(pageCount) || pageCount === 0) {
+            return;
+        }
+        if (pageCount < 0) {
+            this.detachFromLatestOutput();
+        }
+        this.terminal.scrollPages(pageCount);
+        this.syncFollowLatestOutputFromViewport();
     }
 
     private detachFromLatestOutput(): void {
@@ -1502,6 +1561,9 @@ export class TermWrap {
         if (!buffer || buffer.type === "alternate") {
             return;
         }
+        if (buffer.viewportY < this.lastViewportY) {
+            this.detachFromLatestOutput();
+        }
         const nextState = resolveTerminalFollowLatestState(
             buffer.baseY,
             buffer.viewportY,
@@ -1509,6 +1571,7 @@ export class TermWrap {
         );
         this.followLatestOutput = nextState.followLatestOutput;
         this.manuallyDetachedFromLatestOutput = nextState.manuallyDetached;
+        this.lastViewportY = buffer.viewportY;
     }
 
     async reflowHistoryToCurrentWidth(reason: string) {
@@ -1608,16 +1671,20 @@ export class TermWrap {
             resolve = presolve;
         });
         this.terminal.write(data, () => {
-            if (setPtyOffset != null) {
-                this.ptyOffset = setPtyOffset;
-            } else {
-                this.ptyOffset += data.length;
-                this.dataBytesProcessed += data.length;
-            }
-            this.lastUpdated = Date.now();
-            this.refreshDisplayCwdFromBuffer();
-            if (this.terminal.buffer.active.type !== "alternate" && this.followLatestOutput) {
-                this.terminal.scrollToBottom();
+            try {
+                if (setPtyOffset != null) {
+                    this.ptyOffset = setPtyOffset;
+                } else {
+                    this.ptyOffset += data.length;
+                    this.dataBytesProcessed += data.length;
+                }
+                this.lastUpdated = Date.now();
+                this.refreshDisplayCwdFromBuffer();
+                if (this.terminal.buffer.active.type !== "alternate") {
+                    this.scrollToBottomIfFollowingLatest();
+                }
+            } catch (e) {
+                console.error("term write post-processing failed", this.blockId, e);
             }
             resolve();
         });
@@ -1630,8 +1697,13 @@ export class TermWrap {
         const { data: cacheData, fileInfo: cacheFile } = await fetchWaveFile(zoneId, TermCacheFileName);
         let ptyOffset = 0;
         if (cacheFile != null) {
-            ptyOffset = cacheFile.meta["ptyoffset"] ?? 0;
-            if (cacheData.byteLength > 0) {
+            const shouldUseCache = shouldRestoreTerminalCache(cacheFile.meta);
+            if (!shouldUseCache) {
+                console.log("terminal cache ignored (unsafe or legacy metadata)", this.blockId, cacheFile.meta ?? {});
+            } else {
+                ptyOffset = cacheFile.meta["ptyoffset"] ?? 0;
+            }
+            if (shouldUseCache && cacheData.byteLength > 0) {
                 const curTermSize: TermSize = { rows: this.terminal.rows, cols: this.terminal.cols };
                 const fileTermSize: TermSize = cacheFile.meta["termsize"];
                 let didResize = false;
@@ -1693,10 +1765,12 @@ export class TermWrap {
         const oldRows = this.terminal.rows;
         const oldCols = this.terminal.cols;
         this.fitAddon.fit();
-        if (wasAtBottomBeforeResize) {
-            this.terminal.scrollToBottom();
+        if (wasAtBottomBeforeResize && this.followLatestOutput) {
+            this.scrollToBottom();
             window.requestAnimationFrame(() => {
-                this.terminal.scrollToBottom();
+                if (this.followLatestOutput) {
+                    this.scrollToBottom();
+                }
             });
         }
         if (oldRows !== this.terminal.rows || oldCols !== this.terminal.cols) {
@@ -1728,6 +1802,9 @@ export class TermWrap {
         if (this.dataBytesProcessed < MinDataProcessedForCache) {
             return;
         }
+        if (!shouldSaveTerminalCache(this.terminal.buffer.active.type)) {
+            return;
+        }
         const now = Date.now();
         if (now - this.lastUpdated < TerminalStateSaveMinQuietMs) {
             return;
@@ -1743,7 +1820,14 @@ export class TermWrap {
         console.log("idle timeout term", this.dataBytesProcessed, serializedOutput.length, termSize);
         this.lastTerminalStateSaveTs = now;
         fireAndForget(() =>
-            services.BlockService.SaveTerminalState(this.blockId, serializedOutput, "full", this.ptyOffset, termSize)
+            services.BlockService.SaveTerminalState(
+                this.blockId,
+                serializedOutput,
+                "full",
+                this.ptyOffset,
+                termSize,
+                createTerminalCacheMeta(this.terminal.buffer.active.type)
+            )
         );
         this.dataBytesProcessed = 0;
     }
@@ -1811,41 +1895,48 @@ export class TermWrap {
         return Math.max(0, Math.min(bufferLine, buffer.length - 1));
     }
 
-    getRawBufferLines(): string[] {
+    getRawBufferLines(): { text: string; wrapped: boolean }[] {
         if (!this.terminal) {
             return [];
         }
         const buffer = this.terminal.buffer.active;
-        const lines: string[] = [];
+        const lines: { text: string; wrapped: boolean }[] = [];
         for (let idx = 0; idx < buffer.length; idx++) {
             const line = buffer.getLine(idx);
-            lines.push(line ? line.translateToString(true) : "");
+            lines.push({
+                text: line ? line.translateToString(true) : "",
+                wrapped: (line as any)?.isWrapped === true,
+            });
         }
         return lines;
     }
 
     private refreshDisplayCwdFromBuffer() {
         const nextDisplayCwd = extractTerminalDisplayCwdFromBufferLines(this.getRawBufferLines());
-        const prevDisplayCwd = globalStore.get(this.displayCwdAtom) ?? "";
-        if (prevDisplayCwd !== nextDisplayCwd) {
-            globalStore.set(this.displayCwdAtom, nextDisplayCwd);
-            const blockData = globalStore.get(this.blockAtom);
-            const connName = typeof blockData?.meta?.connection === "string" ? String(blockData.meta.connection).trim() : "";
-            const persistedDisplayCwd =
-                typeof blockData?.meta?.["display:launchcwd"] === "string"
-                    ? String(blockData.meta["display:launchcwd"]).trim()
-                    : "";
-            if (isLocalConnName(connName) && !isBlank(nextDisplayCwd) && persistedDisplayCwd !== nextDisplayCwd) {
-                fireAndForget(async () => {
-                    try {
-                        await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", this.blockId), {
-                            "display:launchcwd": nextDisplayCwd,
-                        });
-                    } catch (e) {
-                        console.log("Persist display cwd failed", { blockId: this.blockId, cwd: nextDisplayCwd, error: e });
-                    }
-                });
+        if (this.lastDisplayCwd === nextDisplayCwd) {
+            return;
+        }
+        this.lastDisplayCwd = nextDisplayCwd;
+        try {
+            if (this.displayCwdAtom != null && typeof this.displayCwdAtom === "object") {
+                globalStore.set(this.displayCwdAtom, nextDisplayCwd);
             }
+        } catch (e) {
+            console.debug("term live display cwd update skipped", this.blockId, e);
+        }
+        const persistedDisplayCwd = this.lastPersistedDisplayCwd;
+        if (isLocalConnName(this.connName) && !isBlank(nextDisplayCwd) && persistedDisplayCwd !== nextDisplayCwd) {
+            this.lastPersistedDisplayCwd = nextDisplayCwd;
+            fireAndForget(async () => {
+                try {
+                    await services.ObjectService.UpdateObjectMeta(WOS.makeORef("block", this.blockId), {
+                        "display:launchcwd": nextDisplayCwd,
+                    });
+                } catch (e) {
+                    this.lastPersistedDisplayCwd = persistedDisplayCwd;
+                    console.log("Persist display cwd failed", { blockId: this.blockId, cwd: nextDisplayCwd, error: e });
+                }
+            });
         }
     }
 

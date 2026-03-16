@@ -30,7 +30,24 @@ function Get-RepoMarker {
 }
 
 function Get-ProcessTable {
-  return @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine)
+  try {
+    return @(Get-CimInstance Win32_Process -ErrorAction Stop | Select-Object ProcessId, ParentProcessId, Name, CommandLine)
+  } catch {
+    return @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
+      $procPath = ""
+      try {
+        $procPath = [string]$_.Path
+      } catch {
+        $procPath = ""
+      }
+      [pscustomobject]@{
+        ProcessId = [int]$_.Id
+        ParentProcessId = 0
+        Name = if ([string]::IsNullOrWhiteSpace([string]$_.ProcessName)) { "" } else { "$([string]$_.ProcessName).exe" }
+        CommandLine = $procPath
+      }
+    })
+  }
 }
 
 function Get-ProcessLookup {
@@ -44,12 +61,18 @@ function Get-ProcessLookup {
 function Test-IsDevMainProcess {
   param($Proc)
   if ($null -eq $Proc) { return $false }
-  if ($Proc.Name -ne "electron.exe") { return $false }
+  $name = [string]$Proc.Name
+  if ($name -notin @("electron.exe", "WAVE.exe")) { return $false }
   $cmd = [string]$Proc.CommandLine
   if ([string]::IsNullOrWhiteSpace($cmd)) { return $false }
   if ($cmd -match '--type=') { return $false }
+  $lower = $cmd.ToLowerInvariant()
   $marker = Get-RepoMarker
-  return $cmd.ToLowerInvariant().Contains($marker) -and $cmd.ToLowerInvariant().Contains('node_modules\electron\dist\electron.exe')
+  if (-not $lower.Contains($marker)) { return $false }
+  if ($name -eq "electron.exe") {
+    return $lower.Contains('node_modules\electron\dist\electron.exe')
+  }
+  return $true
 }
 
 function Get-DevMainProcesses {
@@ -161,6 +184,12 @@ function Start-DevInstance {
   $logPath = Get-DevLogPath
   $configDir = "C:\Users\baba1\.config\wave"
 
+  if (Test-Path -LiteralPath $dataDir) {
+    Remove-Item -LiteralPath $dataDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if (Test-Path -LiteralPath $electronDir) {
+    Remove-Item -LiteralPath $electronDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
   New-Item -ItemType Directory -Force -Path $stateRoot, $dataDir, $electronDir | Out-Null
   if (Test-Path -LiteralPath $logPath) {
     Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
@@ -172,6 +201,8 @@ function Start-DevInstance {
   $dataEsc = $dataDir.Replace("'", "''")
   $electronEsc = $electronDir.Replace("'", "''")
   $logEsc = $logPath.Replace("'", "''")
+  $esbuildPath = Enable-RepoEsbuildExecutionWorkaround
+  $esbuildEsc = $esbuildPath.Replace("'", "''")
 
   $debugFlag = if ($DebugOpenExternal) { '$env:WAVETERM_DEBUG_OPEN_EXTERNAL = "1"' } else { 'Remove-Item Env:WAVETERM_DEBUG_OPEN_EXTERNAL -ErrorAction SilentlyContinue' }
 
@@ -181,6 +212,7 @@ function Start-DevInstance {
 `$env:WAVETERM_CONFIG_HOME = '$configEsc'
 `$env:WAVETERM_DATA_HOME = '$dataEsc'
 `$env:WAVETERM_ELECTRON_USER_DATA_HOME = '$electronEsc'
+`$env:ESBUILD_BINARY_PATH = '$esbuildEsc'
 $debugFlag
 Set-Location '$repoRootEsc'
 & npm.cmd run dev *>> '$logEsc'

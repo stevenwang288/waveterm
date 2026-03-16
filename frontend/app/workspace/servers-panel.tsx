@@ -113,6 +113,54 @@ function decorateEntryWithMachine(
     };
 }
 
+function formatServerStatusText(connStatus: ConnStatus | null | undefined, machineStatus: string): string {
+    const errorText = String(connStatus?.error ?? "").trim().toLowerCase();
+    const statusText = String(connStatus?.status ?? "").trim().toLowerCase();
+    if (statusText === "connected") {
+        return "";
+    }
+    if (errorText !== "" || statusText === "error") {
+        const combined = `${statusText} ${errorText}`;
+        if (
+            combined.includes("hostkey-changed") ||
+            combined.includes("host key") ||
+            combined.includes("remote host identification has changed")
+        ) {
+            return "SSH 指纹冲突";
+        }
+        if (combined.includes("no route to host")) {
+            return "网络不通";
+        }
+        if (combined.includes("timeout") || combined.includes("timed out")) {
+            return "连接超时";
+        }
+        return "连接失败";
+    }
+    if (machineStatus === "running" || machineStatus === "") {
+        return "";
+    }
+    if (machineStatus === "stopped") {
+        return "已关机";
+    }
+    if (machineStatus === "paused") {
+        return "已暂停";
+    }
+    return `PVE: ${machineStatus}`;
+}
+
+function getPveActionLabel(action: "start" | "shutdown" | "stop" | "reboot"): string {
+    if (action === "start") {
+        return "启动";
+    }
+    if (action === "shutdown") {
+        return "关机";
+    }
+    if (action === "stop") {
+        return "强制停止";
+    }
+    return "重启";
+}
+
 const ServerRow = memo(
     ({
         entry,
@@ -122,6 +170,7 @@ const ServerRow = memo(
         onEdit,
         onDelete,
         onAdopt,
+        onContextMenu,
     }: {
         entry: ServerEntry;
         iconClassName: string;
@@ -130,10 +179,13 @@ const ServerRow = memo(
         onEdit?: (entry: ServerEntry) => void;
         onDelete?: (entry: ServerEntry) => void;
         onAdopt?: (entry: ServerEntry) => void;
+        onContextMenu?: (entry: ServerEntry, e: React.MouseEvent) => void;
     }) => {
+        const { t } = useTranslation();
         const connStatus = useAtomValue(getConnStatusAtom(entry.connection ?? ""));
         const connColorNum = computeConnColorNum(connStatus);
         const machineStatus = String(entry.pveMachine?.status ?? "").trim().toLowerCase();
+        const statusText = formatServerStatusText(connStatus, machineStatus);
         let statusBadge: React.ReactNode = null;
 
         if (!isBlank(entry.connection) && connStatus?.status === "connected") {
@@ -162,12 +214,14 @@ const ServerRow = memo(
             <div
                 className="group flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-hover rounded cursor-pointer"
                 onClick={() => onOpen(entry)}
+                onContextMenu={(e) => onContextMenu?.(entry, e)}
                 title={entry.label}
             >
                 <i className={`${iconClassName} text-secondary`} />
                 <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="truncate">{entry.label}</div>
                     {entry.sublabel && <div className="truncate text-[10px] text-secondary/70">{entry.sublabel}</div>}
+                    {statusText !== "" && <div className="truncate text-[10px] text-secondary/80">{statusText}</div>}
                 </div>
                 {statusBadge}
                 {tag && <span className="text-[10px] text-secondary/70">{tag}</span>}
@@ -178,7 +232,7 @@ const ServerRow = memo(
                             e.stopPropagation();
                             onAdopt(entry);
                         }}
-                        title="adopt"
+                        title={t("connection.addDiscoveredServer", { defaultValue: "纳管服务器" })}
                     >
                         <i className="fa fa-plus" />
                     </button>
@@ -190,7 +244,7 @@ const ServerRow = memo(
                             e.stopPropagation();
                             onEdit(entry);
                         }}
-                        title="edit"
+                        title={t("common.edit", { defaultValue: "编辑" })}
                     >
                         <i className="fa fa-pen" />
                     </button>
@@ -202,7 +256,7 @@ const ServerRow = memo(
                             e.stopPropagation();
                             onDelete(entry);
                         }}
-                        title="delete"
+                        title={t("connection.removeServer", { defaultValue: "删除服务器" })}
                     >
                         <i className="fa fa-trash" />
                     </button>
@@ -230,6 +284,7 @@ const ServersPanel = memo(() => {
     const [addError, setAddError] = useState<string | null>(null);
     const [pveRefreshing, setPveRefreshing] = useState(false);
     const [pveMachines, setPveMachines] = useState<PveMachineInfoLocal[] | null>(null);
+    const [pveManagedKnownHostsFile, setPveManagedKnownHostsFile] = useState("");
 
     const loadConnections = useCallback(async () => {
         setLoading(true);
@@ -277,15 +332,36 @@ const ServersPanel = memo(() => {
     useEffect(() => {
         fireAndForget(async () => {
             try {
-                const result = await getApi().pveListMachines({ origin: DEFAULT_PVE_ORIGIN, timeoutMs: 12000 });
-                if (result?.ok && Array.isArray(result.machines)) {
-                    setPveMachines(result.machines as PveMachineInfoLocal[]);
+                const result = await getApi().pveGetManagedKnownHostsFile();
+                const filePath = String(result?.filePath ?? "").trim();
+                if (result?.ok && filePath !== "") {
+                    setPveManagedKnownHostsFile(filePath);
                 }
+            } catch {
+                // ignore optional lookup failures
+            }
+        });
+    }, []);
+
+    const reloadPveMachines = useCallback(async (): Promise<PveMachineInfoLocal[]> => {
+        const result = await getApi().pveListMachines({ origin: DEFAULT_PVE_ORIGIN, timeoutMs: 12000 });
+        if (!result?.ok) {
+            throw new Error(result?.error || t("common.error"));
+        }
+        const machines = Array.isArray(result.machines) ? (result.machines as PveMachineInfoLocal[]) : [];
+        setPveMachines(machines);
+        return machines;
+    }, [t]);
+
+    useEffect(() => {
+        fireAndForget(async () => {
+            try {
+                await reloadPveMachines();
             } catch {
                 // ignore silent bootstrap failures
             }
         });
-    }, []);
+    }, [reloadPveMachines]);
 
     const localEntries = useMemo<ServerEntry[]>(() => [{ label: localHostLabel, source: "local" }], [localHostLabel]);
 
@@ -449,17 +525,13 @@ const ServersPanel = memo(() => {
             setPveRefreshing(true);
             fireAndForget(async () => {
                 try {
-                    const result = await getApi().pveListMachines({ origin: DEFAULT_PVE_ORIGIN, timeoutMs: 12000 });
-                    if (!result?.ok) {
-                        throw new Error(result?.error || t("common.error"));
-                    }
-                    const machines = Array.isArray(result.machines) ? result.machines : [];
-                    setPveMachines(machines as PveMachineInfoLocal[]);
+                    const machines = await reloadPveMachines();
                     const { updatedCount, createdCount, skippedCount } = await reconcilePveConnections({
-                        machines: machines as PveMachineInfoLocal[],
+                        machines,
                         fullConfig,
                         managedConnectionSet,
                         connections,
+                        managedKnownHostsFile: pveManagedKnownHostsFile,
                         setConnectionConfig: async (host, metamaptype) => {
                             await RpcApi.SetConnectionsConfigCommand(
                                 TabRpcClient,
@@ -504,7 +576,7 @@ const ServersPanel = memo(() => {
                 }
             });
         },
-        [connections, fullConfig, loadConnections, managedConnectionSet, pveRefreshing, t]
+        [connections, fullConfig, loadConnections, managedConnectionSet, pveManagedKnownHostsFile, pveRefreshing, reloadPveMachines, t]
     );
 
     const refreshServers = useCallback(() => {
@@ -588,6 +660,190 @@ const ServersPanel = memo(() => {
             });
         },
         [loadConnections, t]
+    );
+
+    const handlePveMachineAction = useCallback(
+        (entry: ServerEntry, action: "start" | "shutdown" | "stop" | "reboot") => {
+            if (entry.pveMachine == null || entry.pveVmid == null) {
+                return;
+            }
+            fireAndForget(async () => {
+                const actionLabel = getPveActionLabel(action);
+                try {
+                    const result = await getApi().pveControlMachine({
+                        origin: DEFAULT_PVE_ORIGIN,
+                        node: entry.pveMachine.node,
+                        vmid: entry.pveVmid,
+                        type: entry.pveMachine.type,
+                        action,
+                        timeoutMs: 12000,
+                    });
+                    if (!result?.ok) {
+                        throw new Error(result?.error || t("common.error"));
+                    }
+                    const now = Date.now();
+                    pushNotification({
+                        icon: "server",
+                        title: t("connection.pveActionTitle", { defaultValue: "PVE 操作已发送" }),
+                        message: t("connection.pveActionMessage", {
+                            defaultValue: `${entry.label}：已发送${actionLabel}指令`,
+                            server: entry.label,
+                            action,
+                        }),
+                        timestamp: new Date(now).toISOString(),
+                        expiration: now + 2600,
+                        type: "info",
+                    });
+                    try {
+                        await reloadPveMachines();
+                    } catch (refreshErr) {
+                        console.warn("error reloading pve machines after action", entry.label, refreshErr);
+                    }
+                } catch (e) {
+                    const now = Date.now();
+                    pushNotification({
+                        icon: "triangle-exclamation",
+                        title: t("connection.pveActionFailedTitle", { defaultValue: "PVE 操作失败" }),
+                        message: `${entry.label}：${actionLabel}失败，${e}`,
+                        timestamp: new Date(now).toISOString(),
+                        expiration: now + 3200,
+                        type: "error",
+                    });
+                }
+            });
+        },
+        [reloadPveMachines, t]
+    );
+
+    const handleRepairPveHostKey = useCallback(
+        (entry: ServerEntry) => {
+            if (isBlank(entry.connection)) {
+                return;
+            }
+            const connName = entry.connection ?? "";
+            const connConfig = fullConfig?.connections?.[connName] as ConnKeywords | undefined;
+            const parsed = parseConnectionName(connName);
+            const host = String(connConfig?.["ssh:hostname"] ?? entry.pveMachine?.sshHost ?? parsed.host).trim();
+            const port = Number(String(connConfig?.["ssh:port"] ?? parsed.port ?? "22").trim() || "22");
+            if (isBlank(host)) {
+                return;
+            }
+            fireAndForget(async () => {
+                try {
+                    const result = await getApi().pveRepairSshHostKey({
+                        host,
+                        port: Number.isFinite(port) && port > 0 ? port : 22,
+                        timeoutMs: 8000,
+                    });
+                    if (!result?.ok) {
+                        throw new Error(result?.error || t("common.error"));
+                    }
+                    const knownHostsFile = String(result.knownHostsFile ?? pveManagedKnownHostsFile).trim();
+                    if (knownHostsFile !== "") {
+                        await RpcApi.SetConnectionsConfigCommand(
+                            TabRpcClient,
+                            { host: connName, metamaptype: { "ssh:userknownhostsfile": [knownHostsFile] } },
+                            { timeout: 60000 }
+                        );
+                    }
+                    await loadConnections();
+                    const now = Date.now();
+                    pushNotification({
+                        icon: "key",
+                        title: t("connection.pveRepairSshHostKeyTitle", { defaultValue: "SSH 指纹已修复" }),
+                        message: result.scanned
+                            ? t("connection.pveRepairSshHostKeyScanned", {
+                                  defaultValue: `${entry.label}：已移除旧指纹并导入当前指纹`,
+                                  server: entry.label,
+                              })
+                            : t("connection.pveRepairSshHostKeyRemovedOnly", {
+                                  defaultValue: `${entry.label}：已移除旧指纹，重连时会学习新指纹`,
+                                  server: entry.label,
+                              }),
+                        timestamp: new Date(now).toISOString(),
+                        expiration: now + 3200,
+                        type: "info",
+                    });
+                } catch (e) {
+                    const now = Date.now();
+                    pushNotification({
+                        icon: "triangle-exclamation",
+                        title: t("connection.pveRepairSshHostKeyTitle", { defaultValue: "SSH 指纹修复失败" }),
+                        message: `${e}`,
+                        timestamp: new Date(now).toISOString(),
+                        expiration: now + 3200,
+                        type: "error",
+                    });
+                }
+            });
+        },
+        [fullConfig, loadConnections, pveManagedKnownHostsFile, t]
+    );
+
+    const showServerContextMenu = useCallback(
+        (entry: ServerEntry, e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const machineStatus = String(entry.pveMachine?.status ?? "").trim().toLowerCase();
+            const canStart = entry.pveMachine != null && machineStatus !== "running";
+            const canStop = entry.pveMachine != null && machineStatus === "running";
+            const menu: ContextMenuItem[] = [
+                {
+                    label: t("common.open", { defaultValue: "打开" }),
+                    click: () => openServer(entry),
+                },
+            ];
+            if (entry.source === "managed" && !isBlank(entry.connection)) {
+                menu.push({
+                    label: t("connection.editServer"),
+                    click: () => openEditModal(entry),
+                });
+            }
+            if (entry.source === "discovered" && !isBlank(entry.connection)) {
+                menu.push({
+                    label: t("connection.addDiscoveredServer"),
+                    click: () => openAdoptModal(entry),
+                });
+            }
+            if (entry.source === "managed" && !isBlank(entry.connection)) {
+                menu.push({
+                    label: t("connection.removeServer"),
+                    click: () => handleDeleteServer(entry),
+                });
+            }
+            if (entry.pveMachine != null) {
+                menu.push({ type: "separator", label: "" });
+                menu.push(
+                    {
+                        label: t("connection.pveStart", { defaultValue: "启动" }),
+                        enabled: canStart,
+                        click: () => handlePveMachineAction(entry, "start"),
+                    },
+                    {
+                        label: t("connection.pveShutdown", { defaultValue: "关机" }),
+                        enabled: canStop,
+                        click: () => handlePveMachineAction(entry, "shutdown"),
+                    },
+                    {
+                        label: t("connection.pveStop", { defaultValue: "强制停止" }),
+                        enabled: canStop,
+                        click: () => handlePveMachineAction(entry, "stop"),
+                    },
+                    {
+                        label: t("connection.pveReboot", { defaultValue: "重启" }),
+                        enabled: canStop,
+                        click: () => handlePveMachineAction(entry, "reboot"),
+                    },
+                    {
+                        label: t("connection.pveRepairSshHostKey", { defaultValue: "修复 SSH 指纹" }),
+                        enabled: !isBlank(entry.connection),
+                        click: () => handleRepairPveHostKey(entry),
+                    }
+                );
+            }
+            ContextMenuModel.showContextMenu(menu, e);
+        },
+        [handleDeleteServer, handlePveMachineAction, handleRepairPveHostKey, openAdoptModal, openEditModal, openServer, t]
     );
 
     const handleAddServer = useCallback(() => {
@@ -725,6 +981,7 @@ const ServersPanel = memo(() => {
                                     onOpen={openServer}
                                     onEdit={openEditModal}
                                     onDelete={handleDeleteServer}
+                                    onContextMenu={showServerContextMenu}
                                 />
                             ))
                         )}
@@ -743,6 +1000,7 @@ const ServersPanel = memo(() => {
                                     tag={t("connection.discoveredTag")}
                                     onOpen={openServer}
                                     onAdopt={openAdoptModal}
+                                    onContextMenu={showServerContextMenu}
                                 />
                             ))
                         )}

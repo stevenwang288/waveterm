@@ -14,6 +14,7 @@ import { GitPanel } from "@/app/workspace/git-panel";
 import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { getTerminalInheritableCwd } from "@/util/launchcwd";
+import { isWindows } from "@/util/platformutil";
 import { fireAndForget, isBlank, makeIconClass, stringToBase64 } from "@/util/util";
 import {
     FloatingPortal,
@@ -46,7 +47,7 @@ function isExplorerWidget(widget: WidgetConfigType): boolean {
 }
 
 const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
-    { label: "Codex", command: "codex" },
+    { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
     { label: "Claude", command: "claude" },
     { label: "Gemini", command: "gemini" },
     { label: "Amp", command: "amp" },

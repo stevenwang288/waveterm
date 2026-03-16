@@ -102,12 +102,50 @@ function Ensure-Directory {
   }
 }
 
+function Get-RepoEsbuildBinaryPath {
+  $repoRoot = Get-RepoRoot
+  $src = Join-Path $repoRoot "node_modules\@esbuild\win32-x64\esbuild.exe"
+  if (-not (Test-Path -LiteralPath $src)) {
+    return ""
+  }
+
+  $toolsDir = Join-Path $repoRoot ".tmp\tools"
+  Ensure-Directory -Path $toolsDir
+  $dst = Join-Path $toolsDir "esbuild.exe"
+
+  $copyRequired = -not (Test-Path -LiteralPath $dst)
+  if (-not $copyRequired) {
+    $srcItem = Get-Item -LiteralPath $src
+    $dstItem = Get-Item -LiteralPath $dst
+    if ($srcItem.Length -ne $dstItem.Length -or $srcItem.LastWriteTimeUtc -gt $dstItem.LastWriteTimeUtc) {
+      $copyRequired = $true
+    }
+  }
+
+  if ($copyRequired) {
+    Copy-Item -Force -LiteralPath $src -Destination $dst
+  }
+
+  return $dst
+}
+
+function Enable-RepoEsbuildExecutionWorkaround {
+  $esbuildPath = Get-RepoEsbuildBinaryPath
+  if ([string]::IsNullOrWhiteSpace($esbuildPath)) {
+    return ""
+  }
+
+  $env:ESBUILD_BINARY_PATH = $esbuildPath
+  return $esbuildPath
+}
+
 function Invoke-NpmCmd {
   param(
     [Parameter(Mandatory = $true)]
     [string[]]$Args
   )
 
+  Enable-RepoEsbuildExecutionWorkaround | Out-Null
   & npm.cmd @Args
 }
 

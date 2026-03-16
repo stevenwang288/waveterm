@@ -16,6 +16,38 @@ function normalizeTerminalLine(line: string): string {
         .trim();
 }
 
+type TerminalDisplayBufferLine = string | { text?: string; wrapped?: boolean };
+
+function collapseWrappedTerminalLines(lines?: TerminalDisplayBufferLine[]): string[] {
+    if (!Array.isArray(lines) || lines.length === 0) {
+        return [];
+    }
+
+    const collapsed: string[] = [];
+    let currentLine = "";
+
+    for (const entry of lines) {
+        const text = typeof entry === "string" ? entry : String(entry?.text ?? "");
+        const isWrapped = typeof entry === "object" && entry != null ? entry.wrapped === true : false;
+
+        if (!isWrapped) {
+            if (!isBlank(currentLine)) {
+                collapsed.push(currentLine);
+            }
+            currentLine = text;
+            continue;
+        }
+
+        currentLine += text;
+    }
+
+    if (!isBlank(currentLine)) {
+        collapsed.push(currentLine);
+    }
+
+    return collapsed;
+}
+
 function isLikelyDisplayPath(value: string): boolean {
     const trimmed = String(value ?? "").trim();
     if (!trimmed) {
@@ -57,14 +89,15 @@ export function getTerminalDisplayCwd(meta?: Record<string, any>): string {
     return formatCwdForDisplay(explicitDisplayCwd);
 }
 
-export function extractTerminalDisplayCwdFromBufferLines(lines?: string[]): string {
-    if (!Array.isArray(lines) || lines.length === 0) {
+export function extractTerminalDisplayCwdFromBufferLines(lines?: TerminalDisplayBufferLine[]): string {
+    const logicalLines = collapseWrappedTerminalLines(lines);
+    if (logicalLines.length === 0) {
         return "";
     }
 
-    const startIndex = Math.max(0, lines.length - 40);
-    for (let idx = lines.length - 1; idx >= startIndex; idx--) {
-        const normalizedLine = normalizeTerminalLine(lines[idx]);
+    const startIndex = Math.max(0, logicalLines.length - 40);
+    for (let idx = logicalLines.length - 1; idx >= startIndex; idx--) {
+        const normalizedLine = normalizeTerminalLine(logicalLines[idx]);
         if (!normalizedLine) {
             continue;
         }

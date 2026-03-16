@@ -39,6 +39,21 @@ export type PveCreateConsoleSessionRequest = {
     timeoutMs?: number;
 };
 
+export type PveControlMachineRequest = {
+    origin?: string;
+    node: string;
+    vmid: number;
+    type: "qemu" | "lxc";
+    action: "start" | "shutdown" | "stop" | "reboot";
+    timeoutMs?: number;
+};
+
+export type PveRepairSshHostKeyRequest = {
+    host: string;
+    port?: number;
+    timeoutMs?: number;
+};
+
 export type PveMachineInfo = {
     vmid: number;
     node: string;
@@ -66,6 +81,21 @@ export type PveCreateConsoleSessionResult = {
     vmid?: number;
     type?: "qemu" | "lxc";
     name?: string;
+    error?: string;
+};
+
+export type PveControlMachineResult = {
+    ok: boolean;
+    taskId?: string;
+    action?: "start" | "shutdown" | "stop" | "reboot";
+    error?: string;
+};
+
+export type PveRepairSshHostKeyResult = {
+    ok: boolean;
+    knownHostsFile?: string;
+    removedHosts?: string[];
+    scanned?: boolean;
     error?: string;
 };
 
@@ -283,6 +313,10 @@ function isAllowedPveHost(host: string): boolean {
 
 function getCredentialsFilePath(): string {
     return path.join(getWaveConfigDir(), PVE_CREDENTIALS_FILE_NAME);
+}
+
+export function getManagedPveKnownHostsFilePath(): string {
+    return path.join(getWaveConfigDir(), "pve-managed-known_hosts");
 }
 
 function getCredentialsFileCandidates(): string[] {
@@ -735,6 +769,69 @@ function pickPreferredSshHost(ipHints: string[]): string {
     return uniqStrings(ipHints)[0] ?? "";
 }
 
+async function ensureFileExists(filePath: string): Promise<void> {
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    try {
+        await fs.promises.access(filePath, fs.constants.F_OK);
+    } catch {
+        await fs.promises.writeFile(filePath, "", "utf8");
+    }
+}
+
+async function removeKnownHostEntry(filePath: string, host: string): Promise<void> {
+    try {
+        await execFileAsync(
+            "ssh-keygen",
+            ["-R", host, "-f", filePath],
+            { timeout: 10_000, windowsHide: true, maxBuffer: 512 * 1024 }
+        );
+    } catch (error: any) {
+        const stderr = String(error?.stderr ?? "");
+        const stdout = String(error?.stdout ?? "");
+        const combined = `${stdout}\n${stderr}`;
+        if (/not found in/i.test(combined) || /cannot stat/i.test(combined) || /no such file/i.test(combined)) {
+            return;
+        }
+        throw error;
+    }
+}
+
+async function appendUniqueKnownHosts(filePath: string, rawText: string): Promise<boolean> {
+    const trimmed = String(rawText ?? "").trim();
+    if (!trimmed) {
+        return false;
+    }
+    const existing = await fs.promises.readFile(filePath, "utf8").catch(() => "");
+    const existingLines = new Set(
+        existing
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+    );
+    const nextLines = trimmed
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line !== "" && !existingLines.has(line));
+    if (nextLines.length === 0) {
+        return false;
+    }
+    const prefix = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+    await fs.promises.appendFile(filePath, `${prefix}${nextLines.join("\n")}\n`, "utf8");
+    return true;
+}
+
+function getKnownHostRemovalTargets(host: string, port: number): string[] {
+    const normalizedHost = String(host ?? "").trim();
+    if (!normalizedHost) {
+        return [];
+    }
+    const targets = [normalizedHost];
+    if (port > 0 && port !== 22) {
+        targets.push(`[${normalizedHost}]:${port}`);
+    }
+    return uniqStrings(targets);
+}
+
 async function listPveMachinesViaSsh(origin: string, timeoutMs: number): Promise<PveMachineInfo[]> {
     const base = new URL(origin);
     const sshHost = normalizeHostToken(base.hostname);
@@ -876,6 +973,87 @@ export async function listPveMachines(req?: PveListMachinesRequest): Promise<Pve
             const fallbackError = sshErr?.message || String(sshErr);
             return { ok: false, error: `${apiError}; ssh fallback failed: ${fallbackError}` };
         }
+    }
+}
+
+export async function controlPveMachine(req: PveControlMachineRequest): Promise<PveControlMachineResult> {
+    const origin = normalizeOrigin(req?.origin ?? "https://192.168.1.250:8006");
+    if (!origin) {
+        return { ok: false, error: "origin is required" };
+    }
+    const timeoutMs = Math.max(1000, Math.min(20000, Number(req?.timeoutMs ?? 8000) || 8000));
+    const node = String(req?.node ?? "").trim();
+    const type = req?.type;
+    const vmid = Number(req?.vmid ?? 0);
+    const action = req?.action;
+    if (!node || !Number.isFinite(vmid) || vmid <= 0 || (type !== "qemu" && type !== "lxc")) {
+        return { ok: false, error: "invalid machine target" };
+    }
+    if (action !== "start" && action !== "shutdown" && action !== "stop" && action !== "reboot") {
+        return { ok: false, error: "invalid action" };
+    }
+    try {
+        const login = await getApiTicketForOrigin(origin, timeoutMs);
+        const taskId = await pveApiJsonPost(
+            origin,
+            `/api2/json/nodes/${encodeURIComponent(node)}/${type}/${vmid}/status/${action}`,
+            login,
+            {},
+            timeoutMs
+        );
+        return {
+            ok: true,
+            taskId: String(taskId ?? "").trim() || undefined,
+            action,
+        };
+    } catch (e: any) {
+        return { ok: false, error: e?.message || String(e) };
+    }
+}
+
+export async function repairPveSshHostKey(req: PveRepairSshHostKeyRequest): Promise<PveRepairSshHostKeyResult> {
+    const host = String(req?.host ?? "").trim();
+    const port = Math.max(1, Math.min(65535, Number(req?.port ?? 22) || 22));
+    const timeoutMs = Math.max(1000, Math.min(15000, Number(req?.timeoutMs ?? 5000) || 5000));
+    if (!host) {
+        return { ok: false, error: "host is required" };
+    }
+    const knownHostsFile = getManagedPveKnownHostsFilePath();
+    const removedHosts = getKnownHostRemovalTargets(host, port);
+    try {
+        await ensureFileExists(knownHostsFile);
+        for (const item of removedHosts) {
+            await removeKnownHostEntry(knownHostsFile, item);
+        }
+        let scanned = false;
+        try {
+            const args = ["-T", String(Math.max(2, Math.ceil(timeoutMs / 1000)))];
+            if (port !== 22) {
+                args.push("-p", String(port));
+            }
+            args.push(host);
+            const { stdout } = await execFileAsync("ssh-keyscan", args, {
+                timeout: timeoutMs + 1500,
+                windowsHide: true,
+                maxBuffer: 512 * 1024,
+            });
+            scanned = await appendUniqueKnownHosts(knownHostsFile, String(stdout ?? ""));
+        } catch {
+            scanned = false;
+        }
+        return {
+            ok: true,
+            knownHostsFile,
+            removedHosts,
+            scanned,
+        };
+    } catch (e: any) {
+        return {
+            ok: false,
+            knownHostsFile,
+            removedHosts,
+            error: e?.message || String(e),
+        };
     }
 }
 
