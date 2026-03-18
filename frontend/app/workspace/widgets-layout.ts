@@ -23,7 +23,7 @@ export function getUtilityWidgetCount({
     showDevIndicator = false,
     showExplorerConnection = false,
 }: UtilityWidgetCountOptions): number {
-    const baseUtilityWidgets = 3; // git, ai launcher, settings
+    const baseUtilityWidgets = 4; // git, codex resume, ai launcher, settings
     return (
         baseUtilityWidgets +
         Number(showAppsButton) +

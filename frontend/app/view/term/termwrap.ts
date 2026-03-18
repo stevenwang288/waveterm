@@ -37,6 +37,7 @@ import { debounce } from "throttle-debounce";
 import { FitAddon } from "./fitaddon";
 import {
     captureTerminalScrollRestoreState,
+    TerminalAutoFollowResumeController,
     resolveTerminalFollowLatestState,
     isTerminalViewportNearBottom,
     resolveTerminalScrollRestoreTarget,
@@ -780,6 +781,8 @@ export class TermWrap {
     private restoreBottomOnNextReflow: boolean = false;
     private followLatestOutput: boolean = true;
     private manuallyDetachedFromLatestOutput: boolean = false;
+    private autoFollowResumePending: boolean = false;
+    private autoFollowResumeController: TerminalAutoFollowResumeController;
     private lastViewportY: number = 0;
     private pendingWriteChunks: Uint8Array[] = [];
     private pendingWriteHead: number = 0;
@@ -847,6 +850,9 @@ export class TermWrap {
         this.connName = "";
         this.lastDisplayCwd = "";
         this.lastPersistedDisplayCwd = "";
+        this.autoFollowResumeController = new TerminalAutoFollowResumeController(() => {
+            this.resumeLatestOutputAfterIdle();
+        });
         try {
             const blockData = globalStore.get(this.blockAtom);
             this.connName =
@@ -1179,7 +1185,11 @@ export class TermWrap {
         if (viewportElem instanceof HTMLElement) {
             const wheelHandler = (event: WheelEvent) => {
                 if (event.deltaY < 0) {
-                    this.detachFromLatestOutput();
+                    this.noteManualViewportActivity(true);
+                    return;
+                }
+                if (this.autoFollowResumePending) {
+                    this.noteManualViewportActivity();
                 }
             };
             viewportElem.addEventListener("wheel", wheelHandler, { passive: true });
@@ -1246,6 +1256,7 @@ export class TermWrap {
     }
 
     dispose() {
+        this.cancelAutoFollowResume();
         this.promptMarkers.forEach((marker) => {
             try {
                 marker.dispose();
@@ -1509,6 +1520,7 @@ export class TermWrap {
         if (!this.terminal) {
             return;
         }
+        this.cancelAutoFollowResume();
         this.followLatestOutput = true;
         this.manuallyDetachedFromLatestOutput = false;
         this.terminal.scrollToBottom();
@@ -1529,7 +1541,7 @@ export class TermWrap {
         if (!this.terminal) {
             return;
         }
-        this.detachFromLatestOutput();
+        this.noteManualViewportActivity(true);
         this.terminal.scrollToLine(0);
         const buffer = this.terminal.buffer.active;
         if (buffer && buffer.type !== "alternate") {
@@ -1542,7 +1554,9 @@ export class TermWrap {
             return;
         }
         if (pageCount < 0) {
-            this.detachFromLatestOutput();
+            this.noteManualViewportActivity(true);
+        } else if (this.autoFollowResumePending) {
+            this.noteManualViewportActivity();
         }
         this.terminal.scrollPages(pageCount);
         this.syncFollowLatestOutputFromViewport();
@@ -1553,6 +1567,30 @@ export class TermWrap {
         this.manuallyDetachedFromLatestOutput = true;
     }
 
+    private noteManualViewportActivity(forceDetach: boolean = false): void {
+        if (forceDetach) {
+            this.detachFromLatestOutput();
+        }
+        if (this.followLatestOutput && !this.manuallyDetachedFromLatestOutput) {
+            return;
+        }
+        this.autoFollowResumePending = true;
+        this.autoFollowResumeController.markActivity(true);
+    }
+
+    private cancelAutoFollowResume(): void {
+        this.autoFollowResumePending = false;
+        this.autoFollowResumeController.cancel();
+    }
+
+    private resumeLatestOutputAfterIdle(): void {
+        if (!this.autoFollowResumePending || !this.manuallyDetachedFromLatestOutput) {
+            this.cancelAutoFollowResume();
+            return;
+        }
+        this.scrollToBottom();
+    }
+
     private syncFollowLatestOutputFromViewport(): void {
         if (!this.terminal) {
             return;
@@ -1561,7 +1599,8 @@ export class TermWrap {
         if (!buffer || buffer.type === "alternate") {
             return;
         }
-        if (buffer.viewportY < this.lastViewportY) {
+        const movedUpward = buffer.viewportY < this.lastViewportY;
+        if (movedUpward) {
             this.detachFromLatestOutput();
         }
         const nextState = resolveTerminalFollowLatestState(
@@ -1571,6 +1610,12 @@ export class TermWrap {
         );
         this.followLatestOutput = nextState.followLatestOutput;
         this.manuallyDetachedFromLatestOutput = nextState.manuallyDetached;
+        if (this.followLatestOutput && !this.manuallyDetachedFromLatestOutput) {
+            this.cancelAutoFollowResume();
+        } else if (movedUpward || this.autoFollowResumePending) {
+            this.autoFollowResumePending = true;
+            this.autoFollowResumeController.markActivity(true);
+        }
         this.lastViewportY = buffer.viewportY;
     }
 

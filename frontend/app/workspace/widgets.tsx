@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Tooltip } from "@/app/element/tooltip";
+import {
+    type CodexResumeShellState,
+    getEligibleCodexResumeBlockIds,
+    runCodexResumeSequence,
+} from "@/app/block/codex-resume";
 import { ConnectionButton } from "@/app/block/connectionbutton";
 import { modalsModel } from "@/app/store/modalmodel";
 import { ContextMenuModel } from "@/app/store/contextmenu";
@@ -11,7 +16,17 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getUtilityWidgetCount, getWidgetBarMode, type WidgetBarMode } from "@/app/workspace/widgets-layout";
 import { shouldIncludeWidgetForWorkspace } from "@/app/workspace/widgetfilter";
 import { GitPanel } from "@/app/workspace/git-panel";
-import { atoms, createBlock, getBlockComponentModel, globalStore, useBlockAtom, WOS, isDev } from "@/store/global";
+import {
+    atoms,
+    createBlock,
+    getBlockComponentModel,
+    globalStore,
+    isDev,
+    pushFlashError,
+    recordTEvent,
+    useBlockAtom,
+    WOS,
+} from "@/store/global";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { getTerminalInheritableCwd } from "@/util/launchcwd";
 import { isWindows } from "@/util/platformutil";
@@ -469,12 +484,41 @@ const Widgets = memo(() => {
 
     const [isAppsOpen, setIsAppsOpen] = useState(false);
     const appsButtonRef = useRef<HTMLDivElement>(null);
+    const activeTabId = useAtomValue(atoms.staticTabId);
+    const [activeTabData] = WOS.useWaveObjectValue<Tab>(activeTabId ? WOS.makeORef("tab", activeTabId) : null);
     const focusedBlockId = useAtomValue(FocusManager.getInstance().blockFocusAtom);
     const [focusedBlockData] = WOS.useWaveObjectValue<Block>(focusedBlockId ? WOS.makeORef("block", focusedBlockId) : null);
     const showAppsButton = isDev() || featureWaveAppBuilder;
     const showExplorerConnectionButton =
         focusedBlockData?.meta?.view === "preview" && !!focusedBlockData?.meta?.["preview:explorer"];
     const showDevBadge = isDev();
+    const getBlockData = useCallback((blockId: string): Block | undefined => {
+        if (isBlank(blockId)) {
+            return undefined;
+        }
+        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+        return globalStore.get(blockAtom);
+    }, []);
+    const getShellState = useCallback((blockId: string): CodexResumeShellState => {
+        if (isBlank(blockId)) {
+            return null;
+        }
+        const shellStateAtom = useBlockAtom(blockId, "term:shellstate", () => atom<CodexResumeShellState>(null));
+        return globalStore.get(shellStateAtom);
+    }, []);
+    const waitForBlockShellStateToStart = useCallback(
+        async (blockId: string) => {
+            const timeoutAt = Date.now() + 4000;
+            while (Date.now() < timeoutAt) {
+                if (getShellState(blockId) === "running-command") {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            throw new Error("Codex resume did not start within 4 seconds.");
+        },
+        [getShellState]
+    );
 
     const launchAiCommand = useCallback(
         (command: string) => {
@@ -544,6 +588,59 @@ const Widgets = memo(() => {
             await createBlock(blockDef, false, true);
         });
     }, []);
+
+    const handleResumeCodexForCurrentTab = useCallback(() => {
+        const tabBlockIds = activeTabData?.blockids ?? [];
+        const targetBlockIds = getEligibleCodexResumeBlockIds(tabBlockIds, getBlockData, getShellState);
+        const skippedCount = Math.max(0, tabBlockIds.length - targetBlockIds.length);
+        if (targetBlockIds.length === 0) {
+            pushFlashError({
+                id: "",
+                icon: "triangle-exclamation",
+                title: "Codex resume unavailable",
+                message: "当前页没有可恢复的本地终端。",
+                expiration: Date.now() + 7000,
+            });
+            return;
+        }
+        fireAndForget(async () => {
+            try {
+                await Promise.all(
+                    targetBlockIds.map((blockId) =>
+                        runCodexResumeSequence((input) =>
+                            RpcApi.ControllerInputCommand(TabRpcClient, {
+                                blockid: blockId,
+                                inputdata64: stringToBase64(input),
+                            })
+                        , { waitUntilReadyForFollowup: () => waitForBlockShellStateToStart(blockId) })
+                    )
+                );
+                recordTEvent("action:codexresume", {
+                    "block:view": "term",
+                    blockcount: targetBlockIds.length,
+                    scope: "workspace-widgets",
+                });
+                if (skippedCount > 0) {
+                    pushFlashError({
+                        id: "",
+                        icon: "circle-info",
+                        title: "Codex resume started",
+                        message: `已执行 ${targetBlockIds.length} 个终端，其余 ${skippedCount} 个块已跳过。`,
+                        expiration: Date.now() + 7000,
+                    });
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                pushFlashError({
+                    id: "",
+                    icon: "triangle-exclamation",
+                    title: "Codex resume failed",
+                    message,
+                    expiration: Date.now() + 7000,
+                });
+            }
+        });
+    }, [activeTabData?.blockids, getBlockData, getShellState, waitForBlockShellStateToStart]);
 
     const checkModeNeeded = useCallback(() => {
         if (!containerRef.current || !measurementRef.current) return;
@@ -660,6 +757,20 @@ const Widgets = memo(() => {
                             </div>
                             <div
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                                onClick={handleResumeCodexForCurrentTab}
+                            >
+                                <Tooltip
+                                    content="Resume latest Codex in all local terminals on this page"
+                                    placement="right"
+                                    disable={false}
+                                >
+                                    <div>
+                                        <i className={makeIconClass("clock-rotate-left", true)}></i>
+                                    </div>
+                                </Tooltip>
+                            </div>
+                            <div
+                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={showAiLauncherMenu}
                             >
                                 <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
@@ -738,6 +849,23 @@ const Widgets = memo(() => {
                         </div>
                         <div
                             className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={handleResumeCodexForCurrentTab}
+                        >
+                            <Tooltip content="Resume latest Codex in all local terminals on this page" placement="right" disable={false}>
+                                <div className="flex flex-col items-center w-full">
+                                    <div>
+                                        <i className={makeIconClass("clock-rotate-left", true)}></i>
+                                    </div>
+                                    {mode === "normal" && (
+                                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                                            Resume
+                                        </div>
+                                    )}
+                                </div>
+                            </Tooltip>
+                        </div>
+                        <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                             onClick={showAiLauncherMenu}
                         >
                             <Tooltip content={t("preview.openWithAi")} placement="right" disable={false}>
@@ -807,6 +935,12 @@ const Widgets = memo(() => {
                         <i className={makeIconClass("code-branch", true)}></i>
                     </div>
                     <div className="text-xxs mt-0.5 w-full px-0.5 text-center">{t("workspace.git")}</div>
+                </div>
+                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                    <div>
+                        <i className={makeIconClass("clock-rotate-left", true)}></i>
+                    </div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">Resume</div>
                 </div>
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>

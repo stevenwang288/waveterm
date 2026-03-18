@@ -13,6 +13,11 @@ import {
 } from "@/app/block/blockutil";
 import { ConnectionButton } from "@/app/block/connectionbutton";
 import {
+    canRunCodexResume,
+    runCodexResumeSequence,
+    shouldShowCodexResumeButton,
+} from "@/app/block/codex-resume";
+import {
     loadLatestTerminalFormalReplyPayload,
     playTerminalFormalReplyPayload,
     type TerminalFormalReplyPayload,
@@ -184,6 +189,7 @@ type HeaderEndIconsProps = {
 const HeaderEndIcons = React.memo(
     ({ viewModel, nodeModel, blockId, isTerminalBlock, shellState, lastOutputTs, lastCommandDoneTs }: HeaderEndIconsProps) => {
     const { t } = useTranslation();
+    const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
     const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
     const aiModel = React.useMemo(() => WaveAIModel.getInstance(), []);
     const currentMode = jotai.useAtomValue(aiModel.currentAIMode);
@@ -227,6 +233,8 @@ const HeaderEndIcons = React.memo(
     const speechLocalEngine = jotai.useAtomValue(getSettingsKeyAtom("speech:localengine"));
     const speechLocalModel = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodel"));
     const speechLocalModelPath = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodelpath"));
+    const showCodexResumeButton = shouldShowCodexResumeButton(isTerminalBlock, blockData?.meta?.connection);
+    const codexResumeAvailable = canRunCodexResume(shellState);
     const speechSettings = React.useMemo(
         () =>
             resolveSpeechSettings(
@@ -290,6 +298,19 @@ const HeaderEndIcons = React.memo(
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
     const numLeafs = jotai.useAtomValue(nodeModel.numLeafs);
     const magnifyDisabled = numLeafs <= 1;
+    const waitForBlockShellStateToStart = React.useCallback(async () => {
+        const timeoutAt = Date.now() + 4000;
+        while (Date.now() < timeoutAt) {
+            const shellStateAtom = useBlockAtom(blockId, "term:shellstate", () =>
+                jotai.atom(null) as jotai.PrimitiveAtom<"ready" | "running-command" | null>
+            );
+            if (globalStore.get(shellStateAtom) === "running-command") {
+                return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        throw new Error("Codex resume did not start within 4 seconds.");
+    }, [blockId]);
 
     const endIconsElem: React.ReactElement[] = [];
     const payloadBuildTimerRef = React.useRef<number | null>(null);
@@ -724,6 +745,43 @@ const HeaderEndIcons = React.memo(
     const showSpeechButton = isTerminalBlock ? true : speechSettings.showManualButton;
     if (showSpeechButton) {
         endIconsElem.push(<IconButton key="speech" decl={speechDecl} className="block-frame-speech" />);
+    }
+    if (showCodexResumeButton) {
+        const codexResumeDecl: IconButtonDecl = {
+            elemtype: "iconbutton",
+            icon: "clock-rotate-left",
+            iconColor: codexResumeAvailable ? "var(--accent-color)" : "var(--secondary-text-color)",
+            title: codexResumeAvailable
+                ? "Resume latest Codex session"
+                : "Wait for the current terminal command to finish before resuming Codex",
+            click: () => {
+                if (!codexResumeAvailable) {
+                    return;
+                }
+                util.fireAndForget(async () => {
+                    try {
+                        await runCodexResumeSequence((input) =>
+                            RpcApi.ControllerInputCommand(TabRpcClient, {
+                                blockid: blockId,
+                                inputdata64: util.stringToBase64(input),
+                            })
+                        , { waitUntilReadyForFollowup: waitForBlockShellStateToStart });
+                        recordTEvent("action:codexresume", { "block:view": "term" });
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : String(error);
+                        pushFlashError({
+                            id: "",
+                            icon: "triangle-exclamation",
+                            title: "Codex resume failed",
+                            message,
+                            expiration: Date.now() + 7000,
+                        });
+                    }
+                });
+            },
+            disabled: !codexResumeAvailable,
+        };
+        endIconsElem.push(<IconButton key="codex-resume" decl={codexResumeDecl} className="block-frame-codex-resume" />);
     }
     const settingsDecl: IconButtonDecl = {
         elemtype: "iconbutton",

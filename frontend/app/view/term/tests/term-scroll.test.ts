@@ -1,10 +1,12 @@
 import {
     captureTerminalScrollRestoreState,
     isTerminalViewportNearBottom,
+    TerminalAutoFollowResumeController,
+    TerminalAutoFollowResumeDelayMs,
     resolveTerminalFollowLatestState,
     resolveTerminalScrollRestoreTarget,
 } from "../term-scroll";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("term scroll follow logic", () => {
     it("treats near-bottom viewport as still following latest output", () => {
@@ -47,5 +49,52 @@ describe("term scroll follow logic", () => {
             followLatestOutput: true,
             manuallyDetached: false,
         });
+    });
+});
+
+describe("terminal auto follow resume controller", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("waits for 10 seconds of inactivity before resuming", () => {
+        const onResume = vi.fn();
+        const controller = new TerminalAutoFollowResumeController(onResume);
+
+        controller.markActivity(true);
+        vi.advanceTimersByTime(TerminalAutoFollowResumeDelayMs - 1);
+        expect(onResume).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1);
+        expect(onResume).toHaveBeenCalledTimes(1);
+    });
+
+    it("resets the countdown whenever new manual activity happens", () => {
+        const onResume = vi.fn();
+        const controller = new TerminalAutoFollowResumeController(onResume);
+
+        controller.markActivity(true);
+        vi.advanceTimersByTime(4_000);
+        controller.markActivity(true);
+        vi.advanceTimersByTime(9_999);
+        expect(onResume).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1);
+        expect(onResume).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels the pending resume once auto-follow is restored another way", () => {
+        const onResume = vi.fn();
+        const controller = new TerminalAutoFollowResumeController(onResume);
+
+        controller.markActivity(true);
+        controller.markActivity(false);
+        vi.advanceTimersByTime(TerminalAutoFollowResumeDelayMs);
+
+        expect(onResume).not.toHaveBeenCalled();
     });
 });

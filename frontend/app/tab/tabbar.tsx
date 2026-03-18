@@ -1,16 +1,33 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import {
+    getEligibleCodexResumeBlockIds,
+    runCodexResumeSequence,
+    type CodexResumeShellState,
+} from "@/app/block/codex-resume";
 import { Button } from "@/app/element/button";
 import { modalsModel } from "@/app/store/modalmodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { SidePanelView, WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { deleteLayoutModelForTab } from "@/layout/index";
-import { atoms, createTab, getApi, getSettingsKeyAtom, globalStore, setActiveTab } from "@/store/global";
+import {
+    atoms,
+    createTab,
+    getApi,
+    getSettingsKeyAtom,
+    globalStore,
+    pushFlashError,
+    recordTEvent,
+    setActiveTab,
+    useBlockAtom,
+    WOS,
+} from "@/store/global";
+import * as util from "@/util/util";
 import { isMacOS, isWindows } from "@/util/platformutil";
 import { fireAndForget } from "@/util/util";
-import { useAtomValue } from "jotai";
+import { atom, useAtomValue } from "jotai";
 import { OverlayScrollbars } from "overlayscrollbars";
 import { createRef, Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 import { debounce } from "throttle-debounce";
@@ -101,6 +118,9 @@ function moveSidePanelButton(order: SidePanelView[], dragging: SidePanelView, ov
     return next;
 }
 
+const sidePanelButtonClassName =
+    "flex h-[26px] px-1.5 justify-end items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px]";
+
 const SidePanelToggleButton = memo(
     ({
         view,
@@ -125,7 +145,7 @@ const SidePanelToggleButton = memo(
 
         return (
             <div
-                className={`flex h-[26px] px-1.5 justify-end items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${isActive ? "text-accent" : "text-secondary"}`}
+                className={`${sidePanelButtonClassName} ${isActive ? "text-accent" : "text-secondary"}`}
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
                 onClick={onClick}
             >
@@ -137,6 +157,35 @@ const SidePanelToggleButton = memo(
 );
 
 SidePanelToggleButton.displayName = "SidePanelToggleButton";
+
+const SidePanelActionButton = memo(
+    ({
+        buttonRef,
+        iconClass,
+        title,
+        onClick,
+    }: {
+        buttonRef: React.RefObject<HTMLDivElement>;
+        iconClass: string;
+        title: string;
+        onClick: () => void;
+    }) => {
+        return (
+            <div
+                ref={buttonRef}
+                className={`${sidePanelButtonClassName} text-secondary`}
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                title={title}
+                aria-label={title}
+                onClick={onClick}
+            >
+                <i className={iconClass} />
+            </div>
+        );
+    }
+);
+
+SidePanelActionButton.displayName = "SidePanelActionButton";
 
 const WaveAIButton = memo(() => {
     return <SidePanelToggleButton view="ai" iconClass="fa fa-sparkles" label="AI" labelClassName="font-mono" showLabel={false} />;
@@ -174,6 +223,20 @@ const GitQuickButton = memo(() => {
     return <SidePanelToggleButton view="git" iconClass="fa fa-code-branch" label={t("workspace.git")} showLabel={false} />;
 });
 GitQuickButton.displayName = "GitQuickButton";
+
+const CodexResumeAllButton = memo(
+    ({ buttonRef, onClick }: { buttonRef: React.RefObject<HTMLDivElement>; onClick: () => void }) => {
+        return (
+            <SidePanelActionButton
+                buttonRef={buttonRef}
+                iconClass="fa fa-clock-rotate-left"
+                title="Resume latest Codex in all local terminals on this page"
+                onClick={onClick}
+            />
+        );
+    }
+);
+CodexResumeAllButton.displayName = "CodexResumeAllButton";
 
 const ConfigErrorMessage = () => {
     const fullConfig = useAtomValue(atoms.fullConfigAtom);
@@ -310,12 +373,14 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const serversButtonRef = useRef<HTMLDivElement>(null);
     const layoutButtonRef = useRef<HTMLDivElement>(null);
     const gitButtonRef = useRef<HTMLDivElement>(null);
+    const codexResumeAllButtonRef = useRef<HTMLDivElement>(null);
     const prevAllLoadedRef = useRef<boolean>(false);
     const activeTabId = useAtomValue(atoms.staticTabId);
     const isFullScreen = useAtomValue(atoms.isFullScreen);
     const zoomFactor = useAtomValue(atoms.zoomFactorAtom);
     const settings = useAtomValue(atoms.settingsAtom);
     const sidePanelOrderSetting = settings?.["tab:sidepanelbuttonorder"];
+    const [activeTabData] = WOS.useWaveObjectValue<Tab>(activeTabId ? WOS.makeORef("tab", activeTabId) : null);
 
     const [sidePanelButtonOrder, setSidePanelButtonOrder] = useState<SidePanelView[]>(() =>
         normalizeSidePanelButtonOrder(sidePanelOrderSetting)
@@ -410,6 +475,85 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         layouts: LayoutQuickButton,
         git: GitQuickButton,
     };
+    const getBlockData = useCallback((blockId: string): Block | undefined => {
+        if (util.isBlank(blockId)) {
+            return undefined;
+        }
+        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+        return globalStore.get(blockAtom);
+    }, []);
+    const getShellState = useCallback((blockId: string): CodexResumeShellState => {
+        if (util.isBlank(blockId)) {
+            return null;
+        }
+        const shellStateAtom = useBlockAtom(blockId, "term:shellstate", () => atom<CodexResumeShellState>(null));
+        return globalStore.get(shellStateAtom);
+    }, []);
+    const waitForBlockShellStateToStart = useCallback(
+        async (blockId: string) => {
+            const timeoutAt = Date.now() + 4000;
+            while (Date.now() < timeoutAt) {
+                if (getShellState(blockId) === "running-command") {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            throw new Error("Codex resume did not start within 4 seconds.");
+        },
+        [getShellState]
+    );
+    const handleResumeCodexForCurrentTab = useCallback(() => {
+        const tabBlockIds = activeTabData?.blockids ?? [];
+        const targetBlockIds = getEligibleCodexResumeBlockIds(tabBlockIds, getBlockData, getShellState);
+        const skippedCount = Math.max(0, tabBlockIds.length - targetBlockIds.length);
+        if (targetBlockIds.length === 0) {
+            pushFlashError({
+                id: "",
+                icon: "triangle-exclamation",
+                title: "Codex resume unavailable",
+                message: "当前页没有可恢复的本地终端。",
+                expiration: Date.now() + 7000,
+            });
+            return;
+        }
+        fireAndForget(async () => {
+            try {
+                await Promise.all(
+                    targetBlockIds.map((blockId) =>
+                        runCodexResumeSequence((input) =>
+                            RpcApi.ControllerInputCommand(TabRpcClient, {
+                                blockid: blockId,
+                                inputdata64: util.stringToBase64(input),
+                            })
+                        , { waitUntilReadyForFollowup: () => waitForBlockShellStateToStart(blockId) })
+                    )
+                );
+                recordTEvent("action:codexresume", {
+                    "block:view": "term",
+                    blockcount: targetBlockIds.length,
+                    scope: "tab",
+                });
+                if (skippedCount > 0) {
+                    pushFlashError({
+                        id: "",
+                        icon: "circle-info",
+                        title: "Codex resume started",
+                        message: `已执行 ${targetBlockIds.length} 个终端，其余 ${skippedCount} 个块已跳过。`,
+                        expiration: Date.now() + 7000,
+                    });
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                pushFlashError({
+                    id: "",
+                    icon: "triangle-exclamation",
+                    title: "Codex resume failed",
+                    message,
+                    expiration: Date.now() + 7000,
+                });
+            }
+        });
+    }, [activeTabData?.blockids, getBlockData, getShellState, waitForBlockShellStateToStart]);
 
     let prevDelta: number;
     let prevDragDirection: string;
@@ -466,6 +610,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         const serversButtonWidth = serversButtonRef.current?.getBoundingClientRect().width ?? 0;
         const layoutButtonWidth = layoutButtonRef.current?.getBoundingClientRect().width ?? 0;
         const gitButtonWidth = gitButtonRef.current?.getBoundingClientRect().width ?? 0;
+        const codexResumeAllButtonWidth = codexResumeAllButtonRef.current?.getBoundingClientRect().width ?? 0;
         const workspaceSwitcherWidth = workspaceSwitcherRef.current?.getBoundingClientRect().width ?? 0;
 
         const nonTabElementsWidth =
@@ -481,6 +626,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             serversButtonWidth +
             layoutButtonWidth +
             gitButtonWidth +
+            codexResumeAllButtonWidth +
             workspaceSwitcherWidth;
         const spaceForTabs = tabbarWrapperWidth - nonTabElementsWidth;
 
@@ -911,6 +1057,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                     </Fragment>
                 );
             })}
+            <CodexResumeAllButton buttonRef={codexResumeAllButtonRef} onClick={handleResumeCodexForCurrentTab} />
             <WorkspaceSwitcher ref={workspaceSwitcherRef} />
             <div className="tab-bar" ref={tabBarRef} data-overlayscrollbars-initialize>
                 <div className="tabs-wrapper" ref={tabsWrapperRef} style={{ width: `${tabsWrapperWidth}px` }}>

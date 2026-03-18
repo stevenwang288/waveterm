@@ -19,9 +19,10 @@ import { computeBgStyleFromMeta } from "@/util/waveutil";
 import clsx from "clsx";
 import * as jotai from "jotai";
 import * as React from "react";
+import { computeBlockMaskStyle } from "./block-focus-style";
 import { BlockFrameProps } from "./blocktypes";
 
-const BlockMask = React.memo(({ nodeModel }: { nodeModel: NodeModel }) => {
+const BlockMask = React.memo(({ nodeModel, disableFocusHighlight }: { nodeModel: NodeModel; disableFocusHighlight: boolean }) => {
     const tabModel = useTabModel();
     const isFocused = jotai.useAtomValue(nodeModel.isFocused);
     const isEphemeral = jotai.useAtomValue(nodeModel.isEphemeral);
@@ -32,31 +33,37 @@ const BlockMask = React.memo(({ nodeModel }: { nodeModel: NodeModel }) => {
     const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", nodeModel.blockId));
     const tabActiveBorderColor = jotai.useAtomValue(tabModel.getTabMetaAtom("bg:activebordercolor"));
     const tabBorderColor = jotai.useAtomValue(tabModel.getTabMetaAtom("bg:bordercolor"));
-    const style: React.CSSProperties = {};
+    let baseBorderColor: string | undefined;
     let showBlockMask = false;
 
     if (isFocused) {
         if (tabActiveBorderColor) {
-            style.borderColor = tabActiveBorderColor;
+            baseBorderColor = tabActiveBorderColor;
         }
         if (blockData?.meta?.["frame:activebordercolor"]) {
-            style.borderColor = blockData.meta["frame:activebordercolor"];
+            baseBorderColor = blockData.meta["frame:activebordercolor"];
         }
     } else {
         if (tabBorderColor) {
-            style.borderColor = tabBorderColor;
+            baseBorderColor = tabBorderColor;
         }
         if (blockData?.meta?.["frame:bordercolor"]) {
-            style.borderColor = blockData.meta["frame:bordercolor"];
+            baseBorderColor = blockData.meta["frame:bordercolor"];
         }
-        if (isEphemeral && !style.borderColor) {
-            style.borderColor = "rgba(255, 255, 255, 0.7)";
+        if (isEphemeral && !baseBorderColor) {
+            baseBorderColor = "rgba(255, 255, 255, 0.7)";
         }
     }
 
-    if (blockHighlight && !style.borderColor) {
-        style.borderColor = "rgb(59, 130, 246)";
+    if (blockHighlight && !baseBorderColor) {
+        baseBorderColor = "rgb(59, 130, 246)";
     }
+
+    const style = computeBlockMaskStyle({
+        baseBorderColor,
+        disableFocusHighlight,
+        isFocused,
+    }) as React.CSSProperties;
 
     let innerElem = null;
     if (isLayoutMode && showOverlayBlockNums) {
@@ -149,6 +156,7 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
 
     const viewIconElem = getViewIconElem(viewIconUnion, blockData);
     const isTerminalBlock = blockData?.meta?.view === "term";
+    const disableFocusHighlight = preview || (numBlocksInTab === 1 && !aiPanelVisible);
     let innerStyle: React.CSSProperties = {};
     if (!preview) {
         innerStyle = computeBgStyleFromMeta(customBg);
@@ -163,7 +171,7 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
             className={clsx("block", "block-frame-default", "block-" + nodeModel.blockId, {
                 "block-focused": isFocused || preview,
                 "block-preview": preview,
-                "block-no-highlight": numBlocksInTab === 1 && !aiPanelVisible,
+                "block-no-highlight": disableFocusHighlight && !preview,
                 "term-unread": isTerminalBlock && hasUnread,
                 ephemeral: isEphemeral,
                 magnified: isMagnified,
@@ -182,7 +190,7 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
             // @ts-ignore: inert does exist in the DOM, just not in react
             inert={preview ? "1" : undefined} //
         >
-            <BlockMask nodeModel={nodeModel} />
+            <BlockMask nodeModel={nodeModel} disableFocusHighlight={disableFocusHighlight} />
             {preview || viewModel == null || !manageConnection ? null : (
                 <ConnStatusOverlay
                     nodeModel={nodeModel}
