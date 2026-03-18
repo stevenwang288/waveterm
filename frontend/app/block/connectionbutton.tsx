@@ -8,7 +8,14 @@ import {
 } from "@/app/block/connectionbutton-label";
 import { buildTerminalLabelContextMenu } from "@/app/block/connectionbutton-menu";
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { createBlock, getConnStatusAtom, getLocalHostDisplayNameAtom, pushNotification, recordTEvent } from "@/app/store/global";
+import {
+    createBlock,
+    getApi,
+    getConnStatusAtom,
+    getLocalHostDisplayNameAtom,
+    pushNotification,
+    recordTEvent,
+} from "@/app/store/global";
 import { IconButton } from "@/element/iconbutton";
 import * as util from "@/util/util";
 import * as jotai from "jotai";
@@ -257,6 +264,7 @@ export const ConnectionButton = React.memo(
                         t,
                         createTermBlock: createBlock,
                         copyText: (text) => util.fireAndForget(() => navigator.clipboard.writeText(text)),
+                        openNativePath: (path) => getApi().openNativePath(path),
                     });
                     ContextMenuModel.showContextMenu(menu, e);
                 },

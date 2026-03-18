@@ -6,6 +6,7 @@ describe("buildTerminalLabelContextMenu", () => {
     it("includes inherit-path action and creates a term block with cwd and connection", () => {
         const createTermBlock = vi.fn();
         const copyText = vi.fn();
+        const openNativePath = vi.fn();
         const menu = buildTerminalLabelContextMenu({
             connection: "ubuntu@F1-10.20.0.161",
             terminalCwd: "/home/ubuntu",
@@ -13,9 +14,10 @@ describe("buildTerminalLabelContextMenu", () => {
             t: (key) => key,
             createTermBlock,
             copyText,
+            openNativePath,
         });
 
-        expect(menu).toHaveLength(3);
+        expect(menu).toHaveLength(5);
         expect(menu[0].label).toBe("term.newBlockInheritCwd");
         expect(menu[0].enabled).toBe(true);
         menu[0].click?.();
@@ -28,14 +30,39 @@ describe("buildTerminalLabelContextMenu", () => {
             },
         });
 
-        expect(menu[2].label).toBe("preview.copyFullPath");
-        menu[2].click?.();
+        expect(menu[2].label).toBe("native.revealInManager");
+        expect(menu[2].enabled).toBe(false);
+        expect(openNativePath).not.toHaveBeenCalled();
+
+        expect(menu[4].label).toBe("preview.copyFullPath");
+        menu[4].click?.();
         expect(copyText).toHaveBeenCalledWith("/home/ubuntu");
+    });
+
+    it("adds a reveal action for local terminal paths and opens the cwd in the native manager", () => {
+        const createTermBlock = vi.fn();
+        const copyText = vi.fn();
+        const openNativePath = vi.fn();
+        const menu = buildTerminalLabelContextMenu({
+            connection: "local",
+            terminalCwd: "D:\\\\work",
+            terminalLabel: "D:\\\\work",
+            t: (key) => key,
+            createTermBlock,
+            copyText,
+            openNativePath,
+        });
+
+        expect(menu[2].label).toBe("native.revealInManager");
+        expect(menu[2].enabled).toBe(true);
+        menu[2].click?.();
+        expect(openNativePath).toHaveBeenCalledWith("D:\\\\work");
     });
 
     it("disables inherit-path action when cwd is missing and falls back to the visible label for copy", () => {
         const createTermBlock = vi.fn();
         const copyText = vi.fn();
+        const openNativePath = vi.fn();
         const menu = buildTerminalLabelContextMenu({
             connection: "",
             terminalCwd: "",
@@ -43,12 +70,15 @@ describe("buildTerminalLabelContextMenu", () => {
             t: (key) => key,
             createTermBlock,
             copyText,
+            openNativePath,
         });
 
         expect(menu[0].enabled).toBe(false);
-        menu[2].click?.();
+        expect(menu[2].enabled).toBe(false);
+        menu[4].click?.();
         expect(copyText).toHaveBeenCalledWith("D:\\\\work");
         expect(createTermBlock).not.toHaveBeenCalled();
+        expect(openNativePath).not.toHaveBeenCalled();
     });
 });
 
