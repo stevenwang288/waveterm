@@ -139,14 +139,135 @@ function Enable-RepoEsbuildExecutionWorkaround {
   return $esbuildPath
 }
 
+function Get-NodeVersionInfo {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$NodeExePath
+  )
+
+  if ([string]::IsNullOrWhiteSpace($NodeExePath) -or -not (Test-Path -LiteralPath $NodeExePath)) {
+    return $null
+  }
+
+  try {
+    $versionText = [string](& $NodeExePath -v 2>$null | Select-Object -First 1)
+    $match = [regex]::Match($versionText, '^v?(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$')
+    if (-not $match.Success) {
+      return $null
+    }
+
+    return [pscustomobject]@{
+      Version = "{0}.{1}.{2}" -f $match.Groups["major"].Value, $match.Groups["minor"].Value, $match.Groups["patch"].Value
+      Major = [int]$match.Groups["major"].Value
+    }
+  } catch {
+    return $null
+  }
+}
+
+function Get-NpmCliPathForNpmCmd {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$NpmCmdPath
+  )
+
+  if ([string]::IsNullOrWhiteSpace($NpmCmdPath) -or -not (Test-Path -LiteralPath $NpmCmdPath)) {
+    return ""
+  }
+
+  $npmRoot = Split-Path -Parent $NpmCmdPath
+  $npmCliPath = Join-Path $npmRoot "node_modules\npm\bin\npm-cli.js"
+  if (Test-Path -LiteralPath $npmCliPath) {
+    return $npmCliPath
+  }
+
+  return ""
+}
+
+function Get-DevNpmToolchainInfo {
+  $candidatePaths = @()
+
+  if (-not [string]::IsNullOrWhiteSpace($env:WAVETERM_DEV_NPM_CMD) -and (Test-Path -LiteralPath $env:WAVETERM_DEV_NPM_CMD)) {
+    $candidatePaths += (Resolve-Path -LiteralPath $env:WAVETERM_DEV_NPM_CMD).Path
+  }
+
+  $programFilesNpm = Join-Path $env:ProgramFiles "nodejs\npm.cmd"
+  if (Test-Path -LiteralPath $programFilesNpm) {
+    $candidatePaths += $programFilesNpm
+  }
+
+  try {
+    $resolvedNpmCmd = (Get-Command npm.cmd -ErrorAction Stop).Source
+    if (-not [string]::IsNullOrWhiteSpace($resolvedNpmCmd)) {
+      $candidatePaths += $resolvedNpmCmd
+    }
+  } catch {
+    # fall back to npm.cmd when command resolution fails
+  }
+
+  $toolchains = @()
+  foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
+    $nodeExePath = Join-Path (Split-Path -Parent $candidatePath) "node.exe"
+    $nodeVersion = Get-NodeVersionInfo -NodeExePath $nodeExePath
+    if ($null -eq $nodeVersion) {
+      continue
+    }
+    $npmCliPath = Get-NpmCliPathForNpmCmd -NpmCmdPath $candidatePath
+
+    $toolchains += [pscustomobject]@{
+      NpmCmdPath = $candidatePath
+      NpmCliPath = $npmCliPath
+      NodeExePath = $nodeExePath
+      NodeVersion = [string]$nodeVersion.Version
+      NodeMajor = [int]$nodeVersion.Major
+    }
+  }
+
+  $preferred = $toolchains |
+    Sort-Object `
+      @{ Expression = { $_.NodeMajor -ge 18 }; Descending = $true }, `
+      @{ Expression = { $_.NodeMajor }; Descending = $true } |
+    Select-Object -First 1
+
+  if ($null -ne $preferred) {
+    return $preferred
+  }
+
+  return [pscustomobject]@{
+    NpmCmdPath = "npm.cmd"
+    NpmCliPath = ""
+    NodeExePath = "node.exe"
+    NodeVersion = ""
+    NodeMajor = 0
+  }
+}
+
+function Get-PreferredDevNpmCmdPath {
+  return [string](Get-DevNpmToolchainInfo).NpmCmdPath
+}
+
 function Invoke-NpmCmd {
   param(
     [Parameter(Mandatory = $true)]
     [string[]]$Args
   )
 
+  $toolchain = Get-DevNpmToolchainInfo
   Enable-RepoEsbuildExecutionWorkaround | Out-Null
-  & npm.cmd @Args
+
+  $originalPath = [string]$env:PATH
+  try {
+    if (-not [string]::IsNullOrWhiteSpace([string]$toolchain.NodeExePath)) {
+      $nodeDir = Split-Path -Parent $toolchain.NodeExePath
+      if (-not [string]::IsNullOrWhiteSpace($nodeDir) -and -not $originalPath.StartsWith("$nodeDir;", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $env:PATH = "$nodeDir;$originalPath"
+      }
+    }
+
+    & $toolchain.NpmCmdPath @Args
+  } finally {
+    $env:PATH = $originalPath
+  }
 }
 
 function Get-FileSha256 {

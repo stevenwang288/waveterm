@@ -109,7 +109,7 @@ export function resolveSpeechSettings(
         provider,
         localEngine,
         transport,
-        autoPlay: normalizeBool(globalSettings?.["speech:autoplay"], false),
+        autoPlay: normalizeBool(globalSettings?.["speech:autoplay"], true),
         showManualButton: normalizeBool(globalSettings?.["speech:manualbutton"], true),
         rate: normalizeSpeechRate(globalSettings?.["speech:rate"], 1),
         endpoint,

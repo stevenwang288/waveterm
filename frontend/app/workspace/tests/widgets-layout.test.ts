@@ -6,9 +6,13 @@ import { getUtilityWidgetCount, getWidgetBarMode } from "../widgets-layout";
 
 test("getUtilityWidgetCount only counts currently rendered utility buttons", () => {
     assert.equal(getUtilityWidgetCount({}), 4);
+    assert.equal(getUtilityWidgetCount({ showWorkbenchButton: false }), 3);
     assert.equal(getUtilityWidgetCount({ showExplorerConnection: true }), 5);
     assert.equal(getUtilityWidgetCount({ showAppsButton: true, showExplorerConnection: true }), 6);
-    assert.equal(getUtilityWidgetCount({ showAppsButton: true, showDevIndicator: true, showExplorerConnection: true }), 7);
+    assert.equal(
+        getUtilityWidgetCount({ showAppsButton: true, showDevIndicator: true, showExplorerConnection: true }),
+        7
+    );
 });
 
 test("getWidgetBarMode keeps a single-column compact rail when the actual buttons still fit", () => {

@@ -724,6 +724,65 @@ func (conn *SSHConn) WaitForConnect(ctx context.Context) error {
 	}
 }
 
+func formatConnectErrorForDisplay(err error) string {
+	if err == nil {
+		return ""
+	}
+	code, subCode := remote.ClassifyConnError(err)
+	message := strings.TrimSpace(remote.SimpleMessageFromPossibleConnectionError(err))
+	switch code {
+	case remote.ConnErrCode_SecretNotFound:
+		return "未找到已绑定的 SSH 长期密码，请重新输入并保存。"
+	case remote.ConnErrCode_SecretStore:
+		if message == "" {
+			return "本地密码存储不可用。"
+		}
+		return "本地密码存储失败：" + message
+	case remote.ConnErrCode_AuthFailed:
+		if message == "" {
+			return "SSH 认证失败，请检查密码、密钥或服务端认证方式。"
+		}
+		return "SSH 认证失败：" + message
+	case remote.ConnErrCode_UserCancelled:
+		return "已取消本次 SSH 连接。"
+	case remote.ConnErrCode_HostKeyChanged:
+		return "SSH 主机指纹已变化，请先检查并更新 known_hosts。"
+	case remote.ConnErrCode_HostKeyVerify, remote.ConnErrCode_KnownHostsNone, remote.ConnErrCode_KnownHostsFmt:
+		if message == "" {
+			return "SSH 主机指纹校验失败。"
+		}
+		return "SSH 主机指纹校验失败：" + message
+	case remote.ConnErrCode_Dial, remote.ConnErrCode_ProxyJumpDial:
+		switch subCode {
+		case remote.DialSubCode_DNS:
+			return "连接失败：无法解析主机名。"
+		case remote.DialSubCode_Refused:
+			return "连接失败：目标主机拒绝连接。"
+		case remote.DialSubCode_Timeout:
+			return "连接失败：连接超时。"
+		case remote.DialSubCode_NoRoute:
+			return "连接失败：没有到目标主机的路由。"
+		case remote.DialSubCode_HostUnreach:
+			return "连接失败：目标主机不可达。"
+		case remote.DialSubCode_NetUnreach:
+			return "连接失败：网络不可达。"
+		case remote.DialSubCode_ConnReset:
+			return "连接失败：连接被远端重置。"
+		case remote.DialSubCode_PermDenied:
+			return "连接失败：网络访问被拒绝。"
+		}
+		if message == "" {
+			return "连接失败：无法建立 SSH 网络连接。"
+		}
+		return "连接失败：" + message
+	default:
+		if message == "" {
+			return "SSH 连接失败。"
+		}
+		return "SSH 连接失败：" + message
+	}
+}
+
 // does not return an error since that error is stored inside of SSHConn
 func (conn *SSHConn) Connect(ctx context.Context, connFlags *wconfig.ConnKeywords) error {
 	conn.lifecycleLock.Lock()
@@ -747,13 +806,15 @@ func (conn *SSHConn) Connect(ctx context.Context, connFlags *wconfig.ConnKeyword
 	conn.Infof(ctx, "trying to connect to %q...\n", conn.GetName())
 	conn.FireConnChangeEvent()
 	err := conn.connectInternal(ctx, connFlags)
+	displayErr := ""
 	if err != nil {
 		errorCode, subCode := remote.ClassifyConnError(err)
 		isContextError := errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+		displayErr = formatConnectErrorForDisplay(err)
 		conn.Infof(ctx, "ERROR [%s] %v\n\n", errorCode, err)
 		conn.WithLock(func() {
 			conn.Status = Status_Error
-			conn.Error = err.Error()
+			conn.Error = displayErr
 		})
 		conn.closeInternal_withlifecyclelock()
 		telemetry.GoUpdateActivityWrap(wshrpc.ActivityUpdate{
@@ -789,7 +850,7 @@ func (conn *SSHConn) Connect(ctx context.Context, connFlags *wconfig.ConnKeyword
 	}
 	conn.FireConnChangeEvent()
 	if err != nil {
-		return err
+		return fmt.Errorf("%s", displayErr)
 	}
 
 	// logic for saving connection and potential flags (we only save once a connection has been made successfully)

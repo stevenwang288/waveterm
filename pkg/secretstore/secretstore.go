@@ -38,6 +38,8 @@ var initialized bool
 var lastInitTryTime time.Time
 var lastInitErr error
 var secretNameRegexp = regexp.MustCompile(SecretNamePattern)
+var secretNameInvalidCharsRegexp = regexp.MustCompile(`[^A-Za-z0-9]+`)
+var secretNameExtraUnderscoreRegexp = regexp.MustCompile(`_+`)
 var linuxStorageBackend string
 
 // must hold lock
@@ -234,6 +236,28 @@ func SetSecret(name string, value string) error {
 	return nil
 }
 
+func NormalizeSecretName(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	normalized := secretNameInvalidCharsRegexp.ReplaceAllString(raw, "_")
+	normalized = secretNameExtraUnderscoreRegexp.ReplaceAllString(normalized, "_")
+	return strings.Trim(strings.ToLower(normalized), "_")
+}
+
+func MakeSSHPasswordSecretName(connectionName string) string {
+	normalized := NormalizeSecretName(connectionName)
+	if normalized == "" {
+		normalized = "connection"
+	}
+	candidate := "ssh_password_" + normalized
+	if !secretNameRegexp.MatchString(candidate) {
+		return "ssh_password_connection"
+	}
+	return candidate
+}
+
 func DeleteSecret(name string) error {
 	if name == "" {
 		return fmt.Errorf("secret name cannot be empty")
@@ -283,7 +307,7 @@ func GetSecretNames() ([]string, error) {
 func CountSecrets() (int, error) {
 	lock.Lock()
 	defer lock.Unlock()
-	
+
 	if !initialized {
 		return 0, fmt.Errorf("secret store not initialized")
 	}

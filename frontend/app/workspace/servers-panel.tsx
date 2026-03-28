@@ -22,7 +22,7 @@ import {
     uniqNonBlank,
 } from "@/app/workspace/servers-refresh";
 import { fireAndForget, isBlank } from "@/util/util";
-import { useAtomValue } from "jotai";
+import { atom, useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -269,8 +269,9 @@ ServerRow.displayName = "ServerRow";
 
 const ServersPanel = memo(() => {
     const { t } = useTranslation();
+    const fallbackFullConfigAtom = useMemo(() => atom<FullConfigType>(null), []);
     const localHostLabel = useAtomValue(getLocalHostDisplayNameAtom());
-    const fullConfig = useAtomValue(atoms.fullConfigAtom);
+    const fullConfig = useAtomValue(atoms?.fullConfigAtom ?? fallbackFullConfigAtom);
     const [connections, setConnections] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);

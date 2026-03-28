@@ -4,8 +4,6 @@
 import { ClientModel } from "@/app/store/client-model";
 import { GlobalModel } from "@/app/store/global-model";
 import { getTabModelByTabId, TabModelContext } from "@/app/store/tab-model";
-import { Workspace } from "@/app/workspace/workspace";
-import { ContextMenuModel } from "@/store/contextmenu";
 import {
     atoms,
     createBlock,
@@ -23,38 +21,63 @@ import * as util from "@/util/util";
 import clsx from "clsx";
 import debug from "debug";
 import { Provider, useAtomValue } from "jotai";
-import "overlayscrollbars/overlayscrollbars.css";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, Suspense, lazy, useEffect, useState } from "react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { AppBackground } from "./app-bg";
-import { initAccentColorFromStorage } from "./element/accent-color";
-import { initLogoColorFromStorage } from "./element/logo-color";
-import { CenteredDiv } from "./element/quickelems";
-import { NotificationBubbles } from "./notification/notificationbubbles";
 import { useTranslation } from "react-i18next";
 import "./i18n"; // Import i18n config
 
-import "./app.scss";
-
-// tailwindsetup.css should come *after* app.scss (don't remove the newline above otherwise prettier will reorder these imports)
-import "../tailwindsetup.css";
-
 const dlog = debug("wave:app");
 const focusLog = debug("wave:focus");
+const AppBackground = lazy(async () => ({ default: (await import("./app-bg")).AppBackground }));
+const Workspace = lazy(async () => ({ default: (await import("@/app/workspace/workspace")).Workspace }));
+const NotificationBubbles = lazy(async () => ({
+    default: (await import("./notification/notificationbubbles")).NotificationBubbles,
+}));
+
+function BackgroundFallback() {
+    return <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />;
+}
+
+function AppCenteredMessage({ children }: { children: React.ReactNode }) {
+    return (
+        <div
+            style={{
+                display: "flex",
+                width: "100%",
+                height: "100%",
+                alignItems: "center",
+                justifyContent: "center",
+                textAlign: "center",
+                padding: "24px",
+            }}
+        >
+            <div>{children}</div>
+        </div>
+    );
+}
+
+const AppProviders = () => {
+    const tabId = useAtomValue(atoms.staticTabId);
+    return (
+        <TabModelContext.Provider value={getTabModelByTabId(tabId)}>
+            <AppInner />
+        </TabModelContext.Provider>
+    );
+};
 
 const App = ({ onFirstRender }: { onFirstRender: () => void }) => {
-    const tabId = useAtomValue(atoms.staticTabId);
     useEffect(() => {
-        initAccentColorFromStorage();
-        initLogoColorFromStorage();
+        void import("overlayscrollbars/overlayscrollbars.css");
+        void import("./app.scss");
         onFirstRender();
+        void import("../tailwindsetup.css");
+        void import("./element/accent-color").then((module) => module.initAccentColorFromStorage());
+        void import("./element/logo-color").then((module) => module.initLogoColorFromStorage());
     }, []);
     return (
         <Provider store={globalStore}>
-            <TabModelContext.Provider value={getTabModelByTabId(tabId)}>
-                <AppInner />
-            </TabModelContext.Provider>
+            <AppProviders />
         </Provider>
     );
 };
@@ -135,6 +158,7 @@ async function handleContextMenu(e: React.MouseEvent<HTMLDivElement>, t: any) {
             },
         });
     }
+    const { ContextMenuModel } = await import("@/store/contextmenu");
     ContextMenuModel.showContextMenu(menu, e);
 }
 
@@ -371,8 +395,10 @@ const AppInner = () => {
     if (client == null || windowData == null) {
         return (
             <div className="flex flex-col w-full h-full">
-                <AppBackground />
-                <CenteredDiv>{t("common.invalidConfigurationClientOrWindowNotLoaded")}</CenteredDiv>
+                <Suspense fallback={<BackgroundFallback />}>
+                    <AppBackground />
+                </Suspense>
+                <AppCenteredMessage>{t("common.invalidConfigurationClientOrWindowNotLoaded")}</AppCenteredMessage>
             </div>
         );
     }
@@ -385,17 +411,21 @@ const AppInner = () => {
             })}
             onContextMenu={(e) => handleContextMenu(e, t)}
         >
-            <AppBackground />
+            <Suspense fallback={<BackgroundFallback />}>
+                <AppBackground />
+            </Suspense>
             <AppKeyHandlers />
             <AppRuntimeErrorLogger />
             <AppFocusHandler />
             <AppSettingsUpdater />
             <TabIndicatorAutoClearing />
-            <DndProvider backend={HTML5Backend}>
-                <Workspace />
-            </DndProvider>
+            <Suspense fallback={<AppCenteredMessage>{t("common.loading")}</AppCenteredMessage>}>
+                <DndProvider backend={HTML5Backend}>
+                    <Workspace />
+                </DndProvider>
+            </Suspense>
             <FlashError />
-            {isDev() ? <NotificationBubbles></NotificationBubbles> : null}
+            <Suspense fallback={null}>{isDev() ? <NotificationBubbles></NotificationBubbles> : null}</Suspense>
         </div>
     );
 };

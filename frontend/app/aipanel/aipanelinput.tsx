@@ -5,6 +5,7 @@ import { formatFileSizeError, isAcceptableFile, validateFileSize } from "@/app/a
 import { waveAIHasFocusWithin } from "@/app/aipanel/waveai-focus-utils";
 import { type WaveAIModel } from "@/app/aipanel/waveai-model";
 import { Tooltip } from "@/element/tooltip";
+import { isCompositionProtectedKeydown, useCompositionSafeTextarea } from "@/util/composition-input";
 import { cn } from "@/util/util";
 import { useAtom, useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useRef } from "react";
@@ -28,6 +29,7 @@ export const AIPanelInput = memo(({ onSubmit, status, model }: AIPanelInputProps
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isPanelOpen = useAtomValue(model.getPanelVisibleAtom());
+    const composerInput = useCompositionSafeTextarea(input, setInput);
 
     let placeholder: string;
     if (!isChatEmpty) {
@@ -67,14 +69,14 @@ export const AIPanelInput = memo(({ onSubmit, status, model }: AIPanelInputProps
     }, [model, resizeTextarea]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        const isComposing = e.nativeEvent?.isComposing || e.keyCode == 229;
+        const isComposing = isCompositionProtectedKeydown(composerInput.isComposingRef.current.isComposing, e);
         if (
             !isComposing &&
             !e.altKey &&
             !e.ctrlKey &&
             !e.metaKey &&
             (e.key === "ArrowUp" || e.key === "ArrowDown") &&
-            !input.trim()
+            !composerInput.value.trim()
         ) {
             model.scrollByLine(e.key === "ArrowUp" ? "up" : "down");
             e.preventDefault();
@@ -82,6 +84,7 @@ export const AIPanelInput = memo(({ onSubmit, status, model }: AIPanelInputProps
         }
         if (e.key === "Enter" && !e.shiftKey && !isComposing) {
             e.preventDefault();
+            composerInput.commitDraftValue(textareaRef.current?.value);
             onSubmit(e as any);
         }
     };
@@ -92,6 +95,7 @@ export const AIPanelInput = memo(({ onSubmit, status, model }: AIPanelInputProps
 
     const handleBlur = useCallback(
         (e: React.FocusEvent) => {
+            composerInput.handleBlurWhileComposing(e);
             if (e.relatedTarget === null) {
                 return;
             }
@@ -102,12 +106,20 @@ export const AIPanelInput = memo(({ onSubmit, status, model }: AIPanelInputProps
 
             model.requestNodeFocus();
         },
-        [model]
+        [composerInput, model]
+    );
+
+    const handleSubmit = useCallback(
+        (e: React.FormEvent) => {
+            composerInput.commitDraftValue(textareaRef.current?.value);
+            onSubmit(e);
+        },
+        [composerInput, onSubmit]
     );
 
     useEffect(() => {
         resizeTextarea();
-    }, [input, resizeTextarea]);
+    }, [composerInput.value, resizeTextarea]);
 
     useEffect(() => {
         if (isPanelOpen) {
@@ -154,12 +166,14 @@ export const AIPanelInput = memo(({ onSubmit, status, model }: AIPanelInputProps
                 onChange={handleFileChange}
                 className="hidden"
             />
-            <form onSubmit={onSubmit}>
+            <form onSubmit={handleSubmit}>
                 <div className="relative">
                     <textarea
                         ref={textareaRef}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
+                        value={composerInput.value}
+                        onChange={composerInput.handleChange}
+                        onCompositionStart={composerInput.handleCompositionStart}
+                        onCompositionEnd={composerInput.handleCompositionEnd}
                         onKeyDown={handleKeyDown}
                         onFocus={handleFocus}
                         onBlur={handleBlur}

@@ -2,15 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { tryReinjectKey } from "@/app/store/keymodel";
-import { CodeEditor } from "@/app/view/codeeditor/codeeditor";
 import { globalStore } from "@/store/global";
 import { adaptFromReactOrNativeKeyEvent, checkKeyPressed } from "@/util/keyutil";
 import { fireAndForget } from "@/util/util";
 import { useAtomValue, useSetAtom } from "jotai";
-import * as monaco from "monaco-editor";
+import type * as MonacoModule from "monaco-editor";
 import type * as MonacoTypes from "monaco-editor";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import type { SpecializedViewProps } from "./preview";
+
+const CodeEditor = lazy(() =>
+    import("@/app/view/codeeditor/codeeditor").then((module) => ({ default: module.CodeEditor }))
+);
 
 export const shellFileMap: Record<string, string> = {
     ".bashrc": "shell",
@@ -73,7 +76,7 @@ function CodeEditPreview({ model }: SpecializedViewProps) {
         };
     }, []);
 
-    function onMount(editor: MonacoTypes.editor.IStandaloneCodeEditor, monacoApi: typeof monaco): () => void {
+    function onMount(editor: MonacoTypes.editor.IStandaloneCodeEditor, monacoApi: typeof MonacoModule): () => void {
         model.monacoRef.current = editor;
 
         const keyDownDisposer = editor.onKeyDown((e: MonacoTypes.IKeyboardEvent) => {
@@ -96,15 +99,21 @@ function CodeEditPreview({ model }: SpecializedViewProps) {
     }
 
     return (
-        <CodeEditor
-            blockId={model.blockId}
-            text={fileContent}
-            fileName={fileName}
-            language={language}
-            readonly={fileInfo.readonly}
-            onChange={(text) => setNewFileContent(text)}
-            onMount={onMount}
-        />
+        <Suspense
+            fallback={
+                <div className="flex items-center justify-center w-full h-full text-secondary">Loading editor...</div>
+            }
+        >
+            <CodeEditor
+                blockId={model.blockId}
+                text={fileContent}
+                fileName={fileName}
+                language={language}
+                readonly={fileInfo.readonly}
+                onChange={(text) => setNewFileContent(text)}
+                onMount={onMount}
+            />
+        </Suspense>
     );
 }
 

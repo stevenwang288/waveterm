@@ -40,7 +40,8 @@ const (
 	RoutePrefix_Bare       = "bare:"
 )
 
-const RouterInputChQueueSize = 100
+const RouterInputChQueueSize = 512
+const RouterBacklogRetryDelay = 5 * time.Millisecond
 
 var BacklogLogThresholds = map[int]bool{1: true, 5: true, 10: true, 20: true, 30: true, 40: true, 50: true, 100: true, 200: true, 500: true, 1000: true}
 
@@ -461,7 +462,7 @@ func (router *WshRouter) drainLinkBacklog_withLock(linkId baseds.LinkId, lm *lin
 	return backlog
 }
 
-func (router *WshRouter) processOneBacklogRound() {
+func (router *WshRouter) processOneBacklogRound() bool {
 	router.lock.Lock()
 	defer router.lock.Unlock()
 	for linkId, backlog := range router.linkMsgBacklog {
@@ -487,6 +488,7 @@ func (router *WshRouter) processOneBacklogRound() {
 		}
 		router.linkMsgBacklog[linkId] = newBacklog
 	}
+	return len(router.linkMsgBacklog) > 0
 }
 
 func (router *WshRouter) processBacklog() {
@@ -499,8 +501,10 @@ func (router *WshRouter) processBacklog() {
 			router.linkBacklogCond.Wait()
 		}
 		router.lock.Unlock()
-		router.processOneBacklogRound()
-		time.Sleep(50 * time.Millisecond)
+		hasPendingBacklog := router.processOneBacklogRound()
+		if hasPendingBacklog {
+			time.Sleep(RouterBacklogRetryDelay)
+		}
 	}
 }
 

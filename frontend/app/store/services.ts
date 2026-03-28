@@ -17,7 +17,7 @@ class BlockServiceType {
     }
 
     // save the terminal state to a blockfile
-    SaveTerminalState(blockId: string, state: string, stateType: string, ptyOffset: number, termSize: TermSize, cacheMeta?: Record<string, any>): Promise<void> {
+    SaveTerminalState(blockId: string, state: string, stateType: string, ptyOffset: number, termSize: TermSize, cacheMeta: {[key: string]: any}): Promise<void> {
         return WOS.callBackendService("block", "SaveTerminalState", Array.from(arguments))
     }
     SaveWaveAiData(arg2: string, arg3: WaveAIPromptMessageType[]): Promise<void> {
@@ -188,3 +188,4 @@ class WorkspaceServiceType {
 }
 
 export const WorkspaceService = new WorkspaceServiceType();
+

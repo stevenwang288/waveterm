@@ -331,6 +331,7 @@ type CommandEventReadHistoryData struct {
 
 type WaveAIStreamRequest struct {
 	ClientId string                    `json:"clientid,omitempty"`
+	BlockId  string                    `json:"blockid,omitempty"`
 	Opts     *WaveAIOptsType           `json:"opts"`
 	Prompt   []WaveAIPromptMessageType `json:"prompt"`
 }
@@ -342,16 +343,17 @@ type WaveAIPromptMessageType struct {
 }
 
 type WaveAIOptsType struct {
-	Model      string `json:"model"`
-	APIType    string `json:"apitype,omitempty"`
-	APIToken   string `json:"apitoken"`
-	OrgID      string `json:"orgid,omitempty"`
-	APIVersion string `json:"apiversion,omitempty"`
-	BaseURL    string `json:"baseurl,omitempty"`
-	ProxyURL   string `json:"proxyurl,omitempty"`
-	MaxTokens  int    `json:"maxtokens,omitempty"`
-	MaxChoices int    `json:"maxchoices,omitempty"`
-	TimeoutMs  int    `json:"timeoutms,omitempty"`
+	Model         string `json:"model"`
+	APIType       string `json:"apitype,omitempty"`
+	APIToken      string `json:"apitoken"`
+	OrgID         string `json:"orgid,omitempty"`
+	APIVersion    string `json:"apiversion,omitempty"`
+	BaseURL       string `json:"baseurl,omitempty"`
+	ProxyURL      string `json:"proxyurl,omitempty"`
+	MaxTokens     int    `json:"maxtokens,omitempty"`
+	MaxChoices    int    `json:"maxchoices,omitempty"`
+	ThinkingLevel string `json:"thinkinglevel,omitempty"`
+	TimeoutMs     int    `json:"timeoutms,omitempty"`
 }
 
 type WaveAIPacketType struct {
@@ -889,13 +891,13 @@ type BlockJobStatusData struct {
 }
 
 type FocusedBlockData struct {
-	BlockId                     string               `json:"blockid"`
-	ViewType                    string               `json:"viewtype"`
-	Controller                  string               `json:"controller"`
-	ConnName                    string               `json:"connname"`
-	BlockMeta                   waveobj.MetaMapType  `json:"blockmeta"`
-	TermJobStatus               *BlockJobStatusData  `json:"termjobstatus,omitempty"`
-	ConnStatus                  *ConnStatus          `json:"connstatus,omitempty"`
-	TermShellIntegrationStatus  string               `json:"termshellintegrationstatus,omitempty"`
-	TermLastCommand             string               `json:"termlastcommand,omitempty"`
+	BlockId                    string              `json:"blockid"`
+	ViewType                   string              `json:"viewtype"`
+	Controller                 string              `json:"controller"`
+	ConnName                   string              `json:"connname"`
+	BlockMeta                  waveobj.MetaMapType `json:"blockmeta"`
+	TermJobStatus              *BlockJobStatusData `json:"termjobstatus,omitempty"`
+	ConnStatus                 *ConnStatus         `json:"connstatus,omitempty"`
+	TermShellIntegrationStatus string              `json:"termshellintegrationstatus,omitempty"`
+	TermLastCommand            string              `json:"termlastcommand,omitempty"`
 }

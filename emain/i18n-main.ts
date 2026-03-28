@@ -1,7 +1,7 @@
 import i18next from "i18next";
 
-import enTranslation from "../public/locales/en/translation.json";
-import zhCNTranslation from "../public/locales/zh-CN/translation.json";
+import enTranslation from "../locales/en/translation.json";
+import zhCNTranslation from "../locales/zh-CN/translation.json";
 
 i18next.init({
     lng: "zh-CN",

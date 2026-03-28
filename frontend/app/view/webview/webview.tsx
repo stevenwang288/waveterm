@@ -12,6 +12,7 @@ import {
     getBlockMetaKeyAtom,
     getSettingsKeyAtom,
     openLink,
+    pushNotification,
     setTabIndicator,
     useBlockAtom,
 } from "@/app/store/global";
@@ -26,11 +27,15 @@ import {
 } from "@/app/suggestion/suggestion";
 import { WOS, globalStore } from "@/store/global";
 import { adaptFromReactOrNativeKeyEvent, checkKeyPressed } from "@/util/keyutil";
-import { fireAndForget, useAtomValueSafe } from "@/util/util";
+import { fireAndForget, isBlank, useAtomValueSafe } from "@/util/util";
 import clsx from "clsx";
 import { Atom, PrimitiveAtom, atom, useAtomValue, useSetAtom } from "jotai";
 import { Fragment, createRef, memo, useCallback, useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { getPreferredExternalSiteLabel } from "./site-preferences";
+import { shouldOpenNewWindowInCurrentView } from "./new-window-utils";
+import { getWebViewTitle, shouldHideWebViewTitle } from "./title-utils";
+import { normalizeWebUrl } from "./url-utils";
 import "./webview.scss";
 
 type WaveWebviewTag = HTMLElement & {
@@ -66,15 +71,25 @@ const USER_AGENT_ANDROID =
 
 let webviewPreloadUrl = null;
 
-function getWebviewPreloadUrl() {
-    if (webviewPreloadUrl == null) {
-        webviewPreloadUrl = getApi().getWebviewPreload();
-        console.log("webviewPreloadUrl", webviewPreloadUrl);
-    }
-    if (webviewPreloadUrl == null) {
+function normalizeWebviewPreloadUrl(preloadPath: string) {
+    if (isBlank(preloadPath)) {
         return null;
     }
-    return "file://" + webviewPreloadUrl;
+    if (preloadPath.startsWith("file://")) {
+        return preloadPath;
+    }
+    return "file://" + preloadPath;
+}
+
+function getWebviewPreloadUrl(preloadPath?: string) {
+    if (!isBlank(preloadPath)) {
+        return normalizeWebviewPreloadUrl(preloadPath);
+    }
+    if (webviewPreloadUrl == null) {
+        webviewPreloadUrl = normalizeWebviewPreloadUrl(getApi().getWebviewPreload());
+        console.log("webviewPreloadUrl", webviewPreloadUrl);
+    }
+    return webviewPreloadUrl;
 }
 
 
@@ -105,6 +120,7 @@ export class WebViewModel implements ViewModel {
     hideNav: Atom<boolean>;
     searchAtoms?: SearchAtoms;
     typeaheadOpen: PrimitiveAtom<boolean>;
+    webviewPreloadOverride: Atom<string> | null;
     partitionOverride: Atom<string> | null;
     userAgentType: Atom<string>;
 
@@ -127,13 +143,16 @@ export class WebViewModel implements ViewModel {
         this.isLoading = atom(false);
         this.refreshIcon = atom("rotate-right");
         this.viewIcon = atom("globe");
-        this.viewName = atom("Web");
-        this.hideViewName = atom(true);
+        this.viewName = atom((get) => {
+            return getWebViewTitle(get(this.blockAtom)?.meta?.["frame:title"]);
+        });
+        this.hideViewName = atom((get) => shouldHideWebViewTitle(get(this.blockAtom)?.meta?.["frame:title"]));
         this.urlInputRef = createRef<HTMLInputElement>();
         this.webviewRef = createRef<WaveWebviewTag>();
         this.domReady = atom(false);
         this.hideNav = getBlockMetaKeyAtom(blockId, "web:hidenav");
         this.typeaheadOpen = atom(false);
+        this.webviewPreloadOverride = null;
         this.partitionOverride = null;
         this.userAgentType = getBlockMetaKeyAtom(blockId, "web:useragenttype");
 
@@ -148,6 +167,7 @@ export class WebViewModel implements ViewModel {
             const refreshIcon = get(this.refreshIcon);
             const mediaPlaying = get(this.mediaPlaying);
             const mediaMuted = get(this.mediaMuted);
+            const useBrowserChrome = get(this.blockAtom)?.meta?.["web:headerstyle"] === "browser-chrome";
             const url = currUrl ?? metaUrl ?? homepageUrl;
             const rtn: HeaderElem[] = [];
             if (get(this.hideNav)) {
@@ -157,18 +177,21 @@ export class WebViewModel implements ViewModel {
             rtn.push({
                 elemtype: "iconbutton",
                 icon: "chevron-left",
+                className: useBrowserChrome ? "browser-chrome-nav" : undefined,
                 click: this.handleBack.bind(this),
                 disabled: this.shouldDisableBackButton(),
             });
             rtn.push({
                 elemtype: "iconbutton",
                 icon: "chevron-right",
+                className: useBrowserChrome ? "browser-chrome-nav" : undefined,
                 click: this.handleForward.bind(this),
                 disabled: this.shouldDisableForwardButton(),
             });
             rtn.push({
                 elemtype: "iconbutton",
                 icon: "house",
+                className: useBrowserChrome ? "browser-chrome-nav" : undefined,
                 click: this.handleHome.bind(this),
                 disabled: this.shouldDisableHomeButton(),
             });
@@ -177,7 +200,7 @@ export class WebViewModel implements ViewModel {
                 elemtype: "input",
                 value: url,
                 ref: this.urlInputRef,
-                className: "url-input header-tail-input",
+                className: clsx("url-input header-tail-input", useBrowserChrome && "browser-chrome-url-input"),
                 onChange: this.handleUrlChange.bind(this),
                 onKeyDown: this.handleKeyDown.bind(this),
                 onFocus: this.handleFocus.bind(this),
@@ -187,17 +210,23 @@ export class WebViewModel implements ViewModel {
                 divChildren.push({
                     elemtype: "iconbutton",
                     icon: mediaMuted ? "volume-slash" : "volume",
+                    className: useBrowserChrome ? "browser-chrome-nav browser-chrome-media" : undefined,
                     click: this.handleMuteChange.bind(this),
                 });
             }
             divChildren.push({
                 elemtype: "iconbutton",
                 icon: refreshIcon,
+                className: useBrowserChrome ? "browser-chrome-nav browser-chrome-refresh" : undefined,
                 click: this.handleRefresh.bind(this),
             });
             rtn.push({
                 elemtype: "div",
-                className: clsx("block-frame-div-url", urlWrapperClassName),
+                className: clsx(
+                    "block-frame-div-url",
+                    urlWrapperClassName,
+                    useBrowserChrome && "browser-chrome-urlbar"
+                ),
                 onMouseOver: this.handleUrlWrapperMouseOver.bind(this),
                 onMouseOut: this.handleUrlWrapperMouseOut.bind(this),
                 children: divChildren,
@@ -212,6 +241,7 @@ export class WebViewModel implements ViewModel {
             const url = get(this.url);
             const userAgentType = get(this.userAgentType);
             const buttons: IconButtonDecl[] = [];
+            const preferredExternalSiteLabel = getPreferredExternalSiteLabel(url);
 
             // Add mobile indicator icon if using mobile user agent
             if (userAgentType === "mobile:iphone" || userAgentType === "mobile:android") {
@@ -231,7 +261,10 @@ export class WebViewModel implements ViewModel {
             buttons.push({
                 elemtype: "iconbutton",
                 icon: "arrow-up-right-from-square",
-                title: i18next.t("webview.openExternalBrowser"),
+                title:
+                    preferredExternalSiteLabel == null
+                        ? i18next.t("webview.openExternalBrowser")
+                        : `${preferredExternalSiteLabel} works better in your external browser`,
                 click: () => {
                     console.log("open external", url);
                     if (url != null && url != "") {
@@ -417,37 +450,7 @@ export class WebViewModel implements ViewModel {
     }
 
     ensureUrlScheme(url: string, searchTemplate: string) {
-        if (url == null) {
-            url = "";
-        }
-
-        if (/^(http|https|file):/.test(url)) {
-            // If the URL starts with http: or https:, return it as is
-            return url;
-        }
-
-        // Check if the URL looks like a local URL
-        const isLocal = /^(localhost|(\d{1,3}\.){3}\d{1,3})(:\d+)?$/.test(url.split("/")[0]);
-
-        if (isLocal) {
-            // If it is a local URL, ensure it has http:// scheme
-            return `http://${url}`;
-        }
-
-        // Check if the URL looks like a domain
-        const domainRegex = /^[a-z0-9.-]+\.[a-z]{2,}$/i;
-        const isDomain = domainRegex.test(url.split("/")[0]);
-
-        if (isDomain) {
-            // If it looks like a domain, ensure it has https:// scheme
-            return `https://${url}`;
-        }
-
-        // Otherwise, treat it as a search query
-        if (searchTemplate == null) {
-            return `https://www.google.com/search?q=${encodeURIComponent(url)}`;
-        }
-        return searchTemplate.replace("{query}", encodeURIComponent(url));
+        return normalizeWebUrl(url, searchTemplate);
     }
 
     /**
@@ -862,6 +865,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
     metaUrl = model.ensureUrlScheme(metaUrl, defaultSearch);
     const metaUrlRef = useRef(metaUrl);
     const zoomFactor = useAtomValue(getBlockMetaKeyAtom(model.blockId, "web:zoom")) || 1;
+    const webviewPreloadOverride = useAtomValueSafe(model.webviewPreloadOverride);
     const partitionOverride = useAtomValueSafe(model.partitionOverride);
     const metaPartition = useAtomValue(getBlockMetaKeyAtom(model.blockId, "web:partition"));
     const webPartition = partitionOverride || metaPartition || undefined;
@@ -930,6 +934,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
     // The initial value of the block metadata URL when the component first renders. Used to set the starting src value for the webview.
     const [metaUrlInitial] = useState(initialSrc || metaUrl);
     const prevUserAgentTypeRef = useRef(userAgentType);
+    const preferredExternalSiteRef = useRef<string | null>(null);
 
     const [webContentsId, setWebContentsId] = useState(null);
     const domReady = useAtomValue(model.domReady);
@@ -1035,15 +1040,42 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
         if (!webview) {
             return;
         }
+        const maybeNotifyPreferredExternalSite = (url: string) => {
+            const preferredExternalSiteLabel = getPreferredExternalSiteLabel(url);
+            if (preferredExternalSiteLabel == null) {
+                preferredExternalSiteRef.current = null;
+                return;
+            }
+            if (preferredExternalSiteRef.current === preferredExternalSiteLabel) {
+                return;
+            }
+            preferredExternalSiteRef.current = preferredExternalSiteLabel;
+            const now = Date.now();
+            pushNotification({
+                icon: "arrow-up-right-from-square",
+                title: `${preferredExternalSiteLabel} works better in your external browser`,
+                message:
+                    "Some media sites may reduce video quality inside Wave's embedded webview. Use the external-browser button in the block header for full playback.",
+                timestamp: new Date(now).toISOString(),
+                expiration: now + 8000,
+                type: "warning",
+            });
+        };
         const navigateListener = (e: any) => {
             setErrorText("");
             if (e.isMainFrame) {
                 model.handleNavigate(e.url);
+                maybeNotifyPreferredExternalSite(e.url);
             }
         };
         const newWindowHandler = (e: any) => {
             e.preventDefault();
             const newUrl = e.detail.url;
+            const blockMeta = globalStore.get(model.blockAtom)?.meta as Record<string, any> | undefined;
+            if (shouldOpenNewWindowInCurrentView(blockMeta)) {
+                model.loadUrl(newUrl, "new-window");
+                return;
+            }
             fireAndForget(() => openLink(newUrl, true));
         };
         const startLoadingHandler = () => {
@@ -1127,7 +1159,7 @@ const WebView = memo(({ model, onFailLoad, blockRef, initialSrc }: WebViewProps)
                 src={metaUrlInitial}
                 data-blockid={model.blockId}
                 data-webcontentsid={webContentsId} // needed for emain
-                preload={getWebviewPreloadUrl()}
+                preload={getWebviewPreloadUrl(webviewPreloadOverride)}
                 // @ts-ignore This is a discrepancy between the React typing and the Chromium impl for webviewTag. Chrome webviewTag expects a string, while React expects a boolean.
                 allowpopups="true"
                 partition={webPartition}

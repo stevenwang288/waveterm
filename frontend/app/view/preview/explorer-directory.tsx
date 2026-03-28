@@ -17,7 +17,7 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { openCliLayoutInNewTab } from "@/util/clilayout";
 import { getTerminalInheritableCwd } from "@/util/launchcwd";
-import { isWindows, PLATFORM, PlatformWindows } from "@/util/platformutil";
+import { PLATFORM, PlatformWindows } from "@/util/platformutil";
 import { base64ToString, fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import clsx from "clsx";
 import { useAtom, useAtomValue } from "jotai";
@@ -46,15 +46,6 @@ type TreeNodeState = {
     loading?: boolean;
     error?: string;
 };
-
-const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
-    { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
-    { label: "Claude", command: "claude" },
-    { label: "Gemini", command: "gemini" },
-    { label: "Amp", command: "amp" },
-    { label: "IFlow", command: "iflow" },
-    { label: "OpenCode", command: "opencode" },
-];
 
 type CliLayoutPreset = {
     key: string;
@@ -1095,46 +1086,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         [isLocalExplorer, quickAccessPathMap]
     );
 
-    const buildAiLaunchMenuItems = useCallback(
-        (path: string): ContextMenuItem[] => {
-            const normalized = normalizeExplorerPath(path);
-            if (isBlank(normalized)) {
-                return [];
-            }
-            const commandItems: ContextMenuItem[] = AI_LAUNCH_COMMANDS.map((item) => ({
-                label: t("preview.openAiHere", { ai: item.label }),
-                click: () => openTerminalAtPath(normalized, item.command, true, false),
-            }));
-
-            const layoutItems: ContextMenuItem[] = CLI_LAYOUT_PRESETS.map((preset) => {
-                const labelKey = `clilayout.presets.${preset.key}`;
-                const translated = t(labelKey);
-                const label = translated === labelKey ? preset.label : translated;
-                return {
-                    label,
-                    click: () => applyCliLayoutPreset(preset, normalized),
-                };
-            });
-
-            return [...commandItems, { type: "separator" }, ...layoutItems];
-        },
-        [applyCliLayoutPreset, openTerminalAtPath, t]
-    );
-
-    const buildAutoCommandMenuItems = useCallback(
-        (path: string): ContextMenuItem[] => {
-            const normalized = normalizeExplorerPath(path);
-            if (isBlank(normalized)) {
-                return [];
-            }
-            return AI_LAUNCH_COMMANDS.map((item) => ({
-                label: `${item.label}`,
-                click: () => openTerminalAtPath(normalized, item.command, true, false),
-            }));
-        },
-        [openTerminalAtPath]
-    );
-
     const buildLayoutMenuItems = useCallback(
         (path: string): ContextMenuItem[] => {
             const normalized = normalizeExplorerPath(path);
@@ -1183,19 +1134,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         [applyCliLayoutPreset, applySavedLayoutSlot, saveCurrentLayoutToSlot]
     );
 
-    const showAiLaunchMenu = useCallback(
-        (e: React.MouseEvent, path: string) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const menuItems = buildAiLaunchMenuItems(path);
-            if (menuItems.length === 0) {
-                return;
-            }
-            ContextMenuModel.showContextMenu(menuItems, e);
-        },
-        [buildAiLaunchMenuItems]
-    );
-
     const copyToClipboard = useCallback(
         (text: string) => {
             if (isBlank(text)) {
@@ -1234,14 +1172,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                     type: "separator",
                 },
                 {
-                    label: t("favorites.autoCommand"),
-                    submenu: buildAutoCommandMenuItems(currentPath),
-                },
-                {
-                    label: t("preview.openWithAi"),
-                    submenu: buildAiLaunchMenuItems(currentPath),
-                },
-                {
                     label: t("clilayout.menu"),
                     submenu: buildLayoutMenuItems(currentPath),
                 },
@@ -1250,8 +1180,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         },
         [
             addToFavorites,
-            buildAiLaunchMenuItems,
-            buildAutoCommandMenuItems,
             buildLayoutMenuItems,
             copyToClipboard,
             currentPath,
@@ -1587,14 +1515,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                     type: "separator",
                 },
                 {
-                    label: t("favorites.autoCommand"),
-                    submenu: buildAutoCommandMenuItems(normalized),
-                },
-                {
-                    label: t("preview.openWithAi"),
-                    submenu: buildAiLaunchMenuItems(normalized),
-                },
-                {
                     label: t("clilayout.menu"),
                     submenu: buildLayoutMenuItems(normalized),
                 },
@@ -1615,8 +1535,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
         },
         [
             addToFavorites,
-            buildAiLaunchMenuItems,
-            buildAutoCommandMenuItems,
             buildLayoutMenuItems,
             copyToClipboard,
             favoritesModel,
@@ -1841,16 +1759,6 @@ function ExplorerDirectoryPreview({ model }: SpecializedViewProps) {
                         style={{ width: sidebarWidth }}
                     >
                         <div className="px-2 pt-2 pb-1">
-                            <button
-                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs font-semibold text-secondary hover:bg-hoverbg hover:text-primary"
-                                onClick={(e) => showAiLaunchMenu(e, selectedPath || currentPath)}
-                                title={t("preview.openWithAi")}
-                                type="button"
-                            >
-                                <i className="fas fa-robot text-blue-300 w-4 text-center" />
-                                <span className="truncate">{t("preview.openWithAi")}</span>
-                            </button>
-
                         </div>
                         <button
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-secondary uppercase tracking-wider hover:bg-hoverbg"

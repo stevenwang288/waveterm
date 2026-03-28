@@ -80,6 +80,24 @@ declare global {
         windowId: string;
     };
 
+    type CcSwitchSyncTarget = "deerflow" | "goose" | "promptoptimizer" | "all";
+
+    type CcSwitchSyncResult = {
+        target: CcSwitchSyncTarget;
+        providerId: string;
+        providerName: string;
+        model: string;
+        baseUrl: string;
+        apiBaseUrl: string;
+        updatedFiles: string[];
+    };
+
+    type NativePickDirectoryOpts = {
+        title?: string;
+        defaultPath?: string;
+        buttonLabel?: string;
+    };
+
     type ElectronApi = {
         getAuthKey(): string; // get-auth-key
         getIsDev(): boolean; // get-is-dev
@@ -93,6 +111,10 @@ declare global {
         getHomeDir: () => string; // get-home-dir
         getSystemPath: (name: string) => string; // get-system-path
         getWebviewPreload: () => string; // get-webview-preload
+        getGooseWebviewPreload: () => string; // get-goose-webview-preload
+        getGooseFrontendUrl: () => string; // get-goose-frontend-url
+        syncCcSwitchConfig: (target: CcSwitchSyncTarget) => Promise<CcSwitchSyncResult>; // ccswitch:sync-config
+        optimizePromptInput: (prompt: string) => Promise<string>; // promptoptimizer:optimize-prompt
         getAboutModalDetails: () => AboutModalDetails; // get-about-modal-details
         getZoomFactor: () => number; // get-zoom-factor
         runGit: (cwd: string, args: string[]) => Promise<GitRunResult>; // git-run
@@ -137,6 +159,19 @@ declare global {
         nativePaste: () => void; // native-paste
         codexTranslate: (text: string) => Promise<string>; // codex-translate
         codexAuthReady: () => Promise<boolean>; // codex-auth-ready
+        codexLastSessionId: (cwd: string) => Promise<string | null>; // codex-last-session-id
+        pickDirectory: (opts?: NativePickDirectoryOpts) => Promise<string | null>; // pick-directory
+        httpRequest: (req: {
+            url: string;
+            method?: string;
+            headers?: Record<string, string>;
+            body?: string;
+        }) => Promise<{
+            status: number;
+            statusText: string;
+            headers: Record<string, string>;
+            bodyBase64: string;
+        }>; // http-request
         speechRequest: (req: {
             url: string;
             method?: string;
@@ -480,6 +515,7 @@ declare global {
         uiBuildIso?: string;
         uiDirty?: boolean;
         profile?: string;
+        appDisplayName?: string;
     }
 
     interface GitRunResult {

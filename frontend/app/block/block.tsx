@@ -10,12 +10,15 @@ import {
     SubBlockProps,
 } from "@/app/block/blocktypes";
 import { AiFileDiffViewModel } from "@/app/view/aifilediff/aifilediff";
+import { DeerFlowViewModel } from "@/app/view/deerflow/deerflow";
+import { GooseViewModel } from "@/app/view/goose/goose";
 import { LauncherViewModel } from "@/app/view/launcher/launcher";
 import { PveVncViewModel } from "@/app/view/pvevnc/pvevnc";
 import { PreviewModel } from "@/app/view/preview/preview-model";
 import { SysinfoViewModel } from "@/app/view/sysinfo/sysinfo";
 import { TsunamiViewModel } from "@/app/view/tsunami/tsunami";
 import { VDomModel } from "@/app/view/vdom/vdom-model";
+import { WorkbenchViewModel } from "@/app/view/workbench/workbench";
 import { ErrorBoundary } from "@/element/errorboundary";
 import { CenteredDiv } from "@/element/quickelems";
 import { useDebouncedNodeInnerRect } from "@/layout/index";
@@ -26,6 +29,7 @@ import {
     getSettingsKeyAtom,
     registerBlockComponentModel,
     unregisterBlockComponentModel,
+    useBlockAtom,
 } from "@/store/global";
 import type { TabModel } from "@/app/store/tab-model";
 import { useTabModel } from "@/app/store/tab-model";
@@ -38,10 +42,11 @@ import { WaveAiModel } from "@/view/waveai/waveai";
 import { WebViewModel } from "@/view/webview/webview";
 import clsx from "clsx";
 import i18next from "i18next";
-import { atom, useAtomValue } from "jotai";
+import { atom, useAtom, useAtomValue } from "jotai";
 import { memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { QuickTipsViewModel } from "../view/quicktipsview/quicktipsview";
+import { PromptOptimizerViewModel } from "../view/promptoptimizer/promptoptimizer";
 import { WaveConfigViewModel } from "../view/waveconfig/waveconfig-model";
 import "./block.scss";
 import { BlockFrame } from "./blockframe";
@@ -51,6 +56,9 @@ const BlockRegistry: Map<string, ViewModelClass> = new Map();
 BlockRegistry.set("term", TermViewModel);
 BlockRegistry.set("preview", PreviewModel);
 BlockRegistry.set("web", WebViewModel);
+BlockRegistry.set("goose", GooseViewModel);
+BlockRegistry.set("deerflow", DeerFlowViewModel);
+BlockRegistry.set("promptoptimizer", PromptOptimizerViewModel);
 BlockRegistry.set("pvevnc", PveVncViewModel);
 BlockRegistry.set("waveai", WaveAiModel);
 BlockRegistry.set("cpuplot", SysinfoViewModel);
@@ -62,6 +70,7 @@ BlockRegistry.set("launcher", LauncherViewModel);
 BlockRegistry.set("tsunami", TsunamiViewModel);
 BlockRegistry.set("aifilediff", AiFileDiffViewModel);
 BlockRegistry.set("waveconfig", WaveConfigViewModel);
+BlockRegistry.set("workbench", WorkbenchViewModel);
 
 function makeViewModel(blockId: string, blockView: string, nodeModel: BlockNodeModel, tabModel: TabModel): ViewModel {
     const ctor = BlockRegistry.get(blockView);
@@ -162,6 +171,12 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
     const focusFollowsCursorMode = useAtomValue(getSettingsKeyAtom("app:focusfollowscursor")) ?? "off";
     const innerRect = useDebouncedNodeInnerRect(nodeModel);
     const noPadding = useAtomValueSafe(viewModel.noPadding);
+    const speechAttentionActiveAtom = useMemo(() => {
+        return useBlockAtom(nodeModel.blockId, "speech:attention-active", () => {
+            return atom(false);
+        });
+    }, [nodeModel.blockId]);
+    const [speechAttentionActive, setSpeechAttentionActive] = useAtom(speechAttentionActiveAtom);
 
     useLayoutEffect(() => {
         setBlockClicked(isFocused);
@@ -183,7 +198,10 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
 
     const setBlockClickedTrue = useCallback(() => {
         setBlockClicked(true);
-    }, []);
+        if (speechAttentionActive) {
+            setSpeechAttentionActive(false);
+        }
+    }, [setSpeechAttentionActive, speechAttentionActive]);
 
     const [blockContentOffset, setBlockContentOffset] = useState<Dimensions>();
 
@@ -224,7 +242,7 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
                 nodeModel.focusNode();
             }
         },
-        [isFocused]
+        [isFocused, nodeModel]
     );
 
     const setFocusTarget = useCallback(() => {

@@ -41,8 +41,6 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
     { label: "Claude", command: "claude" },
     { label: "Gemini", command: "gemini" },
-    { label: "Amp", command: "amp" },
-    { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
 ];
 

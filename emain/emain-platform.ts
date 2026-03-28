@@ -44,6 +44,13 @@ function getArgValue(name: string): string {
 //   set WAVETERM_PROFILE=dev
 const profile = (process.env.WAVETERM_PROFILE ?? getArgValue("--profile") ?? "").trim().toLowerCase();
 const isDevProfile = isDev || profile === "dev";
+const WaveAppDisplayNameVarName = "WAVETERM_APP_DISPLAY_NAME";
+const defaultAppDisplayName = isDevProfile ? "WAVE (Dev)" : "WAVE";
+const appDisplayNameOverride = (
+    process.env[WaveAppDisplayNameVarName] ?? getArgValue("--app-display-name") ?? ""
+)
+    .trim();
+const appDisplayName = appDisplayNameOverride || defaultAppDisplayName;
 
 app.setName(isDevProfile ? "wave-dev/electron" : "wave/electron");
 
@@ -90,7 +97,7 @@ const waveDirName = `${waveDirNamePrefix}${waveDirNameSuffix ? `-${waveDirNameSu
 
 const paths = envPaths(waveDirNamePrefix, { suffix: waveDirNameSuffix });
 
-app.setName(isDevProfile ? "WAVE (Dev)" : "WAVE");
+app.setName(appDisplayName);
 const unamePlatform = process.platform;
 const unameArch: string = process.arch;
 keyutil.setKeyUtilPlatform(unamePlatform);

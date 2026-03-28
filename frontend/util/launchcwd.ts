@@ -8,6 +8,18 @@ const AnsiEscapePattern = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 const TerminalDirectoryLinePattern = /^\s*(?:目录|directory|cwd)\s*[:：]\s*(.+?)\s*$/i;
 const TerminalStatusPathLinePattern =
     /^\s*(?:gpt-[\w.-]+|o\d(?:-[\w.-]+)?|claude[\w.-]*|gemini[\w.-]*|qwen[\w.-]*|deepseek[\w.-]*).*?[•·]\s*\d+%\s+(?:left|context left)\s*[•·]\s*(.+?)\s*$/i;
+const OrderedDictionaryPlaceholder = "System.Collections.Specialized.OrderedDictionary";
+
+function normalizeCwdMetaValue(value: unknown): string {
+    if (typeof value !== "string") {
+        return "";
+    }
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === OrderedDictionaryPlaceholder) {
+        return "";
+    }
+    return trimmed;
+}
 
 function normalizeTerminalLine(line: string): string {
     return String(line ?? "")
@@ -61,8 +73,16 @@ function isLikelyDisplayPath(value: string): boolean {
     );
 }
 
+function isAbsoluteTerminalPath(value: string): boolean {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) {
+        return false;
+    }
+    return /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("/") || trimmed.startsWith("\\\\");
+}
+
 export function getTerminalInheritableCwd(meta?: Record<string, any>): string {
-    const cwd = typeof meta?.["cmd:cwd"] === "string" ? String(meta["cmd:cwd"]).trim() : "";
+    const cwd = normalizeCwdMetaValue(meta?.["cmd:cwd"]);
     if (!isBlank(cwd)) {
         return cwd;
     }
@@ -70,11 +90,17 @@ export function getTerminalInheritableCwd(meta?: Record<string, any>): string {
     if (!isLocalConnName(connName)) {
         return "";
     }
-    const displayCwd = typeof meta?.["display:launchcwd"] === "string" ? String(meta["display:launchcwd"]).trim() : "";
+    const displayCwd = normalizeCwdMetaValue(meta?.["display:launchcwd"]);
     return isBlank(displayCwd) ? "" : formatCwdForDisplay(displayCwd);
 }
 
 export function getTerminalDisplayCwd(meta?: Record<string, any>): string {
+    const explicitTermDisplayCwd = normalizeCwdMetaValue(meta?.["term:displaycwd"]);
+    const normalizedTermDisplayCwd = formatCwdForDisplay(explicitTermDisplayCwd);
+    if (!isBlank(normalizedTermDisplayCwd)) {
+        return normalizedTermDisplayCwd;
+    }
+
     const normalizedCmdCwd = formatCwdForDisplay(getTerminalInheritableCwd(meta));
     if (!isBlank(normalizedCmdCwd)) {
         return normalizedCmdCwd;
@@ -85,8 +111,29 @@ export function getTerminalDisplayCwd(meta?: Record<string, any>): string {
         return "";
     }
 
-    const explicitDisplayCwd = typeof meta?.["display:launchcwd"] === "string" ? meta["display:launchcwd"] : "";
+    const explicitDisplayCwd = normalizeCwdMetaValue(meta?.["display:launchcwd"]);
     return formatCwdForDisplay(explicitDisplayCwd);
+}
+
+export function resolveTerminalActionCwd(meta?: Record<string, any>, liveDisplayCwd?: string | null): string {
+    const normalizedLiveDisplayCwd = formatCwdForDisplay(normalizeCwdMetaValue(liveDisplayCwd));
+    const persistedDisplayCwd = getTerminalDisplayCwd(meta);
+    if (isBlank(normalizedLiveDisplayCwd)) {
+        return persistedDisplayCwd;
+    }
+    if (isBlank(persistedDisplayCwd)) {
+        return normalizedLiveDisplayCwd;
+    }
+    if (
+        persistedDisplayCwd.length > normalizedLiveDisplayCwd.length &&
+        persistedDisplayCwd.endsWith(normalizedLiveDisplayCwd)
+    ) {
+        return persistedDisplayCwd;
+    }
+    if (isAbsoluteTerminalPath(persistedDisplayCwd) && !isAbsoluteTerminalPath(normalizedLiveDisplayCwd)) {
+        return persistedDisplayCwd;
+    }
+    return normalizedLiveDisplayCwd;
 }
 
 export function extractTerminalDisplayCwdFromBufferLines(lines?: TerminalDisplayBufferLine[]): string {

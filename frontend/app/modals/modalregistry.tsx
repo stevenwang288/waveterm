@@ -1,28 +1,42 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { MessageModal } from "@/app/modals/messagemodal";
-import { NewInstallOnboardingModal } from "@/app/onboarding/onboarding";
-import { UpgradeOnboardingModal } from "@/app/onboarding/onboarding-upgrade";
-import { DeleteFileModal, PublishAppModal, RenameFileModal } from "@/builder/builder-apppanel";
-import { SetSecretDialog } from "@/builder/tabs/builder-secrettab";
-import { AboutModal } from "./about";
-import { CodexTranslateModal } from "./codextranslatemodal";
-import { UserInputModal } from "./userinputmodal";
+import { lazy } from "react";
+import type { ComponentType, LazyExoticComponent } from "react";
 
-const modalRegistry: { [key: string]: React.ComponentType<any> } = {
-    [NewInstallOnboardingModal.displayName || "NewInstallOnboardingModal"]: NewInstallOnboardingModal,
-    [UpgradeOnboardingModal.displayName || "UpgradeOnboardingModal"]: UpgradeOnboardingModal,
-    [UserInputModal.displayName || "UserInputModal"]: UserInputModal,
-    [AboutModal.displayName || "AboutModal"]: AboutModal,
-    [MessageModal.displayName || "MessageModal"]: MessageModal,
-    [CodexTranslateModal.displayName || "CodexTranslateModal"]: CodexTranslateModal,
-    [PublishAppModal.displayName || "PublishAppModal"]: PublishAppModal,
-    [RenameFileModal.displayName || "RenameFileModal"]: RenameFileModal,
-    [DeleteFileModal.displayName || "DeleteFileModal"]: DeleteFileModal,
-    [SetSecretDialog.displayName || "SetSecretDialog"]: SetSecretDialog,
-};
+const modalRegistry = {
+    NewInstallOnboardingModal: lazy(async () => ({
+        default: (await import("@/app/onboarding/onboarding")).NewInstallOnboardingModal,
+    })),
+    UpgradeOnboardingModal: lazy(async () => ({
+        default: (await import("@/app/onboarding/onboarding-upgrade")).UpgradeOnboardingModal,
+    })),
+    UserInputModal: lazy(async () => ({
+        default: (await import("./userinputmodal")).UserInputModal,
+    })),
+    AboutModal: lazy(async () => ({
+        default: (await import("./about")).AboutModal,
+    })),
+    MessageModal: lazy(async () => ({
+        default: (await import("@/app/modals/messagemodal")).MessageModal,
+    })),
+    CodexTranslateModal: lazy(async () => ({
+        default: (await import("./codextranslatemodal")).CodexTranslateModal,
+    })),
+    PublishAppModal: lazy(async () => ({
+        default: (await import("@/builder/builder-apppanel")).PublishAppModal,
+    })),
+    RenameFileModal: lazy(async () => ({
+        default: (await import("@/builder/builder-apppanel")).RenameFileModal,
+    })),
+    DeleteFileModal: lazy(async () => ({
+        default: (await import("@/builder/builder-apppanel")).DeleteFileModal,
+    })),
+    SetSecretDialog: lazy(async () => ({
+        default: (await import("@/builder/tabs/builder-secrettab")).SetSecretDialog,
+    })),
+} satisfies Record<string, LazyExoticComponent<ComponentType<any>>>;
 
-export const getModalComponent = (key: string): React.ComponentType<any> | undefined => {
+export const getModalComponent = (key: string): LazyExoticComponent<ComponentType<any>> | undefined => {
     return modalRegistry[key];
 };

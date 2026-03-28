@@ -189,7 +189,7 @@ export class WaveConfigViewModel implements ViewModel {
         this.tabModel = tabModel;
         this.configDir = getApi().getConfigDir();
         const platform = getApi().getPlatform();
-        this.saveShortcut = platform === "darwin" ? "Cmd+S" : "Alt+S";
+        this.saveShortcut = platform === "darwin" ? "Cmd+S" : "Ctrl+S";
 
         this.selectedFileAtom = atom(null) as PrimitiveAtom<ConfigFile>;
         this.fileContentAtom = atom("");

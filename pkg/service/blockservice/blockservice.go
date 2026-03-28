@@ -77,7 +77,7 @@ func (bs *BlockService) SaveWaveAiData(ctx context.Context, blockId string, hist
 		return err
 	}
 	viewName := block.Meta.GetString(waveobj.MetaKey_View, "")
-	if viewName != "waveai" {
+	if !canSaveWaveAIDataForView(viewName) {
 		return fmt.Errorf("invalid view type: %s", viewName)
 	}
 	historyBytes, err := json.Marshal(history)
@@ -91,6 +91,15 @@ func (bs *BlockService) SaveWaveAiData(ctx context.Context, blockId string, hist
 		return fmt.Errorf("cannot save terminal state: %w", err)
 	}
 	return nil
+}
+
+func canSaveWaveAIDataForView(viewName string) bool {
+	switch viewName {
+	case "waveai", "workbench":
+		return true
+	default:
+		return false
+	}
 }
 
 func (*BlockService) CleanupOrphanedBlocks_Meta() tsgenmeta.MethodMeta {

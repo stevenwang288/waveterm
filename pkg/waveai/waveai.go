@@ -5,6 +5,7 @@ package waveai
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/url"
 	"strings"
@@ -74,6 +75,34 @@ func makeAIError(err error) wshrpc.RespOrErrorUnion[wshrpc.WaveAIPacketType] {
 
 func RunAICommand(ctx context.Context, request wshrpc.WaveAIStreamRequest) chan wshrpc.RespOrErrorUnion[wshrpc.WaveAIPacketType] {
 	telemetry.GoUpdateActivityWrap(wshrpc.ActivityUpdate{NumAIReqs: 1}, "RunAICommand")
+	if request.Opts == nil {
+		err := errors.New("no wave ai opts found")
+		log.Printf("RunAICommand error: %v\n", err)
+		rtn := make(chan wshrpc.RespOrErrorUnion[wshrpc.WaveAIPacketType], 1)
+		rtn <- makeAIError(err)
+		close(rtn)
+		return rtn
+	}
+
+	originalOpts := *request.Opts
+	if nextRequest, override, err := maybeApplyCodexProviderOverride(request); err != nil {
+		log.Printf("codex provider override unavailable: %v\n", err)
+	} else if override != nil {
+		request = nextRequest
+		log.Printf(
+			"applied codex provider override provider=%q model=%q->%q thinking=%q->%q apitype=%q->%q baseurl=%q->%q auth_override=%t\n",
+			override.ProviderName,
+			originalOpts.Model,
+			request.Opts.Model,
+			originalOpts.ThinkingLevel,
+			request.Opts.ThinkingLevel,
+			originalOpts.APIType,
+			request.Opts.APIType,
+			originalOpts.BaseURL,
+			request.Opts.BaseURL,
+			override.APIToken != "",
+		)
+	}
 
 	endpoint := request.Opts.BaseURL
 	if endpoint == "" {
@@ -93,7 +122,9 @@ func RunAICommand(ctx context.Context, request wshrpc.WaveAIStreamRequest) chan 
 	} else if IsCloudAIRequest(request.Opts) {
 		endpoint = "waveterm cloud"
 		request.Opts.APIType = APIType_OpenAI
-		request.Opts.Model = "default"
+		if request.Opts.Model == "" {
+			request.Opts.Model = "default"
+		}
 		backend = WaveAICloudBackend{}
 		backendType = "wave"
 	} else {
@@ -113,6 +144,12 @@ func RunAICommand(ctx context.Context, request wshrpc.WaveAIStreamRequest) chan 
 		},
 	})
 
-	log.Printf("sending ai chat message to %s endpoint %q using model %s\n", request.Opts.APIType, endpoint, request.Opts.Model)
+	log.Printf(
+		"sending ai chat message to %s endpoint %q using model %s thinking=%q\n",
+		request.Opts.APIType,
+		endpoint,
+		request.Opts.Model,
+		request.Opts.ThinkingLevel,
+	)
 	return backend.StreamCompletion(ctx, request)
 }

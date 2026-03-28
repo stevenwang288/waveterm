@@ -28,7 +28,7 @@ import type { LayoutModel, LayoutTreeSwapNodeAction } from "@/layout/index";
 import * as keyutil from "@/util/keyutil";
 import { isWindows } from "@/util/platformutil";
 import { CHORD_TIMEOUT } from "@/util/sharedconst";
-import { fireAndForget } from "@/util/util";
+import { fireAndForget, isBlank } from "@/util/util";
 import * as jotai from "jotai";
 import { modalsModel } from "./modalmodel";
 
@@ -572,6 +572,17 @@ function checkKeyMap<T>(waveEvent: WaveKeyboardEvent, keyMap: Map<string, T>): [
     return [null, null];
 }
 
+function shouldPreferFocusedWorkbenchHandler(viewModel: ViewModel | undefined, waveEvent: WaveKeyboardEvent): boolean {
+    if (viewModel?.viewType !== "workbench") {
+        return false;
+    }
+    return (
+        keyutil.checkKeyPressed(waveEvent, "Alt:c{Backslash}") ||
+        keyutil.checkKeyPressed(waveEvent, "Alt:c{BracketLeft}") ||
+        keyutil.checkKeyPressed(waveEvent, "Alt:c{BracketRight}")
+    );
+}
+
 function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
     if (globalKeybindingsDisabled) {
         return false;
@@ -602,6 +613,24 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
         return true;
     }
 
+    let focusedViewModel: ViewModel | undefined;
+    let shouldDispatchToFocusedBlock = false;
+    if (globalStore.get(atoms.waveWindowType) == "tab") {
+        const layoutModel = getLayoutModelForStaticTab();
+        const focusedNode = globalStore.get(layoutModel.focusedNode);
+        const blockId = focusedNode?.data?.blockId;
+        shouldDispatchToFocusedBlock = blockId != null && shouldDispatchToBlock(waveEvent);
+        if (shouldDispatchToFocusedBlock) {
+            const bcm = getBlockComponentModel(blockId);
+            focusedViewModel = bcm?.viewModel;
+            if (shouldPreferFocusedWorkbenchHandler(focusedViewModel, waveEvent) && focusedViewModel?.keyDownHandler) {
+                const handledByBlock = focusedViewModel.keyDownHandler(waveEvent);
+                if (handledByBlock) {
+                    return true;
+                }
+            }
+        }
+    }
     const [, globalHandler] = checkKeyMap(waveEvent, globalKeyMap);
     if (globalHandler) {
         const handled = globalHandler(waveEvent);
@@ -609,19 +638,10 @@ function appHandleKeyDown(waveEvent: WaveKeyboardEvent): boolean {
             return true;
         }
     }
-    if (globalStore.get(atoms.waveWindowType) == "tab") {
-        const layoutModel = getLayoutModelForStaticTab();
-        const focusedNode = globalStore.get(layoutModel.focusedNode);
-        const blockId = focusedNode?.data?.blockId;
-        if (blockId != null && shouldDispatchToBlock(waveEvent)) {
-            const bcm = getBlockComponentModel(blockId);
-            const viewModel = bcm?.viewModel;
-            if (viewModel?.keyDownHandler) {
-                const handledByBlock = viewModel.keyDownHandler(waveEvent);
-                if (handledByBlock) {
-                    return true;
-                }
-            }
+    if (shouldDispatchToFocusedBlock && focusedViewModel?.keyDownHandler) {
+        const handledByBlock = focusedViewModel.keyDownHandler(waveEvent);
+        if (handledByBlock) {
+            return true;
         }
     }
     return false;
@@ -720,6 +740,9 @@ function registerGlobalKeys() {
     globalKeyMap.set("Cmd:m", toggleMagnifyFocusedNode);
     if (isWindows()) {
         globalKeyMap.set("Ctrl:q", toggleMagnifyFocusedNode);
+        globalKeyMap.set("Ctrl:c{KeyQ}", toggleMagnifyFocusedNode);
+        globalKeyMap.set("Alt:q", toggleMagnifyFocusedNode);
+        globalKeyMap.set("Alt:c{KeyQ}", toggleMagnifyFocusedNode);
         globalKeyMap.set("Cmd:q", toggleMagnifyFocusedNode);
         globalKeyMap.set("Cmd:c{KeyQ}", toggleMagnifyFocusedNode);
     }

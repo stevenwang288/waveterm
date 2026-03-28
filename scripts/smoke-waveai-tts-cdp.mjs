@@ -9,6 +9,8 @@
 //   0 = Wave AI returned an assistant message and TTS was triggered (speechSynthesis or audio.play)
 //   1 = failure
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import WebSocket from "ws";
 
 function parseArgs(argv) {
@@ -40,6 +42,77 @@ const scenario = String(args.get("scenario") || "waveai"); // waveai | settings 
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readRawSpeechAutoplaySetting(cdp) {
+    const configDir = await cdp.evaluate(String.raw`(() => {
+  try {
+    return window.api?.getConfigDir?.() || null;
+  } catch {
+    return null;
+  }
+})()`);
+    if (!configDir || typeof configDir !== "string") {
+        return { ok: false, error: "window.api.getConfigDir unavailable" };
+    }
+
+    const settingsPath = join(configDir, "settings.json");
+    try {
+        const raw = (await readFile(settingsPath, "utf8")).replace(/^\uFEFF/, "");
+        const parsed = raw.trim() === "" ? {} : JSON.parse(raw);
+        const hasOwnValue =
+            parsed != null &&
+            typeof parsed === "object" &&
+            !Array.isArray(parsed) &&
+            Object.prototype.hasOwnProperty.call(parsed, "speech:autoplay");
+        return {
+            ok: true,
+            settingsPath,
+            hasOwnValue,
+            value: hasOwnValue ? parsed["speech:autoplay"] : null,
+        };
+    } catch (e) {
+        if (e?.code === "ENOENT") {
+            return { ok: true, settingsPath, hasOwnValue: false, value: null };
+        }
+        return { ok: false, settingsPath, error: String(e) };
+    }
+}
+
+async function restoreRawSpeechAutoplaySetting(cdp, savedSetting) {
+    if (!savedSetting?.ok) {
+        return { ok: false, error: "missing saved speech:autoplay setting" };
+    }
+    if (savedSetting.hasOwnValue && typeof savedSetting.value !== "boolean") {
+        return {
+            ok: false,
+            error: `cannot restore non-boolean speech:autoplay from ${savedSetting.settingsPath}`,
+        };
+    }
+
+    const restoreExpr = String.raw`(async () => {
+  try {
+    if (!window.RpcApi?.SetConfigCommand || !window.TabRpcClient) {
+      return { ok: false, error: "RpcApi.SetConfigCommand unavailable" };
+    }
+    await window.RpcApi.SetConfigCommand(window.TabRpcClient, {
+      "speech:autoplay": __RESTORE_AUTOPLAY_VALUE__,
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+})()`;
+    const restoreRes = await cdp.evaluate(
+        restoreExpr.replace(
+            "__RESTORE_AUTOPLAY_VALUE__",
+            savedSetting.hasOwnValue ? JSON.stringify(savedSetting.value) : "null"
+        )
+    );
+    if (!restoreRes?.ok) {
+        return { ok: false, error: restoreRes?.error || "failed to restore speech:autoplay" };
+    }
+    return { ok: true };
 }
 
 async function fetchJson(url, { timeoutMs: fetchTimeoutMs = 5000 } = {}) {
@@ -299,28 +372,14 @@ async function main() {
 
             if (scenario === "terminal") {
                 const expectedText = message.trim() || "smoke terminal reply";
-
-                // Best-effort: disable global autoplay (AI panel) to avoid unrelated speech events,
-                // while keeping speech enabled for terminal autoplay.
-                await cdp.evaluate(String.raw`(async () => {
-  try {
-    if (window.RpcApi?.SetConfigCommand && window.TabRpcClient) {
-      await window.RpcApi.SetConfigCommand(window.TabRpcClient, {
-        "speech:enabled": true,
-        "speech:autoplay": false,
-        "speech:provider": "local",
-        "speech:localengine": "edge",
-        "speech:model": "edge-tts",
-      });
-    }
-  } catch {}
-  return { ok: true };
-})()`);
-
-                const termDeadline = Date.now() + 60000;
-                let termInfo = null;
-                while (Date.now() < termDeadline) {
-                    termInfo = await cdp.evaluate(String.raw`(() => {
+                let speechAutoplaySetting = null;
+                let changedGlobalSpeechAutoplay = false;
+                let terminalSuccess = null;
+                try {
+                    const termDeadline = Date.now() + 60000;
+                    let termInfo = null;
+                    while (Date.now() < termDeadline) {
+                        termInfo = await cdp.evaluate(String.raw`(() => {
   const termWrap = window.term;
   const hasTerm = !!termWrap && !!termWrap.terminal;
   return {
@@ -329,24 +388,65 @@ async function main() {
     bufferLines: termWrap?.terminal?.buffer?.active?.length ?? null,
   };
 })()`);
-                    if (termInfo?.hasTerm && termInfo?.loaded) {
-                        break;
+                        if (termInfo?.hasTerm && termInfo?.loaded) {
+                            break;
+                        }
+                        await sleep(500);
                     }
-                    await sleep(500);
-                }
 
-                if (!termInfo?.hasTerm) {
-                    failures.push({
-                        title: candidate.title,
-                        url: candidate.url,
-                        error: "terminal not found (window.term missing)",
-                        details: termInfo,
-                    });
-                    continue;
-                }
+                    if (!termInfo?.hasTerm) {
+                        failures.push({
+                            title: candidate.title,
+                            url: candidate.url,
+                            error: "terminal not found (window.term missing)",
+                            details: termInfo,
+                        });
+                        continue;
+                    }
 
-                // Clear previous calls so we only observe this scenario.
-                await cdp.evaluate(String.raw`(() => {
+                    speechAutoplaySetting = await readRawSpeechAutoplaySetting(cdp);
+                    if (!speechAutoplaySetting?.ok) {
+                        failures.push({
+                            title: candidate.title,
+                            url: candidate.url,
+                            error: "failed to read original speech:autoplay from settings.json",
+                            details: speechAutoplaySetting,
+                        });
+                        continue;
+                    }
+
+                    // Best-effort: disable global autoplay (AI panel) to avoid unrelated speech events,
+                    // while keeping speech enabled for terminal autoplay.
+                    const setSpeechAutoplayRes = await cdp.evaluate(String.raw`(async () => {
+  try {
+    if (!window.RpcApi?.SetConfigCommand || !window.TabRpcClient) {
+      return { ok: false, error: "RpcApi.SetConfigCommand unavailable" };
+    }
+    await window.RpcApi.SetConfigCommand(window.TabRpcClient, {
+      "speech:enabled": true,
+      "speech:autoplay": false,
+      "speech:provider": "local",
+      "speech:localengine": "edge",
+      "speech:model": "edge-tts",
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+})()`);
+                    if (!setSpeechAutoplayRes?.ok) {
+                        failures.push({
+                            title: candidate.title,
+                            url: candidate.url,
+                            error: "failed to disable global speech:autoplay for terminal scenario",
+                            details: setSpeechAutoplayRes,
+                        });
+                        continue;
+                    }
+                    changedGlobalSpeechAutoplay = true;
+
+                    // Clear previous calls so we only observe this scenario.
+                    await cdp.evaluate(String.raw`(() => {
   if (window.__waveTtsSmoke) {
     window.__waveTtsSmoke.speechSynthesisCalls = [];
     window.__waveTtsSmoke.audioPlayCalls = [];
@@ -356,9 +456,9 @@ async function main() {
   return { ok: true };
 })()`);
 
-                // Validate terminal defaults and UI: auto-play should be ON by default,
-                // and the AI shell-integration sparkles indicator should not appear in the terminal header.
-                const enableAutoRes = await cdp.evaluate(String.raw`(() => {
+                    // Validate terminal defaults and UI: auto-play should be ON by default,
+                    // and the AI shell-integration sparkles indicator should not appear in the terminal header.
+                    const enableAutoRes = await cdp.evaluate(String.raw`(() => {
   try {
     const termWrap = window.term;
     const blockId = termWrap?.blockId || "";
@@ -389,15 +489,15 @@ async function main() {
   }
 })()`);
 
-                if (!enableAutoRes?.ok) {
-                    failures.push({
-                        title: candidate.title,
-                        url: candidate.url,
-                        error: enableAutoRes?.error || "failed to enable terminal autoplay",
-                        details: enableAutoRes,
-                    });
-                    continue;
-                }
+                    if (!enableAutoRes?.ok) {
+                        failures.push({
+                            title: candidate.title,
+                            url: candidate.url,
+                            error: enableAutoRes?.error || "failed to enable terminal autoplay",
+                            details: enableAutoRes,
+                        });
+                        continue;
+                    }
 
                 const chipDeadline = Date.now() + 20000;
                 let chipState = null;
@@ -597,21 +697,39 @@ async function main() {
                     continue;
                 }
 
-                console.log(
-                    JSON.stringify(
-                        {
-                            cdpTarget: {
+                    terminalSuccess = {
+                        cdpTarget: {
+                            title: candidate.title,
+                            url: candidate.url,
+                            ws: candidate.webSocketDebuggerUrl,
+                        },
+                        result: { ok: true, scenario, expectedText, tts: state },
+                    };
+                } finally {
+                    if (changedGlobalSpeechAutoplay && speechAutoplaySetting?.ok) {
+                        const restoreRes = await restoreRawSpeechAutoplaySetting(cdp, speechAutoplaySetting);
+                        if (!restoreRes?.ok) {
+                            terminalSuccess = null;
+                            failures.push({
                                 title: candidate.title,
                                 url: candidate.url,
-                                ws: candidate.webSocketDebuggerUrl,
-                            },
-                        },
-                        null,
-                        2
-                    )
-                );
-                console.log(JSON.stringify({ ok: true, scenario, expectedText, tts: state }, null, 2));
-                return;
+                                error: "failed to restore speech:autoplay after terminal scenario",
+                                details: {
+                                    settingsPath: speechAutoplaySetting.settingsPath,
+                                    hasOwnValue: speechAutoplaySetting.hasOwnValue,
+                                    value: speechAutoplaySetting.value,
+                                    restoreRes,
+                                },
+                            });
+                        }
+                    }
+                }
+
+                if (terminalSuccess) {
+                    console.log(JSON.stringify({ cdpTarget: terminalSuccess.cdpTarget }, null, 2));
+                    console.log(JSON.stringify(terminalSuccess.result, null, 2));
+                    return;
+                }
             }
 
             if (scenario === "settings") {

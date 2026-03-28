@@ -41,6 +41,30 @@ describe("launchcwd helpers", () => {
         expect(getTerminalDisplayCwd({ connection: "local" })).toBe("");
     });
 
+    it("returns persisted term display cwd when present", async () => {
+        const { getTerminalDisplayCwd } = await import("@/util/launchcwd");
+
+        expect(
+            getTerminalDisplayCwd({
+                connection: "local",
+                "term:displaycwd": "D:/runtime/project",
+            })
+        ).toBe("D:/runtime/project");
+    });
+
+    it("prefers term display cwd over stale cwd metadata", async () => {
+        const { getTerminalDisplayCwd } = await import("@/util/launchcwd");
+
+        expect(
+            getTerminalDisplayCwd({
+                connection: "ubuntu@example",
+                "term:displaycwd": "/home/ubuntu/runtime",
+                "cmd:cwd": "/home/ubuntu/start",
+                "display:launchcwd": "D:/local/start",
+            })
+        ).toBe("/home/ubuntu/runtime");
+    });
+
     it("extracts a Windows project path from a model status footer line", async () => {
         const { extractTerminalDisplayCwdFromBufferLines } = await import("@/util/launchcwd");
 
@@ -89,6 +113,25 @@ describe("launchcwd helpers", () => {
         expect(getTerminalInheritableCwd({ "cmd:cwd": "  /home/ubuntu/project/  " })).toBe("/home/ubuntu/project/");
     });
 
+    it("ignores the ordered dictionary placeholder in cmd:cwd", async () => {
+        const { getTerminalInheritableCwd, getTerminalDisplayCwd } = await import("@/util/launchcwd");
+
+        expect(
+            getTerminalInheritableCwd({
+                connection: "local",
+                "cmd:cwd": "System.Collections.Specialized.OrderedDictionary",
+                "display:launchcwd": "E:/code/waveterm-main",
+            })
+        ).toBe("E:/code/waveterm-main");
+        expect(
+            getTerminalDisplayCwd({
+                connection: "local",
+                "cmd:cwd": "System.Collections.Specialized.OrderedDictionary",
+                cwd: "E:/code/waveterm-main",
+            })
+        ).toBe("");
+    });
+
     it("falls back to persisted display cwd for local terminals when cmd:cwd is missing", async () => {
         const { getTerminalInheritableCwd } = await import("@/util/launchcwd");
 
@@ -97,6 +140,35 @@ describe("launchcwd helpers", () => {
                 connection: "local",
                 "display:launchcwd": "D:/OneDrive/steven/code/ai/12CLI/waveterm-main",
             })
+        ).toBe("D:/OneDrive/steven/code/ai/12CLI/waveterm-main");
+    });
+
+    it("prefers the live display cwd for action menus when available", async () => {
+        const { resolveTerminalActionCwd } = await import("@/util/launchcwd");
+
+        expect(
+            resolveTerminalActionCwd(
+                {
+                    connection: "local",
+                    "cmd:cwd": "C:/Users/baba1",
+                    "display:launchcwd": "C:/Users/baba1",
+                },
+                "D:/OneDrive/steven/code/ai/12CLI/waveterm-main"
+            )
+        ).toBe("D:/OneDrive/steven/code/ai/12CLI/waveterm-main");
+    });
+
+    it("keeps the persisted absolute path when a live cwd is only a shortened tail", async () => {
+        const { resolveTerminalActionCwd } = await import("@/util/launchcwd");
+
+        expect(
+            resolveTerminalActionCwd(
+                {
+                    connection: "local",
+                    "display:launchcwd": "D:/OneDrive/steven/code/ai/12CLI/waveterm-main",
+                },
+                "waveterm-main"
+            )
         ).toBe("D:/OneDrive/steven/code/ai/12CLI/waveterm-main");
     });
 });

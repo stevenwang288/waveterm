@@ -61,6 +61,10 @@ export const ConnectionButton = React.memo(
             let connIconElem: React.ReactNode = null;
             const connColorNum = computeConnColorNum(connStatus);
             let color = `var(--conn-icon-color-${connColorNum})`;
+            const hasConnectionError = connStatus?.status == "error";
+            const connectionErrorTitle = util.isBlank(connStatus?.error)
+                ? "SSH 连接失败"
+                : `SSH 连接失败：${connStatus.error}`;
             const openConnectionMenu = React.useCallback(() => {
                 recordTEvent("action:other", { "action:type": "conndropdown", "action:initiator": "mouse" });
                 setConnModalOpen(true);
@@ -200,14 +204,9 @@ export const ConnectionButton = React.memo(
                     );
                 } else if (connStatus?.status == "error") {
                     color = "var(--error-color)";
-                    if (connStatus?.error != null) {
-                        titleText = t("connection.errorConnectingToWithError", {
-                            conn: connection,
-                            error: connStatus.error,
-                        });
-                    } else {
-                        titleText = t("connection.errorConnectingTo", { conn: connection });
-                    }
+                    titleText = connectionErrorTitle;
+                    connDisplayName = `${connection}（连接失败）`;
+                    extraDisplayNameClassName = "text-[var(--error-color)]";
                     showDisconnectedSlash = true;
                 } else if (!connStatus?.connected) {
                     color = "var(--grey-text-color)";
@@ -242,9 +241,18 @@ export const ConnectionButton = React.memo(
                     connectionDisplayName: connDisplayName || connection,
                     terminalLabel: terminalLabelTrimmed,
                 });
-                titleText = terminalDisplayLabel || titleText;
-                connDisplayName = terminalDisplayLabel;
-                extraDisplayNameClassName = terminalLabelPresentation?.className ?? "";
+                if (hasConnectionError) {
+                    titleText = connectionErrorTitle;
+                    connDisplayName = `${terminalDisplayLabel || connection}（连接失败）`;
+                    extraDisplayNameClassName = util.cn(
+                        terminalLabelPresentation?.className ?? "",
+                        "text-[var(--error-color)]"
+                    );
+                } else {
+                    titleText = terminalDisplayLabel || titleText;
+                    connDisplayName = terminalDisplayLabel;
+                    extraDisplayNameClassName = terminalLabelPresentation?.className ?? "";
+                }
             }
 
             const wshProblem = connection && !connStatus?.wshenabled && connStatus?.status == "connected";

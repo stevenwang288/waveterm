@@ -56,6 +56,9 @@ func (cs *ClientService) AgreeTos(ctx context.Context) (waveobj.UpdatesRtnType, 
 	if err != nil {
 		return nil, fmt.Errorf("error getting client data: %w", err)
 	}
+	if clientData.TosAgreed != 0 {
+		return waveobj.ContextGetUpdatesRtn(ctx), nil
+	}
 	timestamp := time.Now().UnixMilli()
 	clientData.TosAgreed = timestamp
 	err = wstore.DBUpdate(ctx, clientData)

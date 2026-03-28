@@ -21,15 +21,24 @@ import {
     incrementTermCommandsWsl,
     setWasActive,
 } from "./emain-activity";
+import { syncCcSwitchTarget, type CcSwitchSyncTarget } from "./ccswitch-sync";
 import { createBuilderWindow, getAllBuilderWindows, getBuilderWindowByWebContentsId } from "./emain-builder";
 import i18next from "./i18n-main";
-import { callWithOriginalXdgCurrentDesktopAsync, getWaveDataDir, unamePlatform } from "./emain-platform";
+import {
+    callWithOriginalXdgCurrentDesktopAsync,
+    getElectronAppBasePath,
+    getWaveDataDir,
+    unamePlatform,
+} from "./emain-platform";
 import { getWaveTabViewByWebContentsId } from "./emain-tabview";
+import { optimizeEmbeddedGoosePromptInput } from "./goose-promptoptimizer-bridge";
+import { getGooseAppConfig, getGooseBaseUrl, getGooseFrontendUrl, getGooseSecretKey } from "./goose-runtime";
 import { handleCtrlShiftState } from "./emain-util";
 import { getWaveVersion } from "./emain-wavesrv";
 import { createNewWaveWindow, getWaveWindowByWebContentsId } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
 import { synthesizeEdgeTtsToMp3Base64 } from "./local-tts-edge";
+import { optimizeWavePromptInput } from "./promptoptimizer-bridge";
 import {
     controlPveMachine,
     createPveConsoleSession,
@@ -47,6 +56,323 @@ const electronApp = electron.app;
 let webviewFocusId: number = null;
 let webviewKeys: string[] = [];
 const execFileAsync = promisify(child_process.execFile);
+const GooseUiZoomMinFactor = 0.8;
+const GooseUiZoomMaxFactor = 1.3;
+const GooseUiZoomStep = 0.1;
+const GooseBridgeSettingsFilePath = path.join(getWaveDataDir(), "goose", "bridge-settings.json");
+
+type GooseUiAccentPreset = "goose" | "ocean" | "forest" | "sunset";
+type GooseUiBackgroundStyle = "neutral" | "soft" | "vivid";
+type GooseNavigationMode = "push" | "overlay";
+type GooseNavigationStyle = "expanded" | "condensed";
+type GooseNavigationPosition = "top" | "bottom" | "left" | "right";
+type GooseNavigationPreferences = {
+    itemOrder: string[];
+    enabledItems: string[];
+};
+
+type GooseBridgeSettings = {
+    theme: "light" | "dark";
+    useSystemTheme: boolean;
+    responseStyle: string;
+    showPricing: boolean;
+    sessionSharing: {
+        enabled: boolean;
+        baseUrl: string;
+    };
+    seenAnnouncementIds: string[];
+    navigationExpanded: boolean;
+    navigationMode: GooseNavigationMode;
+    navigationStyle: GooseNavigationStyle;
+    navigationPosition: GooseNavigationPosition;
+    navigationPreferences: GooseNavigationPreferences;
+    navigationChatExpanded: boolean;
+    navExpandedWidth: number | null;
+    spellcheckEnabled: boolean;
+    uiAccentPreset: GooseUiAccentPreset;
+    uiBackgroundStyle: GooseUiBackgroundStyle;
+    uiZoomFactor: number;
+};
+
+const GooseDefaultNavigationItemOrder = ["home", "chat", "recipes", "apps", "scheduler", "extensions", "settings"] as const;
+const GooseBridgeSettingKeys = [
+    "theme",
+    "useSystemTheme",
+    "responseStyle",
+    "showPricing",
+    "sessionSharing",
+    "seenAnnouncementIds",
+    "navigationExpanded",
+    "navigationMode",
+    "navigationStyle",
+    "navigationPosition",
+    "navigationPreferences",
+    "navigationChatExpanded",
+    "navExpandedWidth",
+    "spellcheckEnabled",
+    "uiAccentPreset",
+    "uiBackgroundStyle",
+    "uiZoomFactor",
+] as const satisfies ReadonlyArray<keyof GooseBridgeSettings>;
+
+const defaultGooseBridgeSettings: GooseBridgeSettings = {
+    theme: "light",
+    useSystemTheme: true,
+    responseStyle: "concise",
+    showPricing: true,
+    sessionSharing: {
+        enabled: false,
+        baseUrl: "",
+    },
+    seenAnnouncementIds: [],
+    navigationExpanded: true,
+    navigationMode: "push",
+    navigationStyle: "condensed",
+    navigationPosition: "right",
+    navigationPreferences: {
+        itemOrder: [...GooseDefaultNavigationItemOrder],
+        enabledItems: [...GooseDefaultNavigationItemOrder],
+    },
+    navigationChatExpanded: true,
+    navExpandedWidth: null,
+    spellcheckEnabled: true,
+    uiAccentPreset: "goose",
+    uiBackgroundStyle: "neutral",
+    uiZoomFactor: 1,
+};
+
+let cachedGooseBridgeSettings: GooseBridgeSettings | null = null;
+
+function isGooseBridgeSettingKey(key: string): key is keyof GooseBridgeSettings {
+    return (GooseBridgeSettingKeys as readonly string[]).includes(key);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value != null && !Array.isArray(value);
+}
+
+function normalizeGooseTheme(value: unknown): GooseBridgeSettings["theme"] {
+    return value === "dark" ? "dark" : "light";
+}
+
+function normalizeGooseUiAccentPreset(value: unknown): GooseUiAccentPreset {
+    return value === "ocean" || value === "forest" || value === "sunset" || value === "goose" ? value : "goose";
+}
+
+function normalizeGooseUiBackgroundStyle(value: unknown): GooseUiBackgroundStyle {
+    return value === "soft" || value === "vivid" || value === "neutral" ? value : "neutral";
+}
+
+function normalizeGooseNavigationMode(value: unknown): GooseNavigationMode {
+    return value === "overlay" ? "overlay" : "push";
+}
+
+function normalizeGooseNavigationStyle(value: unknown): GooseNavigationStyle {
+    return value === "expanded" ? "expanded" : "condensed";
+}
+
+function normalizeGooseNavigationPosition(value: unknown): GooseNavigationPosition {
+    return value === "top" || value === "bottom" || value === "left" || value === "right" ? value : "right";
+}
+
+function normalizeGooseUiZoomFactor(zoomFactor: number): number {
+    if (!Number.isFinite(zoomFactor)) {
+        return 1;
+    }
+    const clamped = Math.min(GooseUiZoomMaxFactor, Math.max(GooseUiZoomMinFactor, zoomFactor));
+    return Math.round(clamped * 10) / 10;
+}
+
+function sanitizeGooseNavigationPreferences(value: unknown): GooseNavigationPreferences {
+    const defaults = defaultGooseBridgeSettings.navigationPreferences;
+    if (!isRecord(value)) {
+        return {
+            itemOrder: [...defaults.itemOrder],
+            enabledItems: [...defaults.enabledItems],
+        };
+    }
+    return {
+        itemOrder: Array.isArray(value.itemOrder)
+            ? value.itemOrder.filter((item): item is string => typeof item === "string")
+            : [...defaults.itemOrder],
+        enabledItems: Array.isArray(value.enabledItems)
+            ? value.enabledItems.filter((item): item is string => typeof item === "string")
+            : [...defaults.enabledItems],
+    };
+}
+
+function sanitizeGooseBridgeSettings(value: unknown): GooseBridgeSettings {
+    const source = isRecord(value) ? value : {};
+    const sessionSharing = isRecord(source.sessionSharing) ? source.sessionSharing : {};
+    return {
+        theme: normalizeGooseTheme(source.theme),
+        useSystemTheme: typeof source.useSystemTheme === "boolean" ? source.useSystemTheme : true,
+        responseStyle:
+            typeof source.responseStyle === "string" && source.responseStyle.trim() ? source.responseStyle : "concise",
+        showPricing: typeof source.showPricing === "boolean" ? source.showPricing : true,
+        sessionSharing: {
+            enabled: typeof sessionSharing.enabled === "boolean" ? sessionSharing.enabled : false,
+            baseUrl: typeof sessionSharing.baseUrl === "string" ? sessionSharing.baseUrl : "",
+        },
+        seenAnnouncementIds: Array.isArray(source.seenAnnouncementIds)
+            ? source.seenAnnouncementIds.filter((item): item is string => typeof item === "string")
+            : [],
+        navigationExpanded: typeof source.navigationExpanded === "boolean" ? source.navigationExpanded : true,
+        navigationMode: normalizeGooseNavigationMode(source.navigationMode),
+        navigationStyle: normalizeGooseNavigationStyle(source.navigationStyle),
+        navigationPosition: normalizeGooseNavigationPosition(source.navigationPosition),
+        navigationPreferences: sanitizeGooseNavigationPreferences(source.navigationPreferences),
+        navigationChatExpanded: typeof source.navigationChatExpanded === "boolean" ? source.navigationChatExpanded : true,
+        navExpandedWidth:
+            typeof source.navExpandedWidth === "number" && Number.isFinite(source.navExpandedWidth)
+                ? source.navExpandedWidth
+                : null,
+        spellcheckEnabled: typeof source.spellcheckEnabled === "boolean" ? source.spellcheckEnabled : true,
+        uiAccentPreset: normalizeGooseUiAccentPreset(source.uiAccentPreset),
+        uiBackgroundStyle: normalizeGooseUiBackgroundStyle(source.uiBackgroundStyle),
+        uiZoomFactor: normalizeGooseUiZoomFactor(
+            typeof source.uiZoomFactor === "number" ? source.uiZoomFactor : Number(source.uiZoomFactor)
+        ),
+    };
+}
+
+function loadGooseBridgeSettings(): GooseBridgeSettings {
+    if (cachedGooseBridgeSettings != null) {
+        return { ...cachedGooseBridgeSettings };
+    }
+    try {
+        if (!fs.existsSync(GooseBridgeSettingsFilePath)) {
+            cachedGooseBridgeSettings = { ...defaultGooseBridgeSettings };
+            return { ...cachedGooseBridgeSettings };
+        }
+        cachedGooseBridgeSettings = sanitizeGooseBridgeSettings(
+            JSON.parse(fs.readFileSync(GooseBridgeSettingsFilePath, "utf8"))
+        );
+        return { ...cachedGooseBridgeSettings };
+    } catch (error) {
+        console.warn("[goose-bridge] failed to load persisted settings", error);
+        cachedGooseBridgeSettings = { ...defaultGooseBridgeSettings };
+        return { ...cachedGooseBridgeSettings };
+    }
+}
+
+function saveGooseBridgeSettings(nextSettings: GooseBridgeSettings): GooseBridgeSettings {
+    const sanitized = sanitizeGooseBridgeSettings(nextSettings);
+    fs.mkdirSync(path.dirname(GooseBridgeSettingsFilePath), { recursive: true });
+    fs.writeFileSync(GooseBridgeSettingsFilePath, JSON.stringify(sanitized, null, 2), "utf8");
+    cachedGooseBridgeSettings = sanitized;
+    return { ...sanitized };
+}
+
+function getGooseBridgeSetting(key: keyof GooseBridgeSettings): GooseBridgeSettings[keyof GooseBridgeSettings] {
+    return loadGooseBridgeSettings()[key];
+}
+
+function setGooseBridgeSetting(
+    key: keyof GooseBridgeSettings,
+    value: unknown
+): GooseBridgeSettings[keyof GooseBridgeSettings] {
+    const currentSettings = loadGooseBridgeSettings();
+    const nextSettings = saveGooseBridgeSettings({ ...currentSettings, [key]: value });
+    return nextSettings[key];
+}
+
+function getGooseThemeBroadcastPatch(themeData: unknown): Partial<GooseBridgeSettings> | null {
+    if (!isRecord(themeData)) {
+        return null;
+    }
+    const patch: Partial<GooseBridgeSettings> = {};
+    if ("theme" in themeData) {
+        patch.theme = normalizeGooseTheme(themeData.theme);
+    }
+    if (typeof themeData.useSystemTheme === "boolean") {
+        patch.useSystemTheme = themeData.useSystemTheme;
+    }
+    if ("uiAccentPreset" in themeData) {
+        patch.uiAccentPreset = normalizeGooseUiAccentPreset(themeData.uiAccentPreset);
+    }
+    if ("uiBackgroundStyle" in themeData) {
+        patch.uiBackgroundStyle = normalizeGooseUiBackgroundStyle(themeData.uiBackgroundStyle);
+    }
+    return Object.keys(patch).length === 0 ? null : patch;
+}
+
+function isGooseGuestWebContents(sender: electron.WebContents): boolean {
+    const currentUrl = sender.getURL();
+    const gooseFrontendUrl = getGooseFrontendUrl();
+    if (!currentUrl || !gooseFrontendUrl) {
+        return false;
+    }
+    return currentUrl.startsWith(gooseFrontendUrl.split("#")[0]);
+}
+
+function getGooseZoomCommand(waveEvent: WaveKeyboardEvent): "in" | "out" | "reset" | null {
+    if (keyutil.checkKeyPressed(waveEvent, "Ctrl:0")) {
+        return "reset";
+    }
+    if (keyutil.checkKeyPressed(waveEvent, "Ctrl:=") || keyutil.checkKeyPressed(waveEvent, "Ctrl:Shift:=")) {
+        return "in";
+    }
+    if (keyutil.checkKeyPressed(waveEvent, "Ctrl:-") || keyutil.checkKeyPressed(waveEvent, "Ctrl:Shift:-")) {
+        return "out";
+    }
+    return null;
+}
+
+async function getGooseUiZoomFactor(sender: electron.WebContents): Promise<number> {
+    const currentZoomFactor = normalizeGooseUiZoomFactor(sender.getZoomFactor());
+    const persistedZoomFactor = normalizeGooseUiZoomFactor(Number(getGooseBridgeSetting("uiZoomFactor")));
+    if (currentZoomFactor !== 1 || persistedZoomFactor === 1) {
+        return currentZoomFactor;
+    }
+    sender.setZoomFactor(persistedZoomFactor);
+    return persistedZoomFactor;
+}
+
+async function setGooseUiZoomFactor(sender: electron.WebContents, zoomFactor: unknown): Promise<number> {
+    const normalizedZoomFactor = normalizeGooseUiZoomFactor(
+        typeof zoomFactor === "number" ? zoomFactor : Number(zoomFactor)
+    );
+    sender.setZoomFactor(normalizedZoomFactor);
+    setGooseBridgeSetting("uiZoomFactor", normalizedZoomFactor);
+    return normalizedZoomFactor;
+}
+
+function broadcastGooseThemeChange(sender: electron.WebContents, themeData: unknown): void {
+    const patch = getGooseThemeBroadcastPatch(themeData);
+    if (patch != null) {
+        saveGooseBridgeSettings({ ...loadGooseBridgeSettings(), ...patch });
+    }
+    for (const webContents of electron.webContents.getAllWebContents()) {
+        if (webContents.id === sender.id || webContents.isDestroyed()) {
+            continue;
+        }
+        if (!isGooseGuestWebContents(webContents)) {
+            continue;
+        }
+        webContents.send("goose:theme-changed", themeData);
+    }
+}
+
+async function handleGooseUiZoomShortcut(
+    sender: electron.WebContents,
+    waveEvent: WaveKeyboardEvent
+): Promise<boolean> {
+    if (!isGooseGuestWebContents(sender)) {
+        return false;
+    }
+    const command = getGooseZoomCommand(waveEvent);
+    if (command == null) {
+        return false;
+    }
+    const currentZoomFactor = normalizeGooseUiZoomFactor(sender.getZoomFactor());
+    const nextZoomFactor =
+        command === "reset"
+            ? 1
+            : normalizeGooseUiZoomFactor(currentZoomFactor + (command === "in" ? GooseUiZoomStep : -GooseUiZoomStep));
+    await setGooseUiZoomFactor(sender, nextZoomFactor);
+    return true;
+}
 
 const allowedGitSubcommands = new Set([
     "status",
@@ -124,6 +450,26 @@ type UrlInSessionResult = {
     stream: Readable;
     mimeType: string;
     fileName: string;
+};
+
+type HttpRequestData = {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+};
+
+type HttpRequestResult = {
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    bodyBase64: string;
+};
+
+type PickDirectoryOptions = {
+    title?: string;
+    defaultPath?: string;
+    buttonLabel?: string;
 };
 
 type SpeechRequestData = {
@@ -420,13 +766,17 @@ function formatWindowsListeningPortOwner(info: WindowsListeningPortOwnerInfo | n
     return parts.join(", ");
 }
 
-function makeSpeechErrorResponse(status: number, statusText: string, message: string): SpeechRequestResult {
+function makeHttpErrorResponse(status: number, statusText: string, message: string): HttpRequestResult {
     return {
         status,
         statusText,
         headers: { "content-type": "text/plain; charset=utf-8" },
         bodyBase64: Buffer.from((message ?? "").toString(), "utf8").toString("base64"),
     };
+}
+
+function makeSpeechErrorResponse(status: number, statusText: string, message: string): SpeechRequestResult {
+    return makeHttpErrorResponse(status, statusText, message);
 }
 
 function parseLocalSpeechPayload(body: unknown): { input: string; voice?: string; speed?: number } {
@@ -460,11 +810,11 @@ async function runBuiltinEdgeSpeechRequest(req: SpeechRequestData): Promise<Spee
     };
 }
 
-function runNetSpeechRequest(req: SpeechRequestData, requestUrl: URL): Promise<SpeechRequestResult> {
+function runNetHttpRequest(req: HttpRequestData, requestUrl: URL): Promise<HttpRequestResult> {
     return new Promise((resolve, reject) => {
         const netRequest = electron.net.request({
             url: requestUrl.toString(),
-            method: req.method?.toUpperCase() || "POST",
+            method: req.method?.toUpperCase() || "GET",
             session: electron.session.defaultSession,
         });
         const requestHeaders = req.headers ?? {};
@@ -506,6 +856,34 @@ function runNetSpeechRequest(req: SpeechRequestData, requestUrl: URL): Promise<S
         }
         netRequest.end();
     });
+}
+
+async function runHttpRequestInMain(req: HttpRequestData): Promise<HttpRequestResult> {
+    if (!req?.url) {
+        return makeHttpErrorResponse(400, "Bad Request", "Missing http request url.");
+    }
+    let requestUrl: URL;
+    try {
+        requestUrl = new URL(req.url);
+    } catch {
+        return makeHttpErrorResponse(400, "Bad Request", "Invalid http request url.");
+    }
+    if (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") {
+        return makeHttpErrorResponse(
+            400,
+            "Bad Request",
+            `Unsupported http request protocol: ${requestUrl.protocol}`
+        );
+    }
+    try {
+        return await runNetHttpRequest(req, requestUrl);
+    } catch (error) {
+        return makeHttpErrorResponse(
+            502,
+            "Bad Gateway",
+            error instanceof Error ? error.message : String(error)
+        );
+    }
 }
 
 async function runSpeechRequestInMain(req: SpeechRequestData): Promise<SpeechRequestResult> {
@@ -636,6 +1014,11 @@ type CodexAuthJson = {
     [key: string]: unknown;
 };
 
+type CodexSessionIndexEntry = {
+    id?: string;
+    updated_at?: string;
+};
+
 async function readCodexAuthJson(codexHome: string): Promise<CodexAuthJson | null> {
     try {
         const authPath = path.join(codexHome, "auth.json");
@@ -648,6 +1031,93 @@ async function readCodexAuthJson(codexHome: string): Promise<CodexAuthJson | nul
         // ignore
     }
     return null;
+}
+
+function normalizeCodexSessionCwd(raw: string): string {
+    const trimmed = typeof raw === "string" ? raw.trim() : "";
+    if (!trimmed) {
+        return "";
+    }
+    return path.normalize(trimmed).replace(/[\\/]+$/, "").toLowerCase();
+}
+
+async function readLastCodexSessionIdForCwd(cwd: string): Promise<string | null> {
+    const normalizedCwd = normalizeCodexSessionCwd(cwd);
+    if (!normalizedCwd) {
+        return null;
+    }
+    const codexHome = getUserCodexHome();
+    const sessionsRoot = path.join(codexHome, "sessions");
+    const sessionIndexPath = path.join(codexHome, "session_index.jsonl");
+    let latestEntry: { id: string; updatedAt: number } | null = null;
+    let raw = "";
+    try {
+        raw = await fs.promises.readFile(sessionIndexPath, "utf8");
+    } catch {
+        return null;
+    }
+    const lines = raw.split(/\r?\n/);
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+            continue;
+        }
+        let parsed: CodexSessionIndexEntry | null = null;
+        try {
+            parsed = JSON.parse(trimmed) as CodexSessionIndexEntry;
+        } catch {
+            continue;
+        }
+        const sessionId = typeof parsed?.id === "string" ? parsed.id.trim() : "";
+        if (!sessionId) {
+            continue;
+        }
+        const sessionFilePattern = path.join(sessionsRoot, "**", `*${sessionId}*.jsonl`).replace(/\\/g, "/");
+        const globFn = (fs.promises as typeof fs.promises & {
+            glob?: (pattern: string, options?: { windowsPathsNoEscape?: boolean }) => AsyncIterable<string>;
+        }).glob;
+        if (typeof globFn !== "function") {
+            return null;
+        }
+        let sessionFile = "";
+        for await (const match of globFn(sessionFilePattern, { windowsPathsNoEscape: true })) {
+            sessionFile = String(match ?? "").trim();
+            if (sessionFile) {
+                break;
+            }
+        }
+        if (!sessionFile) {
+            continue;
+        }
+        let sessionMetaLine = "";
+        try {
+            const sessionRaw = await fs.promises.readFile(sessionFile, "utf8");
+            sessionMetaLine = sessionRaw.split(/\r?\n/, 2)[0] ?? "";
+        } catch {
+            continue;
+        }
+        if (!sessionMetaLine) {
+            continue;
+        }
+        let sessionMeta: { payload?: { cwd?: string } } | null = null;
+        try {
+            sessionMeta = JSON.parse(sessionMetaLine) as { payload?: { cwd?: string } };
+        } catch {
+            continue;
+        }
+        const sessionCwd = normalizeCodexSessionCwd(sessionMeta?.payload?.cwd ?? "");
+        if (sessionCwd !== normalizedCwd) {
+            continue;
+        }
+        const updatedAt = Date.parse(typeof parsed.updated_at === "string" ? parsed.updated_at : "");
+        if (!Number.isFinite(updatedAt)) {
+            continue;
+        }
+        if (latestEntry == null || updatedAt > latestEntry.updatedAt) {
+            latestEntry = { id: sessionId, updatedAt };
+        }
+    }
+    return latestEntry?.id ?? null;
 }
 
 function codexAuthReadyFromAuthJson(auth: CodexAuthJson | null): boolean {
@@ -807,7 +1277,6 @@ export function initIpcHandlers() {
             console.error("Invalid URL received in open-external event:", url);
         }
     });
-
     electron.ipcMain.on("webview-image-contextmenu", (event: electron.IpcMainEvent, payload: { src: string }) => {
         const menu = new electron.Menu();
         const win = getWaveWindowByWebContentsId(event.sender.hostWebContents.id);
@@ -881,8 +1350,85 @@ export function initIpcHandlers() {
             uiBuildIso: (process.env.WAVETERM_UI_BUILD_ISO ?? "").toString(),
             uiDirty: (process.env.WAVETERM_UI_DIRTY ?? "") === "1",
             profile: (process.env.WAVETERM_PROFILE ?? "").toString(),
+            appDisplayName: (process.env.WAVETERM_APP_DISPLAY_NAME ?? "").toString(),
         } as AboutModalDetails;
     });
+
+    electron.ipcMain.on("get-goose-webview-preload", (event) => {
+        event.returnValue = path.join(getElectronAppBasePath(), "preload", "preload-goose.cjs");
+    });
+
+    electron.ipcMain.on("get-goose-frontend-url", (event) => {
+        event.returnValue = getGooseFrontendUrl();
+    });
+
+    electron.ipcMain.on("goose:get-app-config", (event) => {
+        event.returnValue = getGooseAppConfig();
+    });
+
+    electron.ipcMain.handle("goose:get-secret-key", async () => {
+        return getGooseSecretKey();
+    });
+
+    electron.ipcMain.handle("goose:get-goosed-base-url", async () => {
+        return getGooseBaseUrl();
+    });
+
+    electron.ipcMain.handle("goose:get-setting", (_event, key: string) => {
+        if (!isGooseBridgeSettingKey(key)) {
+            return undefined;
+        }
+        return getGooseBridgeSetting(key);
+    });
+
+    electron.ipcMain.handle("goose:set-setting", (_event, key: string, value: unknown) => {
+        if (!isGooseBridgeSettingKey(key)) {
+            return undefined;
+        }
+        return setGooseBridgeSetting(key, value);
+    });
+
+    electron.ipcMain.handle("goose:get-ui-zoom-factor", async (event) => {
+        return getGooseUiZoomFactor(event.sender);
+    });
+
+    electron.ipcMain.handle("goose:set-ui-zoom-factor", async (event, zoomFactor: unknown) => {
+        return setGooseUiZoomFactor(event.sender, zoomFactor);
+    });
+
+    electron.ipcMain.handle("goose:broadcast-theme-change", async (event, themeData: unknown) => {
+        broadcastGooseThemeChange(event.sender, themeData);
+        return true;
+    });
+
+    electron.ipcMain.handle("ccswitch:sync-config", async (_event, target: CcSwitchSyncTarget) => {
+        return syncCcSwitchTarget(target);
+    });
+
+    electron.ipcMain.handle("promptoptimizer:optimize-prompt", async (_event, prompt: string) => {
+        return optimizeWavePromptInput(prompt);
+    });
+
+    electron.ipcMain.handle(
+        "goose:optimize-prompt-input",
+        async (
+            _event,
+            request: {
+                prompt: string;
+                provider?: string;
+                model?: string;
+            }
+        ) => {
+            if (request == null || typeof request.prompt !== "string") {
+                throw new Error("无效的 Goose 提示词优化请求。");
+            }
+            return optimizeEmbeddedGoosePromptInput({
+                prompt: request.prompt,
+                provider: request.provider,
+                model: request.model,
+            });
+        }
+    );
 
     electron.ipcMain.on("get-zoom-factor", (event) => {
         event.returnValue = event.sender.getZoomFactor();
@@ -912,6 +1458,18 @@ export function initIpcHandlers() {
                 }
                 if (input.type != "keyDown") {
                     return;
+                }
+                if (isGooseGuestWebContents(webviewWc)) {
+                    const zoomCommand = getGooseZoomCommand(waveEvent);
+                    if (zoomCommand != null) {
+                        e.preventDefault();
+                    }
+                    fireAndForget(async () => {
+                        await handleGooseUiZoomShortcut(webviewWc, waveEvent);
+                    });
+                    if (zoomCommand != null) {
+                        return;
+                    }
                 }
                 for (let keyDesc of webviewKeys) {
                     if (keyutil.checkKeyPressed(waveEvent, keyDesc)) {
@@ -1009,8 +1567,16 @@ export function initIpcHandlers() {
         return codexAuthReadyFromAuthJson(auth);
     });
 
+    electron.ipcMain.handle("codex-last-session-id", async (_event, cwd: string) => {
+        return await readLastCodexSessionIdForCwd(cwd);
+    });
+
     electron.ipcMain.handle("speech-request", async (_event, req: SpeechRequestData) => {
         return await runSpeechRequestInMain(req);
+    });
+
+    electron.ipcMain.handle("http-request", async (_event, req: HttpRequestData) => {
+        return await runHttpRequestInMain(req);
     });
 
     electron.ipcMain.handle("get-listening-port-owner", async (_event, port: number) => {
@@ -1146,6 +1712,32 @@ export function initIpcHandlers() {
 
     electron.ipcMain.on("do-refresh", (event) => {
         event.sender.reloadIgnoringCache();
+    });
+
+    electron.ipcMain.handle("pick-directory", async (event, opts?: PickDirectoryOptions) => {
+        const ww = electron.BrowserWindow.fromWebContents(event.sender);
+        if (ww == null) {
+            return null;
+        }
+        try {
+            const properties: ("openDirectory" | "createDirectory")[] = ["openDirectory"];
+            if (unamePlatform === "darwin") {
+                properties.push("createDirectory");
+            }
+            const result = await electron.dialog.showOpenDialog(ww, {
+                title: opts?.title,
+                defaultPath: opts?.defaultPath,
+                buttonLabel: opts?.buttonLabel,
+                properties,
+            });
+            if (result.canceled || result.filePaths.length === 0) {
+                return null;
+            }
+            return result.filePaths[0] ?? null;
+        } catch (err) {
+            console.error("error picking directory", err);
+            return null;
+        }
     });
 
     electron.ipcMain.handle("save-text-file", async (event, fileName: string, content: string) => {

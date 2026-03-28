@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>waveterm-main 源码改造盘点与迁移清单</title>
+  <style>
+    :root {
+      --bg: #f6f0e6;
+      --paper: #fffaf2;
+      --ink: #231b17;
+      --muted: #6c5b51;
+      --line: #d8c7b7;
+      --accent: #8a3b12;
+      --accent-soft: #f0dfcf;
+      --olive: #5a6948;
+      --shadow: 0 18px 40px rgba(55, 34, 22, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(138, 59, 18, 0.08), transparent 28%),
+        radial-gradient(circle at top right, rgba(90, 105, 72, 0.08), transparent 24%),
+        linear-gradient(180deg, #f7f1e8 0%, #f3ebdf 100%);
+      line-height: 1.6;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .page {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.9fr);
+      gap: 24px;
+      align-items: stretch;
+      margin-bottom: 28px;
+    }
+
+    .hero-card,
+    .side-card,
+    .section,
+    .note {
+      background: rgba(255, 250, 242, 0.92);
+      border: 1px solid rgba(216, 199, 183, 0.9);
+      box-shadow: var(--shadow);
+      border-radius: 24px;
+      overflow: hidden;
+    }
+
+    .hero-card {
+      padding: 36px 36px 30px;
+      position: relative;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-family: "Newsreader", Georgia, serif;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      margin-top: 16px;
+      font-size: clamp(2.3rem, 4vw, 4.4rem);
+      line-height: 1.02;
+    }
+
+    .hero-card p {
+      margin: 16px 0 0;
+      max-width: 58ch;
+      color: var(--muted);
+      font-size: 1.04rem;
+    }
+
+    .hero-meta {
+      margin-top: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.75);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .side-card {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .side-card header {
+      padding: 24px 24px 14px;
+      border-bottom: 1px solid rgba(216, 199, 183, 0.85);
+    }
+
+    .side-card h2 {
+      font-size: 1.5rem;
+    }
+
+    .side-card ol {
+      margin: 0;
+      padding: 18px 24px 24px 42px;
+    }
+
+    .side-card li + li {
+      margin-top: 10px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .stat {
+      padding: 20px 20px 18px;
+      background: rgba(255, 250, 242, 0.88);
+      border: 1px solid rgba(216, 199, 183, 0.9);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat .value {
+      margin-top: 10px;
+      font-size: 1.55rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .stat .detail {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .section {
+      margin-bottom: 22px;
+    }
+
+    .section-header {
+      padding: 24px 28px 18px;
+      border-bottom: 1px solid rgba(216, 199, 183, 0.85);
+      background: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0));
+    }
+
+    .section-header h2 {
+      font-size: 2rem;
+    }
+
+    .section-header p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 72ch;
+    }
+
+    .section-body {
+      padding: 22px 28px 28px;
+    }
+
+    .method-list,
+    .slice-list,
+    .note ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .method-list li + li,
+    .slice-list li + li,
+    .note li + li {
+      margin-top: 10px;
+    }
+
+    .slice-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px 18px;
+    }
+
+    .slice-card {
+      padding: 18px 18px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.62);
+    }
+
+    .slice-card strong {
+      display: block;
+      font-size: 1rem;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 14px 12px;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(216, 199, 183, 0.8);
+    }
+
+    th {
+      text-align: left;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(240, 223, 207, 0.45);
+    }
+
+    tbody tr:hover td {
+      background: rgba(255,255,255,0.45);
+    }
+
+    code {
+      font-family: "IBM Plex Mono", Consolas, monospace;
+      font-size: 12.5px;
+      background: rgba(138, 59, 18, 0.08);
+      padding: 2px 6px;
+      border-radius: 6px;
+      word-break: break-word;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .note {
+      padding: 22px 24px;
+      margin-bottom: 22px;
+    }
+
+    .note h3 {
+      font-size: 1.45rem;
+      margin-bottom: 10px;
+    }
+
+    .foot {
+      padding: 26px 28px 32px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      white-space: nowrap;
+    }
+
+    .status.keep {
+      color: #1f5130;
+      background: rgba(203, 236, 211, 0.8);
+    }
+
+    .status.remove {
+      color: #7e2f2a;
+      background: rgba(243, 213, 208, 0.82);
+    }
+
+    .status.partial {
+      color: #78530b;
+      background: rgba(248, 232, 196, 0.86);
+    }
+
+    .override-note {
+      margin: 0 0 18px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(138, 59, 18, 0.24);
+      background: rgba(240, 223, 207, 0.48);
+      color: var(--ink);
+    }
+
+    .override-note strong {
+      color: var(--accent);
+    }
+
+    @media (max-width: 1080px) {
+      .hero,
+      .stats,
+      .slice-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .page {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <article class="hero-card">
+        <div class="eyebrow">Source-to-Source Audit</div>
+        <h1>waveterm-main 源码改造盘点与迁移清单</h1>
+        <p>这份 HTML 是按当前源码树对官方 <code>upstream/main</code> 做源码级对照后整理出来的迁移清单，不是按文档猜，也不是按记忆回忆。前面的 37 条负责回答“以前改过什么、代码在哪”，后面的迁移状态块负责回答“现在到底还要不要搬过去”。</p>
+        <div class="hero-meta">
+          <span class="chip">初版生成：2026-03-28</span>
+          <span class="chip">补充更新：2026-03-28（晚间）</span>
+          <span class="chip">本地仓库：<code>E:\code\waveterm-main</code></span>
+          <span class="chip">官方对照：<code>E:\code\_tmp\waveterm-upstream-main-20260328</code></span>
+        </div>
+      </article>
+      <aside class="side-card">
+        <header>
+          <h2>这次最重要的 5 点</h2>
+        </header>
+        <ol>
+          <li>当前仓库相对官方上游已经形成 8 条稳定改造主线，不再是零散 patch。</li>
+          <li><code>git merge-base HEAD upstream/main</code> 返回 <code>no merge base</code>，不能再按普通 fork 历史理解差异。</li>
+          <li>需要优先按“功能族”删减，而不是按文件夹或单个文件粗暴清理。</li>
+          <li>原 37 条报告仍有效，但做迁移判断时，优先先看第 4 节和第 6 节的当前状态收口。</li>
+          <li>PVE / Remote GUI、中文化、终端语音链、Workbench/WebView 仍然是迁移时最容易漏的大块。</li>
+        </ol>
+      </aside>
+    </section>
+
+    <section class="stats">
+      <article class="stat">
+        <div class="label">Upstream SHA</div>
+        <div class="value"><code>96c2526f2aed</code></div>
+        <div class="detail">上游基线：<code>upstream/main</code></div>
+      </article>
+      <article class="stat">
+        <div class="label">Local HEAD</div>
+        <div class="value"><code>abe47d3ebf63</code></div>
+        <div class="detail">当前本地提交基线</div>
+      </article>
+      <article class="stat">
+        <div class="label">Tree Delta</div>
+        <div class="value">559 文件</div>
+        <div class="detail">相对上游：<code>+43440 / -22439</code></div>
+      </article>
+      <article class="stat">
+        <div class="label">Dirty Tree</div>
+        <div class="value">87 + 156</div>
+        <div class="detail">87 个 tracked 修改，156 个 untracked</div>
+      </article>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>1. 比对方法</h2>
+        <p>本次盘点严格从源码出发，先锁定官方上游，再做当前仓库工作树与上游源码树的对照，不使用“基于文档猜测功能范围”的方法。</p>
+      </div>
+      <div class="section-body">
+        <ul class="method-list">
+          <li>官方上游基线：<code>upstream/main</code> @ <code>96c2526f2aed0cf80c81aec11269e35b8cb956c8</code></li>
+          <li>当前本地基线：<code>HEAD</code> @ <code>abe47d3ebf638b327bfc74ad6e11d9fb7fe18a3e</code></li>
+          <li>关键事实：<code>git merge-base HEAD upstream/main</code> 返回 <code>no merge base</code></li>
+          <li>结论：必须按“当前源码树 vs 官方源码树”做逐文件、逐功能族盘点</li>
+          <li>报告组织方式：优先按功能族、交互主线和支撑层归类，而不是按目录平铺</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>2. 建议的 8 个重构切分单元</h2>
+        <p>后续如果你要删减和迁移，建议优先按照下面 8 个单元拆，而不是按目录硬切。这样更接近当前改造真实的耦合边界。</p>
+      </div>
+      <div class="section-body">
+        <div class="slice-grid">
+          <article class="slice-card"><strong>1. 工作区与侧栏</strong>收藏夹、服务器、布局、路径历史、右侧栏按钮顺序。</article>
+          <article class="slice-card"><strong>2. Explorer / 文件操作</strong>资源管理器视图、快速访问、CLI 布局启动、当前终端路径联动。</article>
+          <article class="slice-card"><strong>3. 终端增强</strong>follow-latest、reflow、scrollback 导出、CWD 展示、连接按钮。</article>
+          <article class="slice-card"><strong>4. 终端 / AI 朗读链</strong>formal reply 提取、AI 面板 TTS、内置 Edge TTS。</article>
+          <article class="slice-card"><strong>5. PVE / Remote GUI</strong>PVE 自动登录、VNC console、SSH/GUI 连接整合。</article>
+          <article class="slice-card"><strong>6. WebView / Beta Browser / Workbench / OpenVSCode</strong>内嵌浏览器行为、同视图开窗、Workbench 主界面、OpenVSCode bootstrap。</article>
+          <article class="slice-card"><strong>7. 中文化与文档</strong>i18n 初始化、翻译资源、中文 README/docs。</article>
+          <article class="slice-card"><strong>8. Windows 开发 / 打包基础设施</strong><code>dev:linked</code>、发布脚本、smoke 脚本、preload/ipc 扩展。</article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>3. 已沉淀改造清单</h2>
+        <p>以下条目按“功能族”组织。每条都给出编号、改造摘要、主入口、关键支撑位置和删改时应注意的耦合关系。</p>
+      </div>
+      <div class="section-body">
+        <h3 style="margin:0 0 14px;">A. 工作区 / 侧栏 / 资源管理器</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>收藏夹模型与迁移</td>
+              <td>新增本地持久化收藏夹模型，支持路径归一化、按 connection 去重、嵌套分类，以及旧 scoped localStorage 迁移。</td>
+              <td><code>frontend/app/store/favorites-model.ts:98</code><br><code>frontend/app/workspace/favorites.tsx:161</code></td>
+              <td><code>frontend/app/view/preview/explorer-directory.tsx:264</code><br><code>frontend/app/view/preview/explorer-directory.tsx:641</code><br><code>public/locales/zh-CN/translation.json:87</code></td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Explorer 风格目录视图</td>
+              <td>把目录预览扩成接近系统资源管理器的视图，包含 breadcrumbs、地址栏、quick access、tree、details/list/icon 视图、隐藏文件开关与详情面板。</td>
+              <td><code>frontend/app/view/preview/explorer-directory.tsx:262</code></td>
+              <td><code>frontend/app/view/preview/explorer-directory.tsx:73</code><br><code>...:887</code><br><code>...:978</code><br><code>...:2049</code></td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>CLI 布局预设 / 保存槽</td>
+              <td>新增 2/3/4/6/8/9 宫格 CLI layout 预设、保存槽、最近布局，并支持从 Explorer 直接开多终端布局。</td>
+              <td><code>frontend/app/view/preview/explorer-directory.tsx:73</code><br><code>frontend/app/view/term/term-settings-menu.ts:99</code></td>
+              <td><code>frontend/app/view/term/term-settings-menu.ts:207</code><br><code>...:402</code><br><code>frontend/app/workspace/layouts-panel.tsx</code></td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>服务器面板与右侧栏按钮顺序</td>
+              <td>把 <code>servers</code> 提升成右侧栏一级面板，并允许 <code>ai/history/servers/layouts</code> 等按钮拖拽重排和持久化。</td>
+              <td><code>frontend/app/workspace/servers-panel.tsx:270</code><br><code>frontend/app/workspace/servers-panel.tsx:582</code><br><code>frontend/app/tab/tabbar.tsx:67</code><br><code>frontend/app/tab/tabbar.tsx:401</code></td>
+              <td><code>frontend/app/workspace/right-sidebar.tsx</code><br><code>frontend/app/workspace/servers-refresh.ts:224</code><br><code>schema/settings.json:292</code></td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>路径历史 / Favorites Bar / Git / Widgets 重排</td>
+              <td>新增 <code>favorites-bar</code>、<code>path-history-panel</code>、<code>git-panel</code>、<code>servers-panel</code>、<code>layouts-panel</code> 等 workspace widgets，并改写布局模型。</td>
+              <td><code>frontend/app/workspace/widgets.tsx</code><br><code>frontend/app/workspace/workspace-layout-model.ts</code><br><code>frontend/app/workspace/workspace.tsx</code></td>
+              <td><code>frontend/app/workspace/favorites-bar.tsx</code><br><code>frontend/app/workspace/path-history-panel.tsx</code><br><code>frontend/app/workspace/tests/widgets-layout.test.ts</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">B. 终端增强 / 连接交互</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>6</td>
+              <td>ConnectionButton 与终端头部标签</td>
+              <td>重做连接按钮与终端标签行为，支持点击、双击、上下文菜单、路径标签点击和复制路径。</td>
+              <td><code>frontend/app/block/connectionbutton.tsx:37</code><br><code>...:115</code><br><code>...:261</code></td>
+              <td><code>frontend/app/block/connectionbutton-label.ts</code><br><code>frontend/app/block/connectionbutton-menu.ts</code><br><code>frontend/app/block/blockframe-header.tsx</code></td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>终端 CWD 继承、显示与持久化</td>
+              <td>从 <code>cmd:cwd</code>、<code>display:launchcwd</code> 和缓冲区输出中提取并格式化路径，用于标签显示、目录打开和布局继承。</td>
+              <td><code>frontend/util/launchcwd.ts:45</code><br><code>frontend/util/launchcwd.ts:77</code></td>
+              <td><code>frontend/app/view/preview/explorer-directory.tsx:887</code><br><code>frontend/app/tab/tests/launchcwd.test.ts</code><br><code>frontend/app/view/term/termwrap.ts:1959</code></td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>follow-latest / reflow / scrollback 导出</td>
+              <td>实现终端“跟随最新输出”、手动脱离恢复、按当前宽度重新 reflow 历史以及导出 scrollback 文本。</td>
+              <td><code>frontend/app/view/term/termwrap.ts:1501</code><br><code>...:1622</code><br><code>...:1988</code></td>
+              <td><code>frontend/app/view/term/term-model.ts:1898</code><br><code>frontend/app/view/term/term-model.ts:2151</code><br><code>pkg/service/blockservice/blockservice.go:46</code></td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>formal reply 提取与终端朗读</td>
+              <td>从 Codex/TUI 风格终端输出里提取“正式回复”，过滤 working/status/tool-call 行，并支持自动朗读与按段朗读。</td>
+              <td><code>frontend/app/block/terminal-speech.ts:530</code><br><code>...:722</code><br><code>...:919</code><br><code>...:1269</code><br><code>...:1295</code></td>
+              <td><code>frontend/app/block/tests/terminal-speech-play.test.ts</code><br><code>frontend/app/block/tests/terminal-speech.test.ts</code><br><code>frontend/app/view/workbench/workbench.tsx</code> 也消费 formal reply</td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td>Codex resume 动作与按钮</td>
+              <td>新增针对 Codex/Codex-like 终端会话的 resume 判定、自动交互与“一键恢复”按钮。</td>
+              <td><code>frontend/app/block/codex-resume.ts:47</code><br><code>...:218</code><br><code>frontend/app/tab/tabbar.tsx:223</code></td>
+              <td><code>frontend/app/block/tests/codex-resume.test.ts</code><br><code>frontend/app/tab/tabbar.tsx:1101</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">C. AI 面板 / TTS / WaveAI</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>11</td>
+              <td>AI 面板语音设置与自动朗读</td>
+              <td>AI 面板接入整套 <code>speech:*</code> 设置，支持自动朗读 assistant reply、手动播放按钮、voice 角色、文本过滤、provider/local engine 选择。</td>
+              <td><code>frontend/app/aipanel/aipanel.tsx:265</code><br><code>...:344</code><br><code>...:392</code></td>
+              <td><code>frontend/app/aipanel/aipanelheader.tsx</code><br><code>frontend/app/aipanel/aispeech.ts:290</code><br><code>frontend/app/aipanel/speechruntime.ts:466</code><br><code>schema/settings.json:100</code></td>
+            </tr>
+            <tr>
+              <td>12</td>
+              <td>AI 自动播报目标判定</td>
+              <td>把 AI 面板“自动播报哪条 assistant message”抽成独立逻辑，便于后续在不同面板复用。</td>
+              <td><code>frontend/app/aipanel/aipanel-autoplay.ts:40</code></td>
+              <td><code>frontend/app/aipanel/aipanel.tsx:26</code><br><span class="muted">当前仍在工作树中，未提交。</span></td>
+            </tr>
+            <tr>
+              <td>13</td>
+              <td>OpenAI backend reasoning / verbosity</td>
+              <td>对 OpenAI / Responses API 路线补 reasoning effort、verbosity、不同 token 字段和调试日志。</td>
+              <td><code>pkg/waveai/openaibackend.go:47</code><br><code>...:56</code><br><code>...:437</code></td>
+              <td><code>pkg/waveai/waveai.go:88</code><br><code>schema/waveai.json:50</code><br><code>schema/aipresets.json</code></td>
+            </tr>
+            <tr>
+              <td>14</td>
+              <td>内置 Edge TTS 与主进程 speech IPC</td>
+              <td>把内置 Edge TTS 放到主进程实现，并只允许走内置 <code>wave://edge-tts/v1/audio/speech</code> 路线。</td>
+              <td><code>emain/local-tts-edge.ts:56</code><br><code>emain/preload.ts:82</code><br><code>emain/emain-ipc.ts:472</code><br><code>emain/emain-ipc.ts:563</code><br><code>emain/emain-ipc.ts:1160</code></td>
+              <td><code>scripts/smoke-waveai-tts-cdp.mjs</code><br><code>scripts/show-tts-log.ps1</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">D. PVE / Remote GUI / 连接管理</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>15</td>
+              <td>PVE 自动登录与 console proxy</td>
+              <td>新增 PVE 登录票据获取、凭据加密存储与环境变量引导、SSH fallback 登录、VM/LXC 列表拉取、<code>start/shutdown/stop/reboot</code> 控制、本地 websocket console proxy 与 <code>known_hosts</code> 管理。</td>
+              <td><code>emain/pve-auth.ts:230</code><br><code>...:852</code><br><code>...:979</code><br><code>...:1060</code><br><code>...:1102</code></td>
+              <td><code>emain/pve-auth.ts:47</code><br><code>...:319</code><br><code>emain/preload.ts:104</code><br><code>emain/emain-ipc.ts:1183</code><br><code>schema/connections.json:27</code></td>
+            </tr>
+            <tr>
+              <td>16</td>
+              <td>PVE 机器面板与自动发现</td>
+              <td>服务器面板会把普通连接定义和 PVE VM/LXC 机器做匹配、排序、刷新与补齐；这部分决定服务器列表里是否出现 PVE 机器，以及连接元数据是否被补全。</td>
+              <td><code>frontend/app/workspace/servers-refresh.ts:41</code><br><code>...:161</code><br><code>...:224</code><br><code>frontend/app/workspace/servers-panel.tsx:270</code></td>
+              <td><code>frontend/app/store/services.ts</code><br><code>frontend/app/store/keymodel.ts</code><br><code>pkg/service/clientservice/clientservice.go</code><br><span class="muted">这是 PVE 与服务器 UI 的对接层。</span></td>
+            </tr>
+            <tr>
+              <td>17</td>
+              <td>PVE VNC block 与 Remote GUI</td>
+              <td>新增 <code>pvevnc</code> 视图块，通过 noVNC 打开 PVE VNC；终端侧新增 remote GUI / <code>web</code> / <code>websplit</code> 模式切换、PVE 自动发现、GUI 目标匹配，以及把 <code>pvevnc:*</code> 元数据写回 block 的整套链路。</td>
+              <td><code>frontend/app/view/pvevnc/pvevnc.tsx:63</code><br><code>...:115</code><br><code>frontend/app/view/term/remote-gui.ts:62</code><br><code>...:75</code><br><code>frontend/app/view/term/term-model.ts:1010</code></td>
+              <td><code>frontend/app/view/term/tests/remote-gui.test.ts</code><br><code>frontend/app/view/term/term.tsx</code><br><code>frontend/app/view/term/term-model.ts:872</code><br><code>...:937</code></td>
+            </tr>
+            <tr>
+              <td>18</td>
+              <td>连接 schema 扩展与 SSH 错误文案</td>
+              <td>连接 schema 增加 <code>conn:guiurl</code>、<code>conn:guimode</code>、<code>pve:vmid</code>、<code>pve:node</code>、<code>pve:type</code>、<code>pve:name</code> 等字段；term model 会读取这些字段决定 GUI 是否可显示、是否走 PVE 发现，同时 SSH 连接错误文案也被中文化。</td>
+              <td><code>schema/connections.json:27</code><br><code>pkg/remote/sshclient.go</code></td>
+              <td><code>frontend/app/view/term/remote-gui.ts:71</code><br><code>frontend/app/view/term/term-model.ts:95</code><br><code>pkg/remote/conncontroller/conncontroller.go</code><br><code>pkg/wshutil/wshrouter.go</code><br><code>pkg/wshutil/wshutil.go</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">E. WebView / Beta Browser / Workbench / OpenVSCode</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>19</td>
+              <td>WebView 行为增强</td>
+              <td>WebView 增加标题清洗、URL 规范化、外部浏览器偏好提示、当前视图接管新窗口、存储清理、focus/global keys、mobile UA 等。</td>
+              <td><code>frontend/app/view/webview/webview.tsx:86</code><br><code>...:232</code><br><code>...:441</code><br><code>...:1062</code><br><code>frontend/app/view/webview/site-preferences.ts:31</code><br><code>frontend/app/view/webview/new-window-utils.ts:6</code></td>
+              <td><code>frontend/app/view/webview/title-utils.ts:6</code><br><code>frontend/app/view/webview/url-utils.ts:4</code><br><code>emain/preload.ts:19</code><br><code>emain/emain-ipc.ts:1037</code><br><code>emain/embedded-browser-url.ts:9</code>（未提交）</td>
+            </tr>
+            <tr>
+              <td>20</td>
+              <td>Workbench 模式切换与 source meta</td>
+              <td>把传统 <code>term</code> 块切到 <code>workbench</code> 视图时补齐 source meta、记住 return view，并继承 terminal display cwd。</td>
+              <td><code>frontend/app/view/workbench/workbench-mode.ts:40</code><br><code>...:52</code><br><code>...:67</code><br><code>frontend/app/workspace/workbench-source.ts:52</code><br><code>...:72</code></td>
+              <td><code>frontend/app/workspace/workbench-source.ts:90</code><br><code>...:111</code><br><span class="muted">说明 Workbench 不是独立 app，而是 term 的另一种 surface。</span></td>
+            </tr>
+            <tr>
+              <td>21</td>
+              <td>Workbench 主界面产品线</td>
+              <td>当前工作树已出现一整套未提交的 Workbench 代码：主界面、drawer、task/status/integrations、route command、quick insert、follow-latest、Codex bootstrap、AI mode 映射等。</td>
+              <td><code>frontend/app/view/workbench/workbench.tsx:710</code><br><code>...:1083</code><br><code>...:5632</code></td>
+              <td><code>frontend/app/view/workbench/workbench-agent-spec.ts</code><br><code>workbench-dispatch.ts</code><br><code>workbench-gateway.ts</code><br><code>workbench-input-parser.ts</code><br><code>workbench-integrations.ts</code><br><code>workbench.scss</code><br><span class="muted">当前未提交。</span></td>
+            </tr>
+            <tr>
+              <td>22</td>
+              <td>OpenVSCode clean bootstrap</td>
+              <td>新增脚本管理一套 WSL 内的 clean OpenVSCode Server，并能在 linked dev 实例里自动 seed 一个 workbench block。</td>
+              <td><code>scripts/openvscode-clean.ps1:52</code><br><code>...:73</code><br><code>...:153</code><br><code>scripts/seed-dev-workbench.ps1</code></td>
+              <td><code>scripts/dev-instance.ps1:434</code><br><span class="muted">更像本地实验链，不是通用上游能力。</span></td>
+            </tr>
+            <tr>
+              <td>23</td>
+              <td>Codex config override</td>
+              <td>读取本机 <code>.codex/config.toml</code> 和 <code>auth.json</code>，把 model/provider/base_url/auth override 映射回 WaveAI 请求。</td>
+              <td><code>pkg/waveai/codexconfig.go:149</code><br><code>pkg/waveai/waveai.go:88</code></td>
+              <td><span class="muted">当前未提交，是 WaveAI 与本机 Codex runtime 的硬耦合点。</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">F. 中文化 / 文档 / 文案</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>24</td>
+              <td>前后端 i18n 初始化与默认 zh-CN</td>
+              <td>前端 React 层和主进程都接入 <code>i18next</code>；前端默认语言与 fallback 都切到 <code>zh-CN</code>，主进程也默认 <code>zh-CN</code> 并加载本地翻译资源，所以这不是单页翻译，而是全局启动层改造。</td>
+              <td><code>frontend/app/i18n.ts:7</code><br><code>emain/i18n-main.ts:6</code></td>
+              <td><code>frontend/app/i18n.ts:4</code><br><code>emain/i18n-main.ts:3</code><br><code>package.json:115</code><br><code>README.zh-CN.md</code></td>
+            </tr>
+            <tr>
+              <td>25</td>
+              <td>翻译资源、可见字符串扫描与中文 docs</td>
+              <td>新增中英文 translation 资源，补 <code>i18n-scan-visible.cjs</code> 去扫 <code>frontend/app</code> 下用户可见文本；已经覆盖 about/workspace/explorer/favorites/onboarding/waveconfig 等 UI 面，以及 README/docs 这条文档线。</td>
+              <td><code>public/locales/zh-CN/translation.json:87</code><br><code>...:114</code><br><code>...:151</code><br><code>...:443</code><br><code>scripts/i18n-scan-visible.cjs:149</code></td>
+              <td><code>frontend/app/i18n.ts:4</code><br><code>emain/i18n-main.ts:3</code><br><code>docs/docs/config.mdx</code><br><code>docs/docs/connections.mdx</code><br><code>docs/docs/presets.mdx</code><br><code>docs/docs/waveai-modes.mdx</code><br><span class="muted">迁移时要一起收口 <code>locales/</code> 与 <code>public/locales/</code> 的并行状态。</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">G. Windows 开发 / 打包 / IPC 基础设施</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>26</td>
+              <td>Linked dev、Windows release 与 smoke</td>
+              <td>新增 <code>dev:linked</code> 启动链、干净 state root、独立 config/data/userData、自动 seed，以及一批 Windows 打包 / smoke / sidecar 脚本。</td>
+              <td><code>package.json:23</code><br><code>package.json:24</code><br><code>package.json:25</code><br><code>package.json:34</code><br><code>scripts/dev-instance.ps1:434</code></td>
+              <td><code>scripts/build-backend-windows.ps1</code><br><code>scripts/release-win.ps1</code><br><code>scripts/run-dev-fresh.ps1</code><br><code>scripts/smoke-waveai-tts-cdp.mjs</code></td>
+            </tr>
+            <tr>
+              <td>27</td>
+              <td>Preload / IPC / 主进程扩展</td>
+              <td>preload 新增 speech/PVE/webview 能力暴露；主进程 IPC 新增 speech-log、speech-request、pve-*、webview focus/storage/new-window 路由。</td>
+              <td><code>electron.vite.config.ts:141</code><br><code>emain/preload.ts:19</code><br><code>emain/preload.ts:82</code><br><code>emain/preload.ts:104</code><br><code>emain/emain-ipc.ts:1160</code><br><code>emain/emain-ipc.ts:1183</code></td>
+              <td><code>emain/emain-window.ts</code><br><code>emain/emain-tabview.ts</code><br><code>emain/emain.ts</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">H. 配置 / schema / 后端支撑层</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>28</td>
+              <td>Settings / widgets / presets / speech 支撑</td>
+              <td>后端配置类型与 schema 已经为 speech、sidepanel button order、widgets、presets、AI preset、tab indicator 等扩展做了支撑。</td>
+              <td><code>pkg/wconfig/settingsconfig.go:89</code><br><code>...:155</code><br><code>...:335</code><br><code>schema/settings.json:100</code><br><code>schema/settings.json:292</code><br><code>schema/widgets.json:186</code><br><code>pkg/wcore/tabindicator.go:16</code></td>
+              <td><code>pkg/service/blockservice/blockservice.go:46</code><br><code>pkg/wshrpc/wshrpctypes.go</code><br><code>pkg/web/ws.go</code></td>
+            </tr>
+            <tr>
+              <td>29</td>
+              <td>被删除或替换的上游结构</td>
+              <td>有一批上游旧结构已经被你的改造替换或删除，不是简单“不用了”，而是“被另一套结构接管了”。</td>
+              <td><code>frontend/app/tab/vtab.tsx</code><br><code>frontend/app/tab/vtabbar.tsx</code><br><code>frontend/app/treeview/treeview.tsx</code><br><code>frontend/preview/**</code><br><code>frontend/app/waveenv/**</code><br><code>pkg/wcore/badge.go</code></td>
+              <td><code>schema/backgrounds.json → schema/bgpresets.json</code><br><code>docs/docs/tab-backgrounds.mdx → docs/docs/presets.mdx</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">I. 次级但真实存在的外围改造</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:19%;">改造项</th>
+              <th style="width:27%;">内容</th>
+              <th style="width:24%;">主入口</th>
+              <th style="width:24%;">相关位置 / 备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>30</td>
+              <td>App shell / theme / 通用 UI 元件</td>
+              <td>整个应用壳层和基础 UI 元件也有明显重做，包括背景、主题、logo、accent color、tooltip、quicktips、搜索与 markdown 呈现。</td>
+              <td><code>frontend/app/app.tsx</code><br><code>frontend/app/app.scss</code><br><code>frontend/app/theme.scss</code></td>
+              <td><code>frontend/app/asset/logo.svg</code><br><code>frontend/app/element/accent-color.ts</code><br><code>frontend/app/element/logo-color.ts</code><br><code>frontend/app/element/quicktips.tsx</code><br><code>frontend/app/element/tooltip.tsx</code></td>
+            </tr>
+            <tr>
+              <td>31</td>
+              <td>通知中心 / 更新提醒系统</td>
+              <td>新增完整 notification 体系，包括气泡、列表项、popover、hook 和 update notifier。</td>
+              <td><code>frontend/app/notification/notificationbubbles.tsx</code><br><code>frontend/app/notification/notificationpopover.tsx</code><br><code>frontend/app/notification/usenotification.tsx</code><br><code>frontend/app/notification/updatenotifier.tsx</code></td>
+              <td><span class="muted">这是新增产品层能力，之前版本报告未单独展开。</span></td>
+            </tr>
+            <tr>
+              <td>32</td>
+              <td>Onboarding / About / Translate 引导层</td>
+              <td>onboarding、upgrade 页面、about、连接 typeahead、Codex translate modal 都有系统性改动，不只是文案替换。</td>
+              <td><code>frontend/app/onboarding/onboarding.tsx</code><br><code>frontend/app/onboarding/onboarding-features.tsx</code><br><code>frontend/app/modals/about.tsx</code><br><code>frontend/app/modals/codextranslatemodal.tsx</code></td>
+              <td><code>frontend/app/onboarding/onboarding-upgrade-v0121.tsx</code><br><code>...-v0131.tsx</code><br><code>...-v0144.tsx</code></td>
+            </tr>
+            <tr>
+              <td>33</td>
+              <td>Tab shell / 顶层标签系统</td>
+              <td>除了右侧栏和 vtab 删除，普通 tab 壳层本身也被重做，包括 tab 样式、tab content、update banner、cwd label 以及旧 badge/context menu 退出。</td>
+              <td><code>frontend/app/tab/tab.tsx</code><br><code>frontend/app/tab/tab.scss</code><br><code>frontend/app/tab/tabcontent.tsx</code><br><code>frontend/app/tab/updatebanner.tsx</code></td>
+              <td><code>frontend/app/tab/tabbar-model.ts</code><br><code>frontend/app/tab/tests/cwdlabel.test.ts</code><br><code>frontend/util/cwdlabel.ts</code></td>
+            </tr>
+            <tr>
+              <td>34</td>
+              <td>WaveAI / WaveConfig 可视化配置层</td>
+              <td>不仅 backend 有改，前端 WaveAI / WaveConfig 视图层也做了扩展，包括 speech settings 页面、WaveAI 模式显示和配置界面变化。</td>
+              <td><code>frontend/app/view/waveai/waveai.tsx</code><br><code>frontend/app/view/waveconfig/waveconfig.tsx</code><br><code>frontend/app/view/waveconfig/speechsettingscontent.tsx</code></td>
+              <td><code>frontend/app/view/waveconfig/waveconfig-model.ts</code><br><code>frontend/app/view/waveconfig/waveaivisual.tsx</code><br><code>frontend/app/aipanel/waveai-model.tsx</code></td>
+            </tr>
+            <tr>
+              <td>35</td>
+              <td>Builder / Layout 基础设施</td>
+              <td>builder 面板和 layout 库本身也有改动，说明不只是应用层加功能，也动了通用布局基础设施。</td>
+              <td><code>frontend/builder/builder-app.tsx</code><br><code>frontend/builder/tabs/builder-filestab.tsx</code><br><code>frontend/layout/lib/TileLayout.tsx</code><br><code>frontend/layout/lib/layoutModel.ts</code></td>
+              <td><code>frontend/layout/lib/tilelayout.scss</code><br><code>frontend/layout/tests/layoutTree.test.ts</code></td>
+            </tr>
+            <tr>
+              <td>36</td>
+              <td>WSH / CLI / 后端命令链支撑</td>
+              <td>后端不仅是 schema 和 waveai，<code>cmd/wsh</code>、block controller、job manager、wshrpc、web/socket、shell util 等命令链和执行链也有明显适配。</td>
+              <td><code>cmd/wsh/cmd/wshcmd-connserver.go</code><br><code>cmd/wsh/cmd/wshcmd-tabindicator.go</code><br><code>pkg/blockcontroller/shellcontroller.go</code><br><code>pkg/jobmanager/jobmanager_windows.go</code><br><code>pkg/wshrpc/wshrpctypes.go</code></td>
+              <td><code>pkg/wshrpc/wshserver/wshserver.go</code><br><code>pkg/wshutil/wshadapter.go</code><br><code>pkg/web/web.go</code><br><code>pkg/service/windowservice/windowservice.go</code></td>
+            </tr>
+            <tr>
+              <td>37</td>
+              <td>CI / 文档站 / README / 工具链</td>
+              <td>除了产品源码本体，还改了 GitHub workflows、docs 站组件、README/BUILD、生成脚本等外围工程层。</td>
+              <td><code>.github/workflows/build-helper.yml</code><br><code>.github/workflows/release-linux.yml</code><br><code>docs/src/components/platformcontext.tsx</code><br><code>README.md</code><br><code>BUILD.md</code></td>
+              <td><code>docs/package.json</code><br><code>cmd/generatets/main-generatets.go</code><br><code>cmd/generateschema/main-generateschema.go</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>4. 当前迁移动作矩阵</h2>
+        <p>这一节不再列“脏工作树里还有什么文件”，而是直接回答迁移时最关键的问题：哪些基础胶水建议优先搬，哪些能力按需搬，哪些实验线已经明确不要再迁回新版。</p>
+      </div>
+      <div class="section-body">
+        <h3 style="margin:0 0 12px;">4.1 建议优先迁移</h3>
+        <ul class="slice-list">
+          <li><strong>终端路径持久化 / cwd 胶水</strong>：这是当前最值得搬的基础层修复，解决“从当前终端继续打开动作时掉回用户目录”的老问题。主代码：<code>frontend/util/launchcwd.ts</code>、<code>frontend/app/view/term/termwrap.ts</code>、<code>frontend/app/view/term/term-settings-menu.ts</code>。</li>
+          <li><strong>PVE / Remote GUI 主线</strong>：如果新版还要保留服务器 GUI、VNC、PVE 自动登录，这一整条主线必须整体迁。主代码：<code>emain/pve-auth.ts</code>、<code>frontend/app/workspace/servers-refresh.ts</code>、<code>frontend/app/view/pvevnc/pvevnc.tsx</code>、<code>schema/connections.json</code>。</li>
+          <li><strong>中文化 / i18n 主线</strong>：这不是简单文案替换，前后端初始化、资源文件、文档和扫描脚本都要一起看。主代码：<code>frontend/app/i18n.ts</code>、<code>locales/</code>、<code>public/locales/</code>、<code>i18n-scan-visible.cjs</code>、<code>README.md</code>。</li>
+          <li><strong>隔离开发实例链</strong>：后面继续迁移和验证时，<code>dev:linked</code> 这套思路本身建议保留。主代码：<code>scripts/dev-instance.ps1</code>、<code>package.json</code> 里的 <code>dev:linked</code> 相关脚本。</li>
+        </ul>
+
+        <h3 style="margin:22px 0 12px;">4.2 按产品取舍决定是否迁移</h3>
+        <ul class="slice-list">
+          <li><strong>终端语音自动播报 / TTS</strong>：如果新版还保留语音链，至少要把 <code>terminal-speech.ts</code> 的 freshness 修复和主进程 TTS IPC 一起迁；如果不保留语音，这整条可整体切掉。</li>
+          <li><strong>Workbench / Codex resume / 顶部 Codex / Claude 按钮</strong>：这三块互相缠着，且现在按钮语义已经改成“只在当前终端注入命令”。如果新版不要这套 agent 工作流，就不要只迁 UI 壳。</li>
+          <li><strong>Explorer 风格目录视图 / 收藏夹</strong>：如果新版要继续做增强文件管理，这块值得迁；如果只保留原生文件预览，可按单元整体删。</li>
+          <li><strong>WaveAI backend 扩展</strong>：<code>reasoning effort</code>、<code>verbosity</code>、额外 token 字段和调试日志只在你继续保留这套 OpenAI / Responses API 扩展时才值得迁。</li>
+        </ul>
+
+        <h3 style="margin:22px 0 12px;">4.3 已明确不要回迁的线</h3>
+        <ul class="slice-list">
+          <li><strong>外部 recommended browser 预热链</strong>：不要把外部 Chrome 预热、推荐浏览器 IPC 这条实验链再带回新版。</li>
+          <li><strong>布局 / 多分屏侧栏面板 + 右侧重复 Resume 图标</strong>：底层布局能力可以留，旧的侧栏面板和右侧重复入口不要回迁。</li>
+          <li><strong>git 侧栏快捷入口</strong>：当前已经整条删除，迁移时不要因为旧报告里出现过 <code>GitPanel</code> 就顺手恢复。</li>
+          <li><strong>“用指定 AI 打开”里的 AMP / IFlow</strong>：当前菜单项已经删掉，迁新版不要再加回来。</li>
+          <li><strong>Beta Browser / OpenVSCode 实验支撑脚本</strong>：<code>scripts/openvscode-clean.ps1</code>、<code>scripts/seed-dev-workbench.ps1</code>、以及相关左侧入口都属于已回收实验线。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>5. 给重构 / 删减 / 迁移的直接建议</h2>
+        <p>这部分不是功能清单，而是面向后续行动的拆解建议。你如果准备从这个仓库抽能力，优先从这里下手。</p>
+      </div>
+      <div class="section-body">
+        <div class="slice-grid">
+          <article class="slice-card">
+            <strong>优先单独审计的高耦合块</strong>
+            <div><code>frontend/app/view/preview/explorer-directory.tsx</code></div>
+            <div><code>frontend/app/view/term/termwrap.ts</code></div>
+            <div><code>frontend/app/block/terminal-speech.ts</code></div>
+            <div><code>emain/pve-auth.ts</code></div>
+            <div><code>frontend/app/view/webview/webview.tsx</code></div>
+            <div><code>frontend/app/view/workbench/*</code></div>
+            <div><code>scripts/dev-instance.ps1</code></div>
+          </article>
+          <article class="slice-card">
+            <strong>可以按整块删减的候选能力</strong>
+            <div>1. <code>PVE / Remote GUI</code></div>
+            <div>2. <code>终端 / AI 朗读链</code></div>
+            <div>3. <code>Workbench / OpenVSCode 专线</code></div>
+            <div>4. <code>中文化</code>（保留双语或回退单语需一次决定）</div>
+          </article>
+          <article class="slice-card">
+            <strong>迁移时优先保留的基础胶水</strong>
+            <div><code>frontend/util/launchcwd.ts</code></div>
+            <div><code>frontend/app/store/favorites-model.ts</code></div>
+            <div><code>frontend/app/view/term/term-settings-menu.ts</code> 里通用菜单拼装</div>
+            <div><code>frontend/app/workspace/workbench-source.ts</code> 的 source meta 归一化思路</div>
+            <div><code>scripts/dev-instance.ps1</code> 的隔离 dev 实例思路</div>
+          </article>
+          <article class="slice-card">
+            <strong>一句话结论</strong>
+            <div>当前仓库相对官方上游已经不是“若干零散 patch”，而是至少 8 条改造主线共同演化的结果。后续若不按主线拆分，很容易出现删 A 时把 B/C 的支撑层一起打断的情况。</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>6. 当前迁移覆盖项（优先于旧结论）</h2>
+        <p>这一节专门覆盖 2026-03-28 当天后续又发生的删减、回收和语义修正。前面 37 条是“历史上做过什么”，这一节是“当前仓库最终保留到什么状态，迁移时到底该搬什么”。如果与前文冲突，以本节为准。</p>
+      </div>
+      <div class="section-body">
+        <div class="override-note">
+          <strong>用法：</strong>先看本节判断“要不要迁”，再回到前面的 37 条定位整条功能链。这里保留“已经删掉/已经放弃”的历史条目，不是让你迁它们，而是为了明确告诉后续迁移者：这些线以前做过，但当前不要再搬回新版。
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:6%;">编号</th>
+              <th style="width:10%;">当前状态</th>
+              <th style="width:18%;">覆盖项</th>
+              <th style="width:28%;">当前结论 / 迁移判断</th>
+              <th style="width:38%;">代码位置</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>38</td>
+              <td><span class="status remove">历史改造，当前已删除</span></td>
+              <td>外部 recommended browser 预热链</td>
+              <td>这条“预热外部 Chrome / 推荐浏览器”的主进程链已经被清掉。迁到新版时只保留原生内嵌/原生外链，不要把这条实验性启动链重新带回去。</td>
+              <td><code>emain/emain-ipc.ts</code><br><code>emain/preload.ts</code><br><code>emain/emain.ts</code><br><code>emain/recommended-browser.ts</code>（已删除）</td>
+            </tr>
+            <tr>
+              <td>39</td>
+              <td><span class="status remove">历史改造，当前已删除</span></td>
+              <td>布局 / 多分屏侧栏 + 右侧重复 Resume 图标</td>
+              <td>左/右重复入口已经收掉。若你未来只想保留多终端布局能力，迁底层布局逻辑即可，不要再迁侧栏 <code>layouts</code> 面板和右侧重复的 <code>Codex resume</code> 图标。</td>
+              <td><code>frontend/app/workspace/workspace-layout-model.ts</code><br><code>frontend/app/workspace/workspace.tsx</code><br><code>frontend/app/tab/tabbar.tsx</code><br><code>frontend/app/workspace/layouts-panel.tsx</code>（已删除）</td>
+            </tr>
+            <tr>
+              <td>40</td>
+              <td><span class="status remove">历史改造，当前已删除</span></td>
+              <td>git 侧栏入口</td>
+              <td><code>git</code> 这条快捷侧栏入口已经整条拿掉。迁移时不要只看旧报告里“GitPanel 曾经存在”，要以当前状态为准。</td>
+              <td><code>frontend/app/workspace/workspace-layout-model.ts:23</code><br><code>frontend/app/workspace/workspace.tsx:12</code><br><code>frontend/app/tab/tabbar.tsx:56</code><br><code>frontend/app/workspace/git-panel.tsx</code>（已删除）</td>
+            </tr>
+            <tr>
+              <td>41</td>
+              <td><span class="status keep">当前保留</span></td>
+              <td>顶部 Codex / Claude 按钮最终语义</td>
+              <td>这两个按钮现在不是“开新块”，也不是“切工作台”，而是只在 <code>term</code> 终端块显示，并且直接向当前终端注入启动命令。迁到新版时要带走的是这个最终语义。</td>
+              <td><code>frontend/app/block/blockframe-header.tsx:589</code><br><code>frontend/app/block/blockframe-header.tsx:597</code><br><code>frontend/app/block/blockframe-header.tsx:714</code><br><code>frontend/app/block/blockframe-header.tsx:723</code><br><code>frontend/app/view/workbench/workbench-agent-layout.ts:149</code></td>
+            </tr>
+            <tr>
+              <td>42</td>
+              <td><span class="status partial">历史改造，当前已收口</span></td>
+              <td>“用指定 AI 打开” 菜单删项</td>
+              <td>菜单机制保留，但用户可见菜单项里已经删掉 <code>AMP</code> / <code>IFlow</code>。迁移时别把这两个旧入口再加回去。</td>
+              <td><code>frontend/util/previewutil.ts:40</code><br><code>frontend/app/view/term/term-model.ts:65</code><br><code>frontend/app/view/term/term-model.ts:1858</code><br><code>frontend/app/view/term/term-settings-menu.ts:91</code><br><code>frontend/app/view/term/term-settings-menu.ts:294</code></td>
+            </tr>
+            <tr>
+              <td>43</td>
+              <td><span class="status keep">当前保留，建议迁移</span></td>
+              <td>终端路径持久化 / cwd 胶水</td>
+              <td>这是新版最值得迁的基础胶水之一。它解决的是“动作入口从当前终端继续打开时，路径掉回用户目录”的老问题。即使其他花哨功能不迁，这块也建议保留。</td>
+              <td><code>frontend/util/launchcwd.ts:97</code><br><code>frontend/util/launchcwd.ts:118</code><br><code>frontend/app/view/term/termwrap.ts:1988</code><br><code>frontend/app/view/term/term-model.ts:85</code><br><code>frontend/app/view/term/term-settings-menu.ts:434</code><br><code>frontend/app/block/blockframe-header.tsx</code></td>
+            </tr>
+            <tr>
+              <td>44</td>
+              <td><span class="status partial">当前保留，按需迁移</span></td>
+              <td>终端语音自动播报 + 白屏防护</td>
+              <td>如果新版还要保留 TTS / 终端 formal reply，这里有两个真实补丁不能漏：一是自动播报新鲜度从只认 <code>lastCommandDoneTs</code> 改成认 <code>max(lastCommandDoneTs, lastOutputTs)</code>；二是 workspace 初始化窗口期的 fallback atom 防白屏。</td>
+              <td><code>frontend/app/block/terminal-speech.ts:920</code><br><code>frontend/app/block/terminal-speech.ts:938</code><br><code>frontend/app/workspace/path-history-panel.tsx:124</code><br><code>frontend/app/workspace/servers-panel.tsx:272</code><br><code>frontend/app/workspace/favorites.tsx:169</code><br><code>frontend/app/workspace/widgets.tsx:400</code><br><code>frontend/app/workspace/workspace.tsx:30</code></td>
+            </tr>
+            <tr>
+              <td>45</td>
+              <td><span class="status remove">历史改造，当前已删除</span></td>
+              <td>Beta Browser / OpenVSCode 实验支撑链</td>
+              <td>这条实验线在报告历史中存在，但当前主仓库已经开始回收，不再作为继续实现方向。迁移到最新版时，不应把这条旧实验脚手架整包搬过去。</td>
+              <td><code>frontend/app/workspace/widgets.tsx</code>（相关 Beta Browser 入口已移除）<br><code>scripts/dev-instance.ps1</code>（已去掉 <code>SkipSeed</code> / <code>seed-dev-workbench</code>）<br><code>scripts/openvscode-clean.ps1</code>（已删除）<br><code>scripts/seed-dev-workbench.ps1</code>（已删除）</td>
+            </tr>
+            <tr>
+              <td>46</td>
+              <td><span class="status partial">历史改造，当前已收口</span></td>
+              <td>左侧 workspace widget 栏入口</td>
+              <td>左侧曾经加过 <code>Codex / Cloud / 双栏 / Beta Browser</code> 等定制入口，现在已经明显收口。迁移时如果继续保留左栏，只迁必要的原生入口，不要把这些已回收入口顺手一起带过去。</td>
+              <td><code>frontend/app/workspace/widgets.tsx</code><br><code>frontend/app/workspace/widgets-layout.ts:22</code><br><code>frontend/app/tab/tabbar.tsx:56</code></td>
+            </tr>
+            <tr>
+              <td>47</td>
+              <td><span class="status partial">当前支撑层已收口</span></td>
+              <td>dev:linked 启动链收口</td>
+              <td>当前开发链已经不再自动 seed Workbench 2x4 grid，也不再依赖 OpenVSCode 实验脚本。若要迁移开发基础设施，应迁“隔离实例”思路，不要迁旧实验 seed。</td>
+              <td><code>scripts/dev-instance.ps1</code><br><code>scripts/seed-dev-workbench.ps1</code>（已删除）</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">6.1 两条最容易漏掉的迁移提醒</h3>
+        <ul class="slice-list">
+          <li><strong>PVE / Remote GUI</strong> 仍然是有效主线，不是实验残留。请继续以条目 <code>15-18</code> 为准，重点看 <code>emain/pve-auth.ts</code>、<code>frontend/app/workspace/servers-refresh.ts</code>、<code>frontend/app/view/pvevnc/pvevnc.tsx</code>、<code>schema/connections.json</code> 里的 <code>pve:*</code> / <code>conn:gui*</code> 字段。</li>
+          <li><strong>中文化 / 汉化</strong> 仍然是有效主线，不只是文案替换。请继续以条目 <code>24-25</code> 为准；如果你未来还要恢复嵌入式 OpenVSCode 那条线，额外注意 browser-side <code>out/vs/nls.js</code> 的 zh-CN patch 属于另一条实验链，不在当前主仓库源码树里。</li>
+          <li><strong>Goose / DeerFlow / promptoptimizer 默认入口线</strong> 不要迁移。这条线是中途混入的启动污染，不是当前保留语义。源码级污染点在 <code>frontend/wave.ts</code> 的 embedded projects 启动分叉，以及 <code>pkg/wcore/layout.go</code> 把 starter layout 改成 <code>goose / deerflow</code> 并自动补 <code>promptoptimizer</code> tab 的旧改法。当前已恢复为官方 starter layout 语义：<code>term + sysinfo + web + preview</code>。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>7. 迁移必读坑点</h2>
+        <p>这一节不是“经验之谈”，而是本次真实踩过、并已通过源码和隔离开发验证过的坑点。新的 AI 如果不先看这一节，最容易重复犯错，尤其是“明明改了源码却还是旧界面”“窗口起了但没内容”“默认工作台总是跑偏”这三类问题。</p>
+      </div>
+      <div class="section-body">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:7%;">编号</th>
+              <th style="width:18%;">现象</th>
+              <th style="width:27%;">真实根因</th>
+              <th style="width:28%;">正确迁法</th>
+              <th style="width:20%;">关键文件 / 命令</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>源码明明改了，但启动后的界面还是旧的，最典型就是还是跑进 <code>Goose / DeerFlow</code></td>
+              <td><code>npm run build:dev</code> 只会重打 Electron / Vite，不会重打 Go 后端 <code>wavesrv</code>。而 starter layout 实际由 <code>pkg/wcore/layout.go</code> 编进 <code>dist/bin/wavesrv.*</code> 后执行。</td>
+              <td>只要动了 <code>pkg/**</code>、<code>cmd/**</code>、starter layout、backend 启动逻辑或 schema，不要只跑前端构建；必须额外执行 <code>npm run build:backend:windows</code>，然后再用 fresh 状态重启隔离实例验证。</td>
+              <td><code>pkg/wcore/layout.go</code><br><code>scripts/build-backend-windows.ps1</code><br><code>npm run build:backend:windows</code></td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>开发版总是很难起来，窗口壳起了但长时间没内容，<code>5300</code> 基础请求能卡到 <code>30s</code></td>
+              <td>旧版 <code>scripts/dev-instance.ps1</code> 会在每次 <code>dev:linked</code> 启动时删除 <code>data</code> 和 <code>electron-userdata</code>，把每次启动都强制变成“首启 + 冷缓存”，再叠加首屏依赖重，白屏概率被极大放大。</td>
+              <td><code>dev:linked</code> 默认必须是“持久化隔离实例”，只有明确要验证首启 / 冷状态时才用 <code>-FreshState</code>。不要把“每次都 fresh”迁成新仓库的默认开发行为。</td>
+              <td><code>scripts/dev-instance.ps1</code><br><code>.tmp/dev-linked/current/data</code><br><code>.tmp/dev-linked/current/electron-userdata</code></td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>窗口不是没起来，而是只有一个空壳，看起来像“启动了但没有内容”</td>
+              <td><code>frontend/wave.ts</code> 顶层如果同步 import <code>App</code> / <code>BuilderApp</code> / Monaco 相关依赖，首屏渲染会被整条主链拖住；如果再把 <code>setWindowInitStatus("ready")</code> 放到 <code>document.fonts.ready</code> 之后，会让 ready 信号也被字体请求卡住。</td>
+              <td><code>initBare()</code> 必须保持轻量；<code>ready</code> 要尽早发，不要继续被字体加载阻塞；<code>App</code> / <code>BuilderApp</code> 保持动态导入；首屏日志点至少保留 <code>Init Bare</code>、<code>Init Wave imported App</code>、<code>Wave First Render Done</code>。</td>
+              <td><code>frontend/wave.ts</code></td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>基础页面已经回了，但首屏会长时间 pending 在 <code>builder / onboarding / monaco</code> 相关请求上</td>
+              <td><code>ModalsRenderer -&gt; modalregistry -&gt; builder/onboarding/monaco</code> 是一条重链；如果 modal registry 首屏静态导入，会把这些本来不该在首屏出现的重量依赖一起拉进来。</td>
+              <td><code>modalregistry.tsx</code> 保持 <code>lazy()</code>，<code>modalsrenderer.tsx</code> 保持 <code>Suspense</code>。迁移时不要为了“看起来简单”又改回同步 import。</td>
+              <td><code>frontend/app/modals/modalregistry.tsx</code><br><code>frontend/app/modals/modalsrenderer.tsx</code></td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>一 fresh 启动就进入错误的工作台，或者默认界面总是跑偏</td>
+              <td><code>Goose / DeerFlow / promptoptimizer</code> 默认入口线不是单点污染，而是双点污染：<code>frontend/wave.ts</code> 的 embedded projects 启动分叉，以及 <code>pkg/wcore/layout.go</code> 直接改写 starter layout。</td>
+              <td>迁移新版时把这条线明确标成“不要迁”。如果未来还想保留 Goose 相关 view，也只能当作独立可选 view，不允许再挂到默认启动链上。默认启动语义应恢复为 <code>term + sysinfo + web + preview</code>。</td>
+              <td><code>frontend/wave.ts</code><br><code>pkg/wcore/layout.go</code></td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>不再直接报错或白屏，但界面可能一直停在“加载中...”</td>
+              <td>类似 <code>atoms?.staticTabId ?? fallbackAtom</code>、<code>atoms?.workspace ?? fallbackAtom</code> 的 fallback atom 写法，能防止初始化窗口期直接 crash，但也会把真正的 workspace hydration 问题吞掉，变成静默的“加载中”。</td>
+              <td>这类 fallback 只能作为防白屏护栏，不能当正式状态来源。迁移时如果保留它，必须同时保留首屏日志和 workspace hydration 验证，不能因为“不报错了”就判断功能没问题。</td>
+              <td><code>frontend/app/workspace/workspace.tsx</code><br><code>frontend/app/workspace/widgets.tsx</code><br><code>frontend/app/workspace/favorites.tsx</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin:28px 0 14px;">7.1 新 AI 推荐迁移顺序</h3>
+        <ol class="slice-list">
+          <li>先读本报告第 <code>4</code>、<code>5</code>、<code>6</code>、<code>7</code> 节，再决定“保留 / 删除 / 不迁移”。</li>
+          <li>先划掉“不要迁移”的线，尤其是 <code>Goose / DeerFlow / promptoptimizer</code> 默认入口线，以及已删除的 Beta Browser / OpenVSCode 实验 seed。</li>
+          <li>再迁基础胶水：<code>launchcwd.ts</code>、<code>favorites-model.ts</code>、<code>term-settings-menu.ts</code>、<code>dev-instance.ps1</code>。</li>
+          <li>再迁真正还要保留的产品功能块：Explorer / workspace、终端增强、TTS / Codex resume、PVE / Remote GUI。</li>
+          <li>只要碰到 Go 后端、starter layout、schema 或 backend 启动逻辑，迁完都要额外执行 <code>npm run build:backend:windows</code>。</li>
+          <li>最后跑隔离开发版验证，不要只看源码就收工。</li>
+        </ol>
+
+        <h3 style="margin:28px 0 14px;">7.2 新 AI 最低验证清单</h3>
+        <ol class="slice-list">
+          <li>前端改动后执行 <code>npm run build:dev</code>。</li>
+          <li>只要改了 Go / starter layout / schema / backend 启动逻辑，再执行 <code>npm run build:backend:windows</code>。</li>
+          <li>先停旧隔离实例：<code>npm run dev:linked:stop</code>。</li>
+          <li>用 fresh 状态拉起干净开发版：<code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev-instance.ps1 -Action start -FreshState</code>。</li>
+          <li>检查实例状态：<code>npm run dev:linked:status</code>。</li>
+          <li>检查 <code>dev.log</code> 至少出现 <code>Init Bare</code>、<code>Init Wave imported App</code>、<code>Wave First Render Done</code>。</li>
+          <li>最后必须看真实窗口截图，而不是只看日志。</li>
+          <li>默认启动界面应回到官方 starter layout 语义：左 <code>term</code>，右上 <code>sysinfo</code>，右中 <code>web</code>，右下 <code>preview</code>。</li>
+        </ol>
+
+        <h3 style="margin:28px 0 14px;">7.3 开发版测试、隔离启动与打包规程</h3>
+        <p>这一节不是“推荐姿势”，而是新的 AI 应当直接执行的 Windows 操作规程。核心目标有两个：一是开发版不能顶掉正式版，二是安装包产物必须稳定落到 <code>D:\DeSK</code>。</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:18%;">主题</th>
+              <th style="width:32%;">必须做法</th>
+              <th style="width:28%;">原因 / 约束</th>
+              <th style="width:22%;">关键脚本 / 路径</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>开发版启动</td>
+              <td>不要直接跑裸的 <code>npm run dev</code>。优先使用：<br><code>npm run dev:linked</code><br><code>npm run dev:linked:status</code><br><code>npm run dev:linked:stop</code><br>需要验证首启 / 冷状态时，再用：<br><code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev-instance.ps1 -Action start -FreshState</code></td>
+              <td>仓库规则要求前端 / Electron / 终端交互相关改动走隔离开发实例验证，不能拿正式安装版或日常实例充当测试环境。</td>
+              <td><code>scripts/dev-instance.ps1</code></td>
+            </tr>
+            <tr>
+              <td>为什么不会顶掉正式版</td>
+              <td>开发版实例会把状态写到独立目录：<br><code>.tmp/dev-linked/current/config</code><br><code>.tmp/dev-linked/current/data</code><br><code>.tmp/dev-linked/current/electron-userdata</code><br>并在启动时显式设置：<br><code>WAVETERM_CONFIG_HOME</code><br><code>WAVETERM_DATA_HOME</code><br><code>WAVETERM_ELECTRON_USER_DATA_HOME</code></td>
+              <td>隔离开发版和正式安装版不是共用同一套用户数据目录。真正危险的是乱开多个开发实例、绕开隔离脚本自己手搓启动、或不停旧实例就继续拉新实例。</td>
+              <td><code>scripts/dev-instance.ps1</code><br><code>.tmp/dev-linked/current/*</code></td>
+            </tr>
+            <tr>
+              <td>开发版验证</td>
+              <td>一次只保留一个隔离开发实例；先 <code>status</code> 再判断；改了前端至少跑 <code>npm run build:dev</code>；改了 Go / starter layout / schema / backend 启动链后必须再跑 <code>npm run build:backend:windows</code>；最终必须看真实窗口而不是只看日志。</td>
+              <td>否则最容易出现“源码改了但窗口还是旧内容”“看日志像成功但实际界面没起来”“误把正式版当开发版”的误判。</td>
+              <td><code>npm run build:dev</code><br><code>npm run build:backend:windows</code><br><code>npm run dev:linked:status</code></td>
+            </tr>
+            <tr>
+              <td>安装包打包</td>
+              <td>标准入口优先使用：<br><code>npm run release:win</code><br>若明确接受 dirty 工作树打包，再使用：<br><code>npm run release:win:allow-dirty</code></td>
+              <td><code>release-win.ps1</code> 不只是打包，还会把最终安装包复制到桌面目录，并输出拷贝后文件的 <code>sha256</code>。</td>
+              <td><code>scripts/release-win.ps1</code></td>
+            </tr>
+            <tr>
+              <td>安装包产物位置</td>
+              <td>主产物在：<br><code>make/&lt;version&gt;/WAVE-win32-x64-&lt;version&gt;.exe</code><br>桌面副本默认复制到：<br><code>D:\DeSK\WAVE-win32-x64-&lt;version&gt;-fix-&lt;sha&gt;.exe</code></td>
+              <td>如果要求“打包后在 D 盘 desk 放一份”，当前仓库已经内建支持，不需要新的 AI 另写复制脚本。</td>
+              <td><code>scripts/release-win.ps1</code><br><code>make/&lt;version&gt;/</code><br><code>D:\DeSK</code></td>
+            </tr>
+            <tr>
+              <td>打包前的后端坑</td>
+              <td>只要碰了 Go / backend / schema，不要只打前端；正确顺序是：<br><code>npm run build:prod</code><br><code>npm run build:backend:windows</code><br><code>npm run release:win</code></td>
+              <td>否则很容易把旧的 <code>wavesrv</code> 一起装进安装包，导致“安装包行为”和当前源码不一致。<code>electron-builder.config.cjs</code> 虽有防护，但新的 AI 不能依赖它兜底。</td>
+              <td><code>electron-builder.config.cjs</code><br><code>scripts/build-backend-windows.ps1</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="note">
+      <h3>补充说明</h3>
+      <ul>
+        <li>同目录下还有一份完整 Markdown 版：<code>docs/源码改造盘点-20260328.md</code>。HTML 版是为了更适合浏览与筛选，不替代详细文字版。</li>
+        <li>本 HTML 已补入 2026-03-28 晚间的删减、语义修正和真实踩坑结论；如果旧报告正文与本页第 6-7 节有冲突，按第 6-7 节执行迁移判断。</li>
+        <li>当前树中存在 <code>locales/</code> 与 <code>public/locales/</code> 并行状态，且 <code>frontend/app/i18n.ts</code> 实际 import 的是 <code>../../locales/...</code>。这属于当前 dirty tree 的重要状态，迁移时不要忽略。</li>
+        <li>本报告重点是源码盘点，不对功能正确性做运行时背书。若后续要继续改动终端、Electron、webview 或前端交互，仍需按仓库规则走隔离 dev 实例验证。</li>
+      </ul>
+    </aside>
+
+    <footer class="foot">
+      这份报告基于 2026-03-28 的本地工作树与官方上游源码树对照生成，并已补入 2026-03-28 晚间的最新收口结果。
+    </footer>
+  </main>
+</body>
+</html>

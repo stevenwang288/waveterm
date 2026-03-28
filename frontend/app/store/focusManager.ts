@@ -1,5 +1,4 @@
 import { waveAIHasFocusWithin } from "@/app/aipanel/waveai-focus-utils";
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { atoms, getBlockComponentModel } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { focusedBlockId } from "@/util/focusutil";
@@ -73,7 +72,9 @@ export class FocusManager {
     refocusNode() {
         const ftype = globalStore.get(this.focusType);
         if (ftype == "waveai") {
-            WaveAIModel.getInstance().focusInput();
+            void import("@/app/aipanel/waveai-model").then(({ WaveAIModel }) => {
+                WaveAIModel.getInstance().focusInput();
+            });
             return;
         }
         const layoutModel = getLayoutModelForStaticTab();

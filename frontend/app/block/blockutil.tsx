@@ -23,8 +23,20 @@ export function blockViewToIcon(view: string): string {
     if (view == "web") {
         return "globe";
     }
+    if (view == "goose") {
+        return "feather-pointed";
+    }
+    if (view == "deerflow") {
+        return "diagram-project";
+    }
+    if (view == "promptoptimizer") {
+        return "wand-magic-sparkles";
+    }
     if (view == "waveai") {
         return "sparkles";
+    }
+    if (view == "workbench") {
+        return "gauge-high";
     }
     if (view == "help") {
         return "circle-question";
@@ -48,8 +60,20 @@ export function blockViewToName(view: string): string {
     if (view == "web") {
         return i18next.t("block.viewName.web");
     }
+    if (view == "goose") {
+        return "Goose";
+    }
+    if (view == "deerflow") {
+        return "DeerFlow";
+    }
+    if (view == "promptoptimizer") {
+        return "提示词优化";
+    }
     if (view == "waveai") {
         return i18next.t("block.viewName.waveai");
+    }
+    if (view == "workbench") {
+        return "工作台";
     }
     if (view == "help") {
         return i18next.t("block.viewName.help");
@@ -192,7 +216,7 @@ export const OptMagnifyButton = React.memo(
         const magnifyDecl: IconButtonDecl = {
             elemtype: "iconbutton",
             icon: <MagnifyIcon enabled={magnified} />,
-            title: magnified ? i18next.t("block.minimize") : i18next.t("block.magnify"),
+            title: magnified ? "还原窗口" : "放大窗口",
             click: toggleMagnify,
             disabled,
         };

@@ -24,6 +24,15 @@
         "ai:model": {
           "type": "string"
         },
+        "ai:thinkinglevel": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
         "ai:orgid": {
           "type": "string"
         },

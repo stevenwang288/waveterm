@@ -218,7 +218,7 @@ export const AIModeDropdown = memo(({ compatibilityMode = false }: AIModeDropdow
                     "group flex items-center gap-1.5 px-2 py-1 text-xs text-gray-300 hover:text-white rounded transition-colors cursor-pointer border border-gray-600/50",
                     isOpen ? "bg-zinc-700" : "bg-zinc-800/50 hover:bg-zinc-700"
                 )}
-                title={`AI Mode: ${displayName}`}
+                title={`工作模式：${displayName}`}
             >
                 <i className={cn(makeIconClass(displayIcon, false), "text-[10px]")}></i>
                 <span className={`text-[11px]`}>{displayName}</span>

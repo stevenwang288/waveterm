@@ -41,6 +41,8 @@ class SpeechRuntime {
     private apiAbort: AbortController | null = null;
     private isActive = false;
     private activeOwnerId: SpeechOwnerId = null;
+    private activePlaySignature: string | null = null;
+    private activePlayPromise: Promise<boolean> | null = null;
     private playSeq = 0;
     private listeners = new Set<SpeechSubscription>();
 
@@ -111,6 +113,18 @@ class SpeechRuntime {
         return playId === this.playSeq;
     }
 
+    private makePlaySignature(text: string, role: SpeechRole, ownerId?: string): string {
+        return `${this.normalizeOwnerId(ownerId) ?? ""}\u0000${role}\u0000${text.trim()}`;
+    }
+
+    private clearActivePlay(playId?: number): void {
+        if (playId != null && !this.isCurrentPlay(playId)) {
+            return;
+        }
+        this.activePlaySignature = null;
+        this.activePlayPromise = null;
+    }
+
     private cleanupApiAudioResources(): void {
         if (this.apiAudio) {
             this.apiAudio.onended = null;
@@ -142,6 +156,7 @@ class SpeechRuntime {
             this.apiAbort.abort();
             this.apiAbort = null;
         }
+        this.clearActivePlay();
         this.cleanupApiAudioResources();
         this.setActive(false);
     }
@@ -169,6 +184,7 @@ class SpeechRuntime {
     ): Promise<boolean> {
         const ownerId = this.normalizeOwnerId(options?.ownerId);
         const messageText = text.trim();
+        const playSignature = this.makePlaySignature(messageText, role, ownerId);
         if (!settings.enabled) {
             this.logSpeech({
                 event: "error",
@@ -192,9 +208,14 @@ class SpeechRuntime {
             return false;
         }
 
+        if (this.isActive && this.activePlaySignature === playSignature && this.activePlayPromise != null) {
+            return await this.activePlayPromise;
+        }
+
         this.stop();
         const playId = ++this.playSeq;
         this.setActive(true, ownerId);
+        this.activePlaySignature = playSignature;
 
         const roleVoice = getSpeechVoiceForRole(settings, role);
         const logBase: SpeechLogBase = {
@@ -278,6 +299,7 @@ class SpeechRuntime {
             }
             this.cleanupApiAudioResources();
             clearAbortController();
+            this.clearActivePlay(playId);
             this.setActive(false);
         };
 
@@ -411,13 +433,13 @@ class SpeechRuntime {
             }
         };
 
-        try {
+        const playPromise = (async () => {
             const started = await playChunk(0);
             if (!started && this.isCurrentPlay(playId)) {
                 finishPlayback();
             }
             return started;
-        } catch (error) {
+        })().catch((error) => {
             if (!this.isCurrentPlay(playId)) {
                 return false;
             }
@@ -435,7 +457,9 @@ class SpeechRuntime {
             }
             finishPlayback();
             return false;
-        }
+        });
+        this.activePlayPromise = playPromise;
+        return await playPromise;
     }
 }
 

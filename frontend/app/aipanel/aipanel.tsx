@@ -23,6 +23,7 @@ import { AIPanelHeader } from "./aipanelheader";
 import { AIPanelInput } from "./aipanelinput";
 import { AIPanelMessages } from "./aipanelmessages";
 import { AIRateLimitStrip } from "./airatelimitstrip";
+import { findLatestAssistantMessage, getAssistantMessageText, resolveAssistantAutoPlayTarget } from "./aipanel-autoplay";
 import { resolveSpeechSettings } from "./speechsettings";
 import { speechRuntime } from "./speechruntime";
 import { WaveUIMessage } from "./aitypes";
@@ -312,6 +313,7 @@ const AIPanelComponentInner = memo(() => {
     });
 
     model.registerUseChatData(sendMessage, setMessages, status, stop);
+    const isAIStreaming = status === "streaming" || status === "submitted";
 
     // console.log("AICHAT messages", messages);
     (window as any).aichatmessages = messages;
@@ -325,11 +327,7 @@ const AIPanelComponentInner = memo(() => {
             if (message.role !== "assistant") {
                 continue;
             }
-            const text = (message.parts ?? [])
-                .filter((part) => part.type === "text")
-                .map((part) => part.text ?? "")
-                .join("\n\n")
-                .trim();
+            const text = getAssistantMessageText(message);
             if (text) {
                 if (!latestAssistantText) {
                     latestAssistantText = text;
@@ -391,41 +389,24 @@ const AIPanelComponentInner = memo(() => {
     useEffect(() => {
         const prevStatus = prevStatusRef.current;
         prevStatusRef.current = status;
-        // Prevent speaking historical messages loaded during startup / initial chat restore.
-        // Autoplay should only happen for *new* assistant messages after the panel is ready.
-        if (!initialLoadDone) {
+        if (!speechSettings.enabled || !speechSettings.autoPlay) {
             return;
         }
-        // Some providers may skip "streaming" (ready -> submitted -> ready). We still want to autoplay
-        // when a new assistant message arrives and the final state is ready.
-        if (!speechSettings.enabled || !speechSettings.autoPlay || status !== "ready" || prevStatus === "ready") {
+        const autoPlayTarget = resolveAssistantAutoPlayTarget({
+            initialLoadDone,
+            status,
+            prevStatus,
+            isAIStreaming,
+            latestAssistantMessage: findLatestAssistantMessage(messages),
+            latestAssistantMessageText: globalStore.get(model.latestAssistantMessageText) ?? "",
+            lastAutoPlayedMessageId: globalStore.get(model.lastAutoPlayedMessageId),
+        });
+        if (autoPlayTarget == null) {
             return;
         }
-        let latestAssistantMessage: WaveUIMessage | null = null;
-        for (let idx = messages.length - 1; idx >= 0; idx--) {
-            if (messages[idx]?.role === "assistant") {
-                latestAssistantMessage = messages[idx];
-                break;
-            }
-        }
-        if (!latestAssistantMessage?.id) {
-            return;
-        }
-        const lastAutoPlayedMessageId = globalStore.get(model.lastAutoPlayedMessageId);
-        if (lastAutoPlayedMessageId === latestAssistantMessage.id) {
-            return;
-        }
-        const text = (latestAssistantMessage.parts ?? [])
-            .filter((part) => part.type === "text")
-            .map((part) => part.text ?? "")
-            .join("\n\n")
-            .trim();
-        if (!text) {
-            return;
-        }
-        globalStore.set(model.lastAutoPlayedMessageId, latestAssistantMessage.id);
+        globalStore.set(model.lastAutoPlayedMessageId, autoPlayTarget.messageId);
         void speechRuntime.play(
-            text,
+            autoPlayTarget.text,
             speechSettings,
             "assistant",
             (errorMessage) => {
@@ -433,7 +414,7 @@ const AIPanelComponentInner = memo(() => {
             },
             { ownerId: "aipanel" }
         );
-    }, [initialLoadDone, messages, model, speechSettings, status]);
+    }, [initialLoadDone, isAIStreaming, messages, model, speechSettings, status]);
 
     const handleKeyDown = (waveEvent: WaveKeyboardEvent): boolean => {
         if (checkKeyPressed(waveEvent, "Cmd:k")) {
@@ -444,8 +425,8 @@ const AIPanelComponentInner = memo(() => {
     };
 
     useEffect(() => {
-        globalStore.set(model.isAIStreaming, status === "streaming" || status === "submitted");
-    }, [status]);
+        globalStore.set(model.isAIStreaming, isAIStreaming);
+    }, [isAIStreaming, model]);
 
     useEffect(() => {
         const keyHandler = keydownWrapper(handleKeyDown);

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>迁移执行说明（给新 AI）</title>
+  <style>
+    :root {
+      --bg: #f5f1ea;
+      --surface: #fffdf9;
+      --surface-2: #f0e8db;
+      --line: #d9cdb9;
+      --text: #2b241c;
+      --muted: #6b5a49;
+      --accent: #0f766e;
+      --accent-2: #9a3412;
+      --warn: #b45309;
+      --danger: #b91c1c;
+      --shadow: 0 18px 40px rgba(43, 36, 28, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(15, 118, 110, 0.08), transparent 28%),
+        linear-gradient(180deg, #f8f4ee 0%, var(--bg) 100%);
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: "IBM Plex Mono", "Cascadia Code", monospace;
+      font-size: 0.92em;
+      background: rgba(15, 118, 110, 0.08);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    .page {
+      width: min(1240px, calc(100vw - 32px));
+      margin: 24px auto 48px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(154, 52, 18, 0.1));
+      border: 1px solid rgba(15, 118, 110, 0.2);
+      border-radius: 24px;
+      padding: 28px 30px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      line-height: 1.15;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 940px;
+    }
+
+    .top-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 22px 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h2,
+    .section h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .meta-list,
+    .step-list,
+    .note-list {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .section {
+      margin-top: 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .section p {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+
+    .callout {
+      margin-top: 16px;
+      background: var(--surface-2);
+      border-left: 4px solid var(--accent-2);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      overflow: hidden;
+      border-radius: 16px;
+    }
+
+    th,
+    td {
+      vertical-align: top;
+      text-align: left;
+      padding: 14px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      background: rgba(15, 118, 110, 0.08);
+      font-size: 14px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .tag.keep {
+      color: #065f46;
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .tag.remove {
+      color: #991b1b;
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .tag.warn {
+      color: #92400e;
+      background: rgba(245, 158, 11, 0.14);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .top-grid,
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .page {
+        width: min(100vw - 18px, 1240px);
+      }
+
+      .hero,
+      .section,
+      .card {
+        padding: 18px;
+      }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>迁移执行说明（给新 AI）</h1>
+      <p>这不是历史盘点，而是执行手册。它只回答五件事：按什么上游基线对照、先迁什么、哪些线绝对不要迁、开发版怎么隔离测试不顶掉正式版、安装包怎么打并自动复制到 <code>D:\DeSK</code>。</p>
+    </section>
+
+    <section class="top-grid">
+      <article class="card">
+        <h2>源码对照基线</h2>
+        <ol class="meta-list">
+          <li>官方上游：<code>upstream/main @ 96c2526f2aed0cf80c81aec11269e35b8cb956c8</code></li>
+          <li>上游最近确认提交：<code>2026-03-27 13:59:25 -0700 First Cut at a new ProcessViewer Widget (#3137)</code></li>
+          <li>本地头指针：<code>HEAD @ abe47d3ebf638b327bfc74ad6e11d9fb7fe18a3e</code></li>
+          <li>详细改造总表：<code>docs/源码改造盘点-20260328.md</code> / <code>.html</code></li>
+        </ol>
+      </article>
+      <article class="card">
+        <h2>迁移前先读</h2>
+        <ol class="meta-list">
+          <li><code>docs/源码改造盘点-20260328.md</code></li>
+          <li><code>docs/当前任务进展.md</code></li>
+          <li><code>frontend/wave.ts</code></li>
+          <li><code>pkg/wcore/layout.go</code></li>
+          <li><code>scripts/dev-instance.ps1</code></li>
+          <li><code>scripts/build-backend-windows.ps1</code></li>
+          <li><code>scripts/release-win.ps1</code></li>
+        </ol>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2>1. 绝对不要迁移的线</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 14%;">状态</th>
+            <th style="width: 24%;">功能线</th>
+            <th style="width: 32%;">迁移判断</th>
+            <th style="width: 30%;">关键代码</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag remove">不要迁</span></td>
+            <td><code>Goose / DeerFlow / promptoptimizer</code> 默认入口线</td>
+            <td>这是中途混入的启动污染，不是当前产品语义。默认启动必须恢复为官方 starter layout：<code>term + sysinfo + web + preview</code>。</td>
+            <td><code>frontend/wave.ts</code><br><code>pkg/wcore/layout.go</code></td>
+          </tr>
+          <tr>
+            <td><span class="tag remove">不要迁</span></td>
+            <td>Beta Browser / OpenVSCode 实验脚手架</td>
+            <td>历史上做过，但当前已经回收。不要把旧实验入口、seed、server 管理脚本重新搬回新版。</td>
+            <td><code>scripts/dev-instance.ps1</code><br><code>scripts/seed-dev-workbench.ps1</code>（已删）<br><code>scripts/openvscode-clean.ps1</code>（已删）</td>
+          </tr>
+          <tr>
+            <td><span class="tag remove">不要迁</span></td>
+            <td>右侧重复 <code>Codex resume</code> / git 侧栏 / 布局面板入口</td>
+            <td>这些入口当前已删或已收口。不要因为旧盘点里出现过，就又把 UI 入口整包带回去。</td>
+            <td><code>frontend/app/tab/tabbar.tsx</code><br><code>frontend/app/workspace/workspace.tsx</code><br><code>frontend/app/workspace/layouts-panel.tsx</code>（已删）</td>
+          </tr>
+          <tr>
+            <td><span class="tag remove">不要迁</span></td>
+            <td>“用指定 AI 打开”中的 <code>AMP</code> / <code>IFlow</code></td>
+            <td>菜单机制可以保留，但这两个旧项已经被明确删除，不应再出现于迁移后的用户菜单。</td>
+            <td><code>frontend/app/view/term/term-settings-menu.ts</code><br><code>frontend/util/previewutil.ts</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>2. 优先迁移的基础胶水</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 25%;">功能</th>
+            <th style="width: 35%;">价值</th>
+            <th style="width: 40%;">代码位置</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>终端路径持久化 / cwd 胶水</td>
+            <td>解决各种入口从当前终端继续打开时，路径掉回用户目录的问题。</td>
+            <td><code>frontend/util/launchcwd.ts</code><br><code>frontend/app/view/term/termwrap.ts</code><br><code>frontend/app/view/term/term-model.ts</code><br><code>frontend/app/view/term/term-settings-menu.ts</code><br><code>frontend/app/block/blockframe-header.tsx</code></td>
+          </tr>
+          <tr>
+            <td>收藏/工作区基础状态</td>
+            <td>是 workspace 和多个动作入口的底层状态胶水，不属于表层 UI。</td>
+            <td><code>frontend/app/store/favorites-model.ts</code></td>
+          </tr>
+          <tr>
+            <td>隔离开发实例能力</td>
+            <td>保证开发版和正式版不共用用户数据目录，是后续所有验证的前提。</td>
+            <td><code>scripts/dev-instance.ps1</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        新 AI 最容易犯的错，是先迁一堆表层入口，再发现路径继承、状态恢复、开发验证链根本没跟上。正确顺序正好相反：先迁胶水，再迁功能。
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>3. 当前仍保留的功能主线</h2>
+      <div class="grid-2">
+        <article class="card">
+          <h2>顶部 Claude / Codex 按钮</h2>
+          <p>当前最终语义：只在 <code>term</code> 终端块显示，点击后向当前终端注入启动命令，不是切工作台，也不是开新块。</p>
+          <ul class="note-list">
+            <li><code>frontend/app/block/blockframe-header.tsx</code></li>
+            <li><code>frontend/app/view/workbench/workbench-agent-layout.ts</code></li>
+          </ul>
+        </article>
+        <article class="card">
+          <h2>TTS / 自动播报</h2>
+          <p>若要迁移 TTS，不能漏掉“新鲜度判定”和“workspace 初始化期 fallback atom 护栏”两块，否则自动播报和白屏防护都会不稳定。</p>
+          <ul class="note-list">
+            <li><code>frontend/app/block/terminal-speech.ts</code></li>
+            <li><code>frontend/app/workspace/workspace.tsx</code></li>
+            <li><code>frontend/app/workspace/widgets.tsx</code></li>
+          </ul>
+        </article>
+        <article class="card">
+          <h2>PVE / Remote GUI</h2>
+          <p>这是有效主线，不是实验残留。迁移时请继续按源码走，不要误删成“历史包袱”。</p>
+          <ul class="note-list">
+            <li><code>emain/pve-auth.ts</code></li>
+            <li><code>frontend/app/workspace/servers-refresh.ts</code></li>
+            <li><code>frontend/app/view/pvevnc/pvevnc.tsx</code></li>
+            <li><code>schema/connections.json</code></li>
+          </ul>
+        </article>
+        <article class="card">
+          <h2>汉化 / i18n</h2>
+          <p>这不是纯文案工作，还包含加载路径和资源目录组织。迁移时需要同时核对主进程与前端加载链。</p>
+          <ul class="note-list">
+            <li><code>frontend/app/i18n.ts</code></li>
+            <li><code>emain/i18n-main.ts</code></li>
+            <li><code>locales/</code></li>
+            <li><code>public/locales/</code></li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>4. 开发版怎么启动，才不会顶掉正式版</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 24%;">主题</th>
+            <th style="width: 40%;">必须做法</th>
+            <th style="width: 36%;">原因 / 证据</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>标准入口</td>
+            <td><code>npm run dev:linked</code><br><code>npm run dev:linked:status</code><br><code>npm run dev:linked:stop</code></td>
+            <td>仓库规则要求前端 / Electron / 终端交互改动走隔离实例验证，不要把正式安装版当测试环境。</td>
+          </tr>
+          <tr>
+            <td>首启 / 冷状态验证</td>
+            <td><code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev-instance.ps1 -Action start -FreshState</code></td>
+            <td>只有这种情况才该 fresh。不要把 fresh 变成默认日常开发行为。</td>
+          </tr>
+          <tr>
+            <td>为什么不会顶掉正式版</td>
+            <td>开发版状态写入：<br><code>.tmp/dev-linked/current/config</code><br><code>.tmp/dev-linked/current/data</code><br><code>.tmp/dev-linked/current/electron-userdata</code><br>并显式设置：<br><code>WAVETERM_CONFIG_HOME</code><br><code>WAVETERM_DATA_HOME</code><br><code>WAVETERM_ELECTRON_USER_DATA_HOME</code></td>
+            <td>隔离开发版和正式安装版不共享同一套用户数据目录。真正危险的是绕开脚本自己启动、或一次开多个实例。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>5. 开发版怎么测试</h2>
+      <ol class="step-list">
+        <li>改了前端后先执行 <code>npm run build:dev</code>。</li>
+        <li>只要碰了 Go / starter layout / schema / backend 启动链，再执行 <code>npm run build:backend:windows</code>。</li>
+        <li>停旧实例：<code>npm run dev:linked:stop</code>。</li>
+        <li>需要冷状态验证时，用 <code>scripts/dev-instance.ps1 -Action start -FreshState</code>。</li>
+        <li>检查状态：<code>npm run dev:linked:status</code>。</li>
+        <li>检查 <code>dev.log</code> 至少出现 <code>Init Bare</code>、<code>Init Wave imported App</code>、<code>Wave First Render Done</code>。</li>
+        <li>最终必须看真实窗口，而不是只看日志。</li>
+      </ol>
+      <div class="callout">
+        最大坑点：<code>npm run build:dev</code> 不会重打 Go 后端 <code>wavesrv</code>。如果你动过 <code>pkg/**</code> 或 starter layout，却没跑 <code>npm run build:backend:windows</code>，最后看到的很可能还是旧界面。
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>6. 安装包应该怎么打</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 22%;">主题</th>
+            <th style="width: 38%;">规则</th>
+            <th style="width: 40%;">结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>标准打包入口</td>
+            <td><code>npm run release:win</code><br>dirty 工作树才用 <code>npm run release:win:allow-dirty</code></td>
+            <td><code>scripts/release-win.ps1</code> 会先做构建/打包，再处理安装包复制。</td>
+          </tr>
+          <tr>
+            <td>脚本默认桌面目录</td>
+            <td><code>DeskDir = "D:\\DeSK"</code></td>
+            <td>安装包会自动复制一份到 <code>D:\DeSK</code>，不需要另写复制脚本。</td>
+          </tr>
+          <tr>
+            <td>产物路径</td>
+            <td>主包：<code>make/&lt;version&gt;/WAVE-win32-x64-&lt;version&gt;.exe</code></td>
+            <td>桌面副本：<code>D:\DeSK\WAVE-win32-x64-&lt;version&gt;-fix-&lt;sha&gt;.exe</code></td>
+          </tr>
+          <tr>
+            <td>打包前顺序</td>
+            <td>如果碰了 Go / backend / schema：<br><code>npm run build:prod</code><br><code>npm run build:backend:windows</code><br><code>npm run release:win</code></td>
+            <td>避免前端是新的、安装包里的 <code>wavesrv</code> 还是旧的，最终产出半新半旧安装包。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>7. 为什么之前总容易启动空白、启动错、或者没有内容</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 24%;">现象</th>
+            <th style="width: 36%;">真实根因</th>
+            <th style="width: 40%;">关键文件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>默认启动总跑进 <code>Goose / DeerFlow</code></td>
+            <td>不是一个点错，而是 <code>frontend/wave.ts</code> 和 <code>pkg/wcore/layout.go</code> 双点一起污染。</td>
+            <td><code>frontend/wave.ts</code><br><code>pkg/wcore/layout.go</code></td>
+          </tr>
+          <tr>
+            <td>窗口壳起来了，但没有内容</td>
+            <td>顶层依赖过重，或 modal registry 首屏静态导入，把 <code>builder / onboarding / monaco</code> 提前拉进启动主链。</td>
+            <td><code>frontend/wave.ts</code><br><code>frontend/app/modals/modalregistry.tsx</code><br><code>frontend/app/modals/modalsrenderer.tsx</code></td>
+          </tr>
+          <tr>
+            <td>源码改了，界面还是旧的</td>
+            <td>只跑了前端构建，没重打 Go 后端 <code>wavesrv</code>。</td>
+            <td><code>scripts/build-backend-windows.ps1</code><br><code>dist/bin/wavesrv.x64.exe</code></td>
+          </tr>
+          <tr>
+            <td>不报错了，但一直“加载中...”</td>
+            <td>fallback atom 把初始化期 crash 护住了，也把真正的 workspace hydration 问题藏起来了。</td>
+            <td><code>frontend/app/workspace/workspace.tsx</code><br><code>frontend/app/workspace/widgets.tsx</code><br><code>frontend/app/workspace/favorites.tsx</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>8. 推荐执行顺序</h2>
+      <ol class="step-list">
+        <li>先拉最新上游并锁定基线 commit。</li>
+        <li>先读总盘点、当前任务进展、本文。</li>
+        <li>先删不要迁的线：<code>Goose / DeerFlow / promptoptimizer</code> 默认入口线、Beta Browser / OpenVSCode 实验线。</li>
+        <li>再迁基础胶水：<code>launchcwd.ts</code>、<code>favorites-model.ts</code>、<code>term-settings-menu.ts</code>、<code>dev-instance.ps1</code>。</li>
+        <li>再迁保留功能：顶部 Claude / Codex、TTS、PVE / Remote GUI、汉化。</li>
+        <li>前端后跑 <code>npm run build:dev</code>，Go/backend 后跑 <code>npm run build:backend:windows</code>。</li>
+        <li>用隔离实例做真实验证。</li>
+        <li>最后再打包：<code>npm run release:win</code>。</li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <h2>9. 最低交付检查清单</h2>
+      <ol class="step-list">
+        <li>新版默认启动不再进入 <code>Goose / DeerFlow / promptoptimizer</code>。</li>
+        <li>隔离开发版能正常启动，且不污染正式版数据。</li>
+        <li>只保留一个隔离开发实例。</li>
+        <li>涉及 Go 后端时，已执行 <code>npm run build:backend:windows</code>。</li>
+        <li>真实窗口已验证，不是只看日志。</li>
+        <li>主安装包存在于 <code>make/&lt;version&gt;/WAVE-win32-x64-&lt;version&gt;.exe</code>。</li>
+        <li>桌面副本存在于 <code>D:\DeSK\WAVE-win32-x64-&lt;version&gt;-fix-&lt;sha&gt;.exe</code>。</li>
+        <li>控制台已输出最终 <code>sha256</code>。</li>
+      </ol>
+    </section>
+
+    <div class="footer">
+      这份说明书服务于“把当前改造迁到新版”这件事。功能全盘点继续看 <code>docs/源码改造盘点-20260328.md</code>，执行顺序和坑点优先按本页。
+    </div>
+  </main>
+</body>
+</html>

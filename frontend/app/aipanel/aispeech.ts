@@ -1,9 +1,12 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-const MaxSpeechInputLength = 4096;
+const MaxSpeechInputLength = 1600;
 const MinSpeechRate = 0.5;
 const MaxSpeechRate = 2;
+// Built-in Edge TTS returns the full mp3 before the renderer can begin playback.
+// A short timeout misclassifies slower synth work as a dead main process and causes duplicate retries.
+export const MainProcessSpeechRequestTimeoutMs = 12000;
 
 export const DefaultOpenAICompatibleSpeechEndpoint = "https://api.openai.com/v1/audio/speech";
 export const DefaultOpenAICompatibleSpeechModel = "gpt-4o-mini-tts";
@@ -191,12 +194,66 @@ type MainProcessSpeechResponse = {
     bodyBase64: string;
 };
 
+type MainProcessSpeechRequest = {
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+};
+
 function hasMainProcessSpeechRequestApi(): boolean {
     if (typeof window === "undefined") {
         return false;
     }
     const api = (window as any).api;
     return typeof api?.speechRequest === "function";
+}
+
+function invokeMainProcessSpeechRequest(
+    req: MainProcessSpeechRequest,
+    signal?: AbortSignal
+): Promise<MainProcessSpeechResponse> {
+    if (signal?.aborted) {
+        return Promise.reject(new Error("Speech request aborted."));
+    }
+    const api = (window as any).api;
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const timeoutId = globalThis.setTimeout(() => {
+            finishReject(new Error("语音主进程无响应，请检查当前开发版窗口是否仍在运行。"));
+        }, MainProcessSpeechRequestTimeoutMs);
+
+        const cleanup = () => {
+            globalThis.clearTimeout(timeoutId);
+            signal?.removeEventListener("abort", handleAbort);
+        };
+
+        const finishResolve = (value: MainProcessSpeechResponse) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            resolve(value);
+        };
+
+        const finishReject = (error: unknown) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            reject(error instanceof Error ? error : new Error(String(error)));
+        };
+
+        const handleAbort = () => {
+            finishReject(new Error("Speech request aborted."));
+        };
+
+        signal?.addEventListener("abort", handleAbort, { once: true });
+
+        Promise.resolve(api.speechRequest(req)).then(finishResolve).catch(finishReject);
+    });
 }
 
 function decodeBase64ToBytes(base64: string): Uint8Array {
@@ -282,12 +339,12 @@ export async function requestOpenAICompatibleSpeechAudio(
     }
 
     if (hasMainProcessSpeechRequestApi()) {
-        const response = (await (window as any).api.speechRequest({
+        const response = await invokeMainProcessSpeechRequest({
             url: config.endpoint,
             method: "POST",
             headers,
             body: JSON.stringify(payload),
-        })) as MainProcessSpeechResponse;
+        }, signal);
         if (signal?.aborted) {
             throw new Error("Speech request aborted.");
         }

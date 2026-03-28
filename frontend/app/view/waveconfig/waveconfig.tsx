@@ -4,15 +4,18 @@
 import { Tooltip } from "@/app/element/tooltip";
 import { globalStore } from "@/app/store/jotaiStore";
 import { tryReinjectKey } from "@/app/store/keymodel";
-import { CodeEditor } from "@/app/view/codeeditor/codeeditor";
 import type { ConfigFile, WaveConfigViewModel } from "@/app/view/waveconfig/waveconfig-model";
 import { adaptFromReactOrNativeKeyEvent, checkKeyPressed, keydownWrapper } from "@/util/keyutil";
 import { cn } from "@/util/util";
 import { useAtom, useAtomValue } from "jotai";
 import type * as MonacoTypes from "monaco-editor";
-import { memo, useCallback, useEffect, useRef } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useRef } from "react";
 import { debounce } from "throttle-debounce";
 import { useTranslation } from "react-i18next";
+
+const CodeEditor = lazy(() =>
+    import("@/app/view/codeeditor/codeeditor").then((module) => ({ default: module.CodeEditor }))
+);
 
 interface ConfigSidebarProps {
     model: WaveConfigViewModel;
@@ -272,15 +275,23 @@ const WaveConfigView = memo(({ blockId, model }: ViewComponentProps<WaveConfigVi
                                     return <VisualComponent model={model} />;
                                 })()
                             ) : (
-                                <CodeEditor
-                                    blockId={blockId}
-                                    text={fileContent}
-                                    fileName={`WAVECONFIGPATH/${selectedFile.path}`}
-                                    language={selectedFile.language}
-                                    readonly={false}
-                                    onChange={handleContentChange}
-                                    onMount={handleEditorMount}
-                                />
+                                <Suspense
+                                    fallback={
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            Loading editor...
+                                        </div>
+                                    }
+                                >
+                                    <CodeEditor
+                                        blockId={blockId}
+                                        text={fileContent}
+                                        fileName={`WAVECONFIGPATH/${selectedFile.path}`}
+                                        language={selectedFile.language}
+                                        readonly={false}
+                                        onChange={handleContentChange}
+                                        onMount={handleEditorMount}
+                                    />
+                                </Suspense>
                             )}
                         </div>
                     </>

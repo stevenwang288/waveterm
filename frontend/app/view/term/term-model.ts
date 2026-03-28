@@ -1,7 +1,6 @@
 ﻿// Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
 import { extractTerminalParagraphByLine, getLatestTerminalFormalReplyText } from "@/app/block/terminal-speech";
 import i18next from "@/app/i18n";
@@ -13,12 +12,13 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { FavoriteItem, FavoritesModel } from "@/app/store/favorites-model";
 import { makeFeBlockRouteId } from "@/app/store/wshrouter";
 import { DefaultRouter, TabRpcClient } from "@/app/store/wshrpcutil";
+import { buildSharedTermContextMenuItems, buildSharedTermSettingsMenuItems } from "@/app/view/term/term-settings-menu";
 import { TerminalView } from "@/app/view/term/term";
 import { TermWshClient } from "@/app/view/term/term-wsh";
 import { VDomModel } from "@/app/view/vdom/vdom-model";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { openCliLayoutInNewTab } from "@/util/clilayout";
-import { getTerminalInheritableCwd } from "@/util/launchcwd";
+import { resolveTerminalActionCwd } from "@/util/launchcwd";
 import {
     atoms,
     createBlock,
@@ -65,8 +65,6 @@ const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
     { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
     { label: "Claude", command: "claude" },
     { label: "Gemini", command: "gemini" },
-    { label: "Amp", command: "amp" },
-    { label: "IFlow", command: "iflow" },
     { label: "OpenCode", command: "opencode" },
 ];
 
@@ -81,6 +79,10 @@ type PveMachineInfo = {
     sshHost?: string;
     ipHints?: string[];
 };
+
+function resolveCurrentTerminalActionPath(blockData?: Block | null, liveDisplayCwd?: string | null): string {
+    return normalizePath(resolveTerminalActionCwd(blockData?.meta, liveDisplayCwd)) || "~";
+}
 
 function normalizeHostCandidate(value: string): string {
     return String(value ?? "").trim().toLowerCase();
@@ -179,30 +181,6 @@ function canAttemptRemoteGui(connName: string, connConfig?: ConnKeywords | null)
 }
 
 const remoteGuiDiscoveryPromises = new Map<string, Promise<void>>();
-
-const BUILTIN_TERM_THEME_DISPLAY_NAME_TO_I18N_KEY: Record<string, string> = {
-    "Default Dark": "term.themeNames.defaultDark",
-    "One Dark Pro": "term.themeNames.oneDarkPro",
-    Dracula: "term.themeNames.dracula",
-    Monokai: "term.themeNames.monokai",
-    Campbell: "term.themeNames.campbell",
-    "Warm Yellow": "term.themeNames.warmYellow",
-    "Rose Pine": "term.themeNames.rosePine",
-};
-
-function translateBuiltinTermThemeDisplayName(displayName: string): string {
-    const key = BUILTIN_TERM_THEME_DISPLAY_NAME_TO_I18N_KEY[displayName];
-    if (!key) {
-        return displayName;
-    }
-    const translated = i18next.t(key);
-    return translated === key ? displayName : translated;
-}
-
-function getTermThemeMenuLabel(themeName: string, theme: Record<string, any> | undefined): string {
-    const displayName = theme?.["display:name"] ?? themeName;
-    return translateBuiltinTermThemeDisplayName(displayName);
-}
 
 type CliLayoutPreset = {
     key: string;
@@ -1345,7 +1323,7 @@ export class TermViewModel implements ViewModel {
         return true;
     }
 
-    setTerminalTheme(themeName: string) {
+    setTerminalTheme(themeName: string | null) {
         RpcApi.SetMetaCommand(TabRpcClient, {
             oref: WOS.makeORef("block", this.blockId),
             meta: { "term:theme": themeName },
@@ -1447,7 +1425,7 @@ export class TermViewModel implements ViewModel {
         }
 
         const blockData = globalStore.get(this.blockAtom);
-        const currentPath = normalizePath(getTerminalInheritableCwd(blockData?.meta)) || "~";
+        const currentPath = resolveCurrentTerminalActionPath(blockData, this.termRef.current?.getDisplayCwd());
         const currentConn = normalizeConnectionName(blockData?.meta?.connection);
         const cliLayoutConfigPath = `${getApi().getConfigDir()}/cli-layout-presets.json`;
 
@@ -1734,12 +1712,12 @@ export class TermViewModel implements ViewModel {
     }
 
     getContextMenuItems(contextMenuOpts?: { clientY?: number }): ContextMenuItem[] {
-        const menu: ContextMenuItem[] = [];
         const contextMenuClientY = contextMenuOpts?.clientY;
         const hasSelection = this.termRef.current?.terminal?.hasSelection();
         const selection = hasSelection ? this.termRef.current?.terminal.getSelection() : null;
+        const clipboardItems: ContextMenuItem[] = [];
 
-        menu.push({
+        clipboardItems.push({
             label: i18next.t("term.copySmartParagraph"),
             click: () => {
                 fireAndForget(async () => {
@@ -1759,7 +1737,7 @@ export class TermViewModel implements ViewModel {
             },
         });
 
-        menu.push({
+        clipboardItems.push({
             label: i18next.t("term.copyPreciseSelection"),
             enabled: !!hasSelection,
             click: () => {
@@ -1771,23 +1749,25 @@ export class TermViewModel implements ViewModel {
             },
         });
 
+        const selectionItems: ContextMenuItem[] = [];
         if (hasSelection) {
-            menu.push({ type: "separator" });
-            menu.push({
+            selectionItems.push({
                 label: i18next.t("term.sendToWaveAI"),
                 click: () => {
                     if (selection) {
-                        const aiModel = WaveAIModel.getInstance();
-                        aiModel.appendText(selection, true, { scrollToBottom: true });
-                        const layoutModel = WorkspaceLayoutModel.getInstance();
-                        if (!layoutModel.getAIPanelVisible()) {
-                            layoutModel.setAIPanelVisible(true);
-                        }
-                        aiModel.focusInput();
+                        void import("@/app/aipanel/waveai-model").then(({ WaveAIModel }) => {
+                            const aiModel = WaveAIModel.getInstance();
+                            aiModel.appendText(selection, true, { scrollToBottom: true });
+                            const layoutModel = WorkspaceLayoutModel.getInstance();
+                            if (!layoutModel.getAIPanelVisible()) {
+                                layoutModel.setAIPanelVisible(true);
+                            }
+                            aiModel.focusInput();
+                        });
                     }
                 },
             });
-            menu.push({
+            selectionItems.push({
                 label: i18next.t("term.translateSelection"),
                 click: () => {
                     if (!selection) {
@@ -1811,8 +1791,8 @@ export class TermViewModel implements ViewModel {
             }
 
             if (selectionURL) {
-                menu.push({ type: "separator" });
-                menu.push({
+                selectionItems.push({ type: "separator" });
+                selectionItems.push({
                     label: i18next.t("term.openUrl", { host: selectionURL.hostname }),
                     click: () => {
                         createBlock({
@@ -1823,24 +1803,22 @@ export class TermViewModel implements ViewModel {
                         });
                     },
                 });
-                menu.push({
+                selectionItems.push({
                     label: i18next.t("term.openUrlExternal"),
                     click: () => {
                         getApi().openExternal(selectionURL.toString());
                     },
                 });
             }
-            menu.push({ type: "separator" });
-        } else {
-            menu.push({ type: "separator" });
         }
 
         const favoritesModel = FavoritesModel.getInstance();
         const blockData = globalStore.get(this.blockAtom);
-        const currentPath = getTerminalInheritableCwd(blockData?.meta) || "~";
+        const currentPath = resolveCurrentTerminalActionPath(blockData, this.termRef.current?.getDisplayCwd());
         const connection = blockData?.meta?.connection;
+        const workspaceItems: ContextMenuItem[] = [];
 
-        menu.push({
+        workspaceItems.push({
             label: i18next.t("favorites.add"),
             click: () => {
                 const currentAutoCmd =
@@ -1856,12 +1834,12 @@ export class TermViewModel implements ViewModel {
             },
         });
 
-        menu.push({
+        workspaceItems.push({
             label: i18next.t("favorites.title"),
             submenu: this.buildFavoritesOpenMenuItems(favoritesModel.getItems(), connection),
         });
 
-        menu.push({
+        workspaceItems.push({
             label: i18next.t("block.addToLayout"),
             submenu: CLI_LAYOUT_PRESETS.map((preset) => ({
                 label: getCliLayoutPresetLabel(preset),
@@ -1894,248 +1872,50 @@ export class TermViewModel implements ViewModel {
             },
         }));
 
-        menu.push({
+        workspaceItems.push({
             label: i18next.t("preview.openWithAi"),
             submenu: openAiSubmenu,
         });
 
-        menu.push({ type: "separator" });
-
-        menu.push({
+        const editItems: ContextMenuItem[] = [
+            {
             label: i18next.t("ctx.paste"),
             click: () => {
                 getApi().nativePaste();
             },
-        });
-
-        menu.push({ type: "separator" });
+            },
+        ];
 
         const magnified = globalStore.get(this.nodeModel.isMagnified);
-        menu.push({
-            label: magnified ? i18next.t("block.unMagnifyBlock") : i18next.t("block.magnifyBlock"),
-            click: () => {
-                this.nodeModel.toggleMagnify();
-            },
-        });
-        menu.push({
-            label: i18next.t("term.reflowHistory"),
-            click: () => {
-                fireAndForget(() => this.termRef.current?.reflowHistoryToCurrentWidth("context-menu"));
-            },
-        });
-
-        menu.push({ type: "separator" });
-
         const settingsItems = this.getSettingsMenuItems();
-        menu.push(...settingsItems);
+        const blockItems: ContextMenuItem[] = [
+            {
+                label: magnified ? i18next.t("block.unMagnifyBlock") : i18next.t("block.magnifyBlock"),
+                click: () => {
+                    this.nodeModel.toggleMagnify();
+                },
+            },
+            {
+                label: i18next.t("term.reflowHistory"),
+                click: () => {
+                    fireAndForget(() => this.termRef.current?.reflowHistoryToCurrentWidth("context-menu"));
+                },
+            },
+        ];
 
-        return menu;
+        return buildSharedTermContextMenuItems({
+            clipboardItems,
+            selectionItems,
+            workspaceItems,
+            editItems,
+            blockItems,
+            settingsItems,
+        });
     }
 
     getSettingsMenuItems(): ContextMenuItem[] {
-        const fullConfig = globalStore.get(atoms.fullConfigAtom);
-        const termThemes = fullConfig?.termthemes ?? {};
-        const termThemeKeys = Object.keys(termThemes);
-        const curThemeName = globalStore.get(getBlockMetaKeyAtom(this.blockId, "term:theme"));
-        const defaultFontSize = globalStore.get(getSettingsKeyAtom("term:fontsize")) ?? 12;
         const defaultAllowBracketedPaste = globalStore.get(getSettingsKeyAtom("term:allowbracketedpaste")) ?? true;
-        const transparencyMeta = globalStore.get(getBlockMetaKeyAtom(this.blockId, "term:transparency"));
         const blockData = globalStore.get(this.blockAtom);
-        const overrideFontSize = blockData?.meta?.["term:fontsize"];
-
-        termThemeKeys.sort((a, b) => {
-            return (termThemes[a]["display:order"] ?? 0) - (termThemes[b]["display:order"] ?? 0);
-        });
-        const defaultTermBlockDef: BlockDef = {
-            meta: {
-                view: "term",
-                controller: "shell",
-            },
-        };
-
-        const cwd = getTerminalInheritableCwd(blockData?.meta);
-        const canInheritCwd = !isBlank(cwd);
-        const canShowFileBrowser = canInheritCwd;
-
-        const fullMenu: ContextMenuItem[] = [];
-        fullMenu.push({
-            label: i18next.t("term.splitHorizontally"),
-            click: () => {
-                const blockData = globalStore.get(this.blockAtom);
-                const blockDef: BlockDef = {
-                    meta: blockData?.meta || defaultTermBlockDef.meta,
-                };
-                createBlockSplitHorizontally(blockDef, this.blockId, "after");
-            },
-        });
-        fullMenu.push({
-            label: i18next.t("term.splitVertically"),
-            click: () => {
-                const blockData = globalStore.get(this.blockAtom);
-                const blockDef: BlockDef = {
-                    meta: blockData?.meta || defaultTermBlockDef.meta,
-                };
-                createBlockSplitVertically(blockDef, this.blockId, "after");
-            },
-        });
-        fullMenu.push({
-            label: i18next.t("term.newBlockInheritCwd"),
-            enabled: canInheritCwd,
-            click: () => {
-                const blockData = globalStore.get(this.blockAtom);
-                const connection = blockData?.meta?.connection;
-                const meta: Record<string, any> = {
-                    ...defaultTermBlockDef.meta,
-                    "cmd:cwd": cwd,
-                };
-                if (connection) {
-                    meta.connection = connection;
-                }
-                createBlock({ meta });
-            },
-        });
-        fullMenu.push({ type: "separator" });
-
-        if (canShowFileBrowser) {
-            fullMenu.push({
-                label: i18next.t("term.fileBrowser"),
-                click: () => {
-                    const blockData = globalStore.get(this.blockAtom);
-                    const connection = blockData?.meta?.connection;
-                    const cwd = getTerminalInheritableCwd(blockData?.meta);
-                    const meta: Record<string, any> = {
-                        view: "preview",
-                        file: cwd,
-                    };
-                    if (connection) {
-                        meta.connection = connection;
-                    }
-                    const blockDef: BlockDef = { meta };
-                    createBlock(blockDef);
-                },
-            });
-            fullMenu.push({ type: "separator" });
-        }
-
-        fullMenu.push({
-            label: "Save Session As...",
-            click: () => {
-                if (this.termRef.current) {
-                    const content = this.termRef.current.getScrollbackContent();
-                    if (content) {
-                        fireAndForget(async () => {
-                            try {
-                                const success = await getApi().saveTextFile("session.log", content);
-                                if (!success) {
-                                    console.log("Save scrollback cancelled by user");
-                                }
-                            } catch (error) {
-                                console.error("Failed to save scrollback:", error);
-                                const errorMessage = error?.message || "An unknown error occurred";
-                                modalsModel.pushModal("MessageModal", {
-                                    children: `Failed to save session scrollback: ${errorMessage}`,
-                                });
-                            }
-                        });
-                    } else {
-                        modalsModel.pushModal("MessageModal", {
-                            children: "No scrollback content to save.",
-                        });
-                    }
-                }
-            },
-        });
-        fullMenu.push({ type: "separator" });
-
-        const submenu: ContextMenuItem[] = termThemeKeys.map((themeName) => {
-            const theme = termThemes[themeName];
-            return {
-                label: getTermThemeMenuLabel(themeName, theme),
-                type: "checkbox",
-                checked: curThemeName == themeName,
-                click: () => this.setTerminalTheme(themeName),
-            };
-        });
-        submenu.unshift({
-            label: i18next.t("common.default"),
-            type: "checkbox",
-            checked: curThemeName == null,
-            click: () => this.setTerminalTheme(null),
-        });
-        const transparencySubMenu: ContextMenuItem[] = [];
-        transparencySubMenu.push({
-            label: i18next.t("common.default"),
-            type: "checkbox",
-            checked: transparencyMeta == null,
-            click: () => {
-                RpcApi.SetMetaCommand(TabRpcClient, {
-                    oref: WOS.makeORef("block", this.blockId),
-                    meta: { "term:transparency": null },
-                });
-            },
-        });
-        transparencySubMenu.push({
-            label: i18next.t("term.transparentBackground"),
-            type: "checkbox",
-            checked: transparencyMeta == 0.5,
-            click: () => {
-                RpcApi.SetMetaCommand(TabRpcClient, {
-                    oref: WOS.makeORef("block", this.blockId),
-                    meta: { "term:transparency": 0.5 },
-                });
-            },
-        });
-        transparencySubMenu.push({
-            label: i18next.t("term.noTransparency"),
-            type: "checkbox",
-            checked: transparencyMeta == 0,
-            click: () => {
-                RpcApi.SetMetaCommand(TabRpcClient, {
-                    oref: WOS.makeORef("block", this.blockId),
-                    meta: { "term:transparency": 0 },
-                });
-            },
-        });
-
-        const fontSizeSubMenu: ContextMenuItem[] = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map(
-            (fontSize: number) => {
-                return {
-                    label: fontSize.toString() + "px",
-                    type: "checkbox",
-                    checked: overrideFontSize == fontSize,
-                    click: () => {
-                        RpcApi.SetMetaCommand(TabRpcClient, {
-                            oref: WOS.makeORef("block", this.blockId),
-                            meta: { "term:fontsize": fontSize },
-                        });
-                    },
-                };
-            }
-        );
-        fontSizeSubMenu.unshift({
-            label: i18next.t("common.defaultWithValue", { value: `${defaultFontSize}px` }),
-            type: "checkbox",
-            checked: overrideFontSize == null,
-            click: () => {
-                RpcApi.SetMetaCommand(TabRpcClient, {
-                    oref: WOS.makeORef("block", this.blockId),
-                    meta: { "term:fontsize": null },
-                });
-            },
-        });
-        fullMenu.push({
-            label: i18next.t("term.themes"),
-            submenu: submenu,
-        });
-        fullMenu.push({
-            label: i18next.t("term.fontSize"),
-            submenu: fontSizeSubMenu,
-        });
-        fullMenu.push({
-            label: i18next.t("term.transparency"),
-            submenu: transparencySubMenu,
-        });
-        fullMenu.push({ type: "separator" });
         const advancedSubmenu: ContextMenuItem[] = [];
 
         const defaultBellNotify = globalStore.get(getSettingsKeyAtom("term:bellnotify")) ?? true;
@@ -2334,21 +2114,82 @@ export class TermViewModel implements ViewModel {
                 ],
             });
         }
-
-        fullMenu.push({
-            label: i18next.t("term.advanced"),
-            submenu: advancedSubmenu,
-        });
-        if (blockData?.meta?.["term:vdomtoolbarblockid"]) {
-            fullMenu.push({ type: "separator" });
-            fullMenu.push({
-                label: i18next.t("term.closeToolbar"),
-                click: () => {
-                    RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: blockData.meta["term:vdomtoolbarblockid"] });
+        return buildSharedTermSettingsMenuItems({
+            blockId: this.blockId,
+            blockData,
+            liveDisplayCwd: this.termRef.current?.getDisplayCwd(),
+            splitItems: [
+                {
+                    label: i18next.t("term.splitHorizontally"),
+                    click: () => {
+                        const currentBlockData = globalStore.get(this.blockAtom);
+                        const blockDef: BlockDef = {
+                            meta: currentBlockData?.meta || {
+                                view: "term",
+                                controller: "shell",
+                            },
+                        };
+                        createBlockSplitHorizontally(blockDef, this.blockId, "after");
+                    },
                 },
-            });
-        }
-        return fullMenu;
+                {
+                    label: i18next.t("term.splitVertically"),
+                    click: () => {
+                        const currentBlockData = globalStore.get(this.blockAtom);
+                        const blockDef: BlockDef = {
+                            meta: currentBlockData?.meta || {
+                                view: "term",
+                                controller: "shell",
+                            },
+                        };
+                        createBlockSplitVertically(blockDef, this.blockId, "after");
+                    },
+                },
+            ],
+            includeNewBlockInheritCwd: true,
+            includeFileBrowser: true,
+            saveItem: {
+                label: "Save Session As...",
+                click: () => {
+                    if (this.termRef.current) {
+                        const content = this.termRef.current.getScrollbackContent();
+                        if (content) {
+                            fireAndForget(async () => {
+                                try {
+                                    const success = await getApi().saveTextFile("session.log", content);
+                                    if (!success) {
+                                        console.log("Save scrollback cancelled by user");
+                                    }
+                                } catch (error) {
+                                    console.error("Failed to save scrollback:", error);
+                                    const errorMessage = error?.message || "An unknown error occurred";
+                                    modalsModel.pushModal("MessageModal", {
+                                        children: `Failed to save session scrollback: ${errorMessage}`,
+                                    });
+                                }
+                            });
+                        } else {
+                            modalsModel.pushModal("MessageModal", {
+                                children: "No scrollback content to save.",
+                            });
+                        }
+                    }
+                },
+            },
+            includeFontSize: true,
+            setTheme: (themeName) => this.setTerminalTheme(themeName),
+            advancedItems: advancedSubmenu,
+            closeToolbarItem: blockData?.meta?.["term:vdomtoolbarblockid"]
+                ? {
+                      label: i18next.t("term.closeToolbar"),
+                      click: () => {
+                          RpcApi.DeleteSubBlockCommand(TabRpcClient, {
+                              blockid: blockData.meta["term:vdomtoolbarblockid"],
+                          });
+                      },
+                  }
+                : null,
+        });
     }
 }
 

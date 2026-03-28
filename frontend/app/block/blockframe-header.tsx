@@ -2,8 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { speechRuntime } from "@/app/aipanel/speechruntime";
-import { resolveSpeechSettings } from "@/app/aipanel/speechsettings";
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
+import { resolveSpeechSettings, type ResolvedSpeechSettings } from "@/app/aipanel/speechsettings";
+import {
+    waveAICurrentModeAtom,
+    waveAIErrorAtom,
+    waveAILatestAssistantMessageTextAtom,
+    waveAIStreamingAtom,
+} from "@/app/aipanel/waveai-shared";
 import {
     blockViewToIcon,
     blockViewToName,
@@ -16,11 +21,19 @@ import {
     canRunCodexResume,
     runCodexResumeSequence,
     shouldShowCodexResumeButton,
+    waitForCodexResumeToBecomeInteractive,
 } from "@/app/block/codex-resume";
 import {
+    getTerminalFormalReplyRefreshDelayMs,
+    getTerminalSpeechAutoPlayBaselineTs,
+    getTerminalSpeechCompletionAnchor,
     loadLatestTerminalFormalReplyPayload,
+    loadLatestWorkbenchFormalReplyPayload,
     playTerminalFormalReplyPayload,
+    shouldAutoPlayTerminalFormalReply,
+    type TerminalSpeechCompletionAnchor,
     type TerminalFormalReplyPayload,
+    type TerminalFormalReplySourceMode,
 } from "@/app/block/terminal-speech";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import {
@@ -35,10 +48,15 @@ import {
 } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { uxCloseBlock } from "@/app/store/keymodel";
+import { getFileSubject } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import {
+    launchAgentCommandInCurrentTerminalBlock,
+} from "@/app/view/workbench/workbench-agent-layout";
+import { getTraditionalView, toggleWorkbenchMode } from "@/app/view/workbench/workbench-mode";
 import { IconButton } from "@/element/iconbutton";
-import { getTerminalDisplayCwd, getTerminalInheritableCwd } from "@/util/launchcwd";
+import { getTerminalDisplayCwd, resolveTerminalActionCwd } from "@/util/launchcwd";
 import { NodeModel } from "@/layout/index";
 import * as util from "@/util/util";
 import { cn } from "@/util/util";
@@ -88,17 +106,14 @@ function getDurableIconProps(
     return { color, titleText };
 }
 
-function handleHeaderContextMenu(
-    e: React.MouseEvent<HTMLDivElement>,
+export function buildBlockFrameContextMenuItems(
     blockId: string,
     viewModel: ViewModel,
     nodeModel: NodeModel,
     t: (key: string, options?: any) => string
-) {
-    e.preventDefault();
-    e.stopPropagation();
+): ContextMenuItem[] {
     const magnified = globalStore.get(nodeModel.isMagnified);
-    let menu: ContextMenuItem[] = [
+    const menu: ContextMenuItem[] = [
         {
             label: magnified ? t("block.unMagnifyBlock") : t("block.magnifyBlock"),
             click: () => {
@@ -122,22 +137,30 @@ function handleHeaderContextMenu(
             click: () => uxCloseBlock(blockId),
         }
     );
-    ContextMenuModel.showContextMenu(menu, e);
+    return menu;
+}
+
+function handleHeaderContextMenu(
+    e: React.MouseEvent<HTMLDivElement>,
+    blockId: string,
+    viewModel: ViewModel,
+    nodeModel: NodeModel,
+    t: (key: string, options?: any) => string
+) {
+    e.preventDefault();
+    e.stopPropagation();
+    ContextMenuModel.showContextMenu(buildBlockFrameContextMenuItems(blockId, viewModel, nodeModel, t), e);
 }
 
 type HeaderTextElemsProps = {
-    viewModel: ViewModel;
-    blockData: Block;
+    headerTextUnion: string | HeaderElem[];
     preview: boolean;
     error?: Error;
     onDoubleClick?: React.MouseEventHandler<HTMLDivElement>;
 };
 
-const HeaderTextElems = React.memo(({ viewModel, blockData, preview, error, onDoubleClick }: HeaderTextElemsProps) => {
+const HeaderTextElems = React.memo(({ headerTextUnion, preview, error, onDoubleClick }: HeaderTextElemsProps) => {
     const { t } = useTranslation();
-    let headerTextUnion = util.useAtomValueSafe(viewModel?.viewText);
-    headerTextUnion = blockData?.meta?.["frame:text"] ?? headerTextUnion;
-
     const headerTextElems: React.ReactElement[] = [];
     if (typeof headerTextUnion === "string") {
         if (!util.isBlank(headerTextUnion)) {
@@ -180,60 +203,293 @@ type HeaderEndIconsProps = {
     viewModel: ViewModel;
     nodeModel: NodeModel;
     blockId: string;
+    currentView: string;
     isTerminalBlock: boolean;
     shellState: "ready" | "running-command" | null;
     lastOutputTs: number;
     lastCommandDoneTs: number;
+    liveDisplayCwd?: string;
 };
 
+const MODE_TOGGLE_ICON = "gauge-high";
+
+function CodexBrandMark() {
+    return (
+        <svg viewBox="0 0 158.7128 157.296" aria-hidden="true" focusable="false">
+            <path
+                fill="currentColor"
+                d="M60.8734,57.2556v-14.9432c0-1.2586.4722-2.2029,1.5728-2.8314l30.0443-17.3023c4.0899-2.3593,8.9662-3.4599,13.9988-3.4599,18.8759,0,30.8307,14.6289,30.8307,30.2006,0,1.1007,0,2.3593-.158,3.6178l-31.1446-18.2467c-1.8872-1.1006-3.7754-1.1006-5.6629,0l-39.4812,22.9651ZM131.0276,115.4561v-35.7074c0-2.2028-.9446-3.7756-2.8318-4.8763l-39.481-22.9651,12.8982-7.3934c1.1007-.6285,2.0453-.6285,3.1458,0l30.0441,17.3024c8.6523,5.0341,14.4708,15.7296,14.4708,26.1107,0,11.9539-7.0769,22.965-18.2461,27.527v.0021ZM51.593,83.9964l-12.8982-7.5497c-1.1007-.6285-1.5728-1.5728-1.5728-2.8314v-34.6048c0-16.8303,12.8982-29.5722,30.3585-29.5722,6.607,0,12.7403,2.2029,17.9324,6.1349l-30.987,17.9324c-1.8871,1.1007-2.8314,2.6735-2.8314,4.8764v45.6159l-.0014-.0015ZM79.3562,100.0403l-18.4829-10.3811v-22.0209l18.4829-10.3811,18.4812,10.3811v22.0209l-18.4812,10.3811ZM91.2319,147.8591c-6.607,0-12.7403-2.2031-17.9324-6.1344l30.9866-17.9333c1.8872-1.1005,2.8318-2.6728,2.8318-4.8759v-45.616l13.0564,7.5498c1.1005.6285,1.5723,1.5728,1.5723,2.8314v34.6051c0,16.8297-13.0564,29.5723-30.5147,29.5723v.001ZM53.9522,112.7822l-30.0443-17.3024c-8.652-5.0343-14.471-15.7296-14.471-26.1107,0-12.1119,7.2356-22.9652,18.403-27.5272v35.8634c0,2.2028.9443,3.7756,2.8314,4.8763l39.3248,22.8068-12.8982,7.3938c-1.1007.6287-2.045.6287-3.1456,0ZM52.2229,138.5791c-17.7745,0-30.8306-13.3713-30.8306-29.8871,0-1.2585.1578-2.5169.3143-3.7754l30.987,17.9323c1.8871,1.1005,3.7757,1.1005,5.6628,0l39.4811-22.807v14.9435c0,1.2585-.4721,2.2021-1.5728,2.8308l-30.0443,17.3025c-4.0898,2.359-8.9662,3.4605-13.9989,3.4605h.0014ZM91.2319,157.296c19.0327,0,34.9188-13.5272,38.5383-31.4594,17.6164-4.562,28.9425-21.0779,28.9425-37.908,0-11.0112-4.719-21.7066-13.2133-29.4143.7867-3.3035,1.2595-6.607,1.2595-9.909,0-22.4929-18.2471-39.3247-39.3251-39.3247-4.2461,0-8.3363.6285-12.4262,2.045-7.0792-6.9213-16.8318-11.3254-27.5271-11.3254-19.0331,0-34.9191,13.5268-38.5384,31.4591C11.3255,36.0212,0,52.5373,0,69.3675c0,11.0112,4.7184,21.7065,13.2125,29.4142-.7865,3.3035-1.2586,6.6067-1.2586,9.9092,0,22.4923,18.2466,39.3241,39.3248,39.3241,4.2462,0,8.3362-.6277,12.426-2.0441,7.0776,6.921,16.8302,11.3251,27.5271,11.3251Z"
+            />
+        </svg>
+    );
+}
+
+function ClaudeBrandMark() {
+    return (
+        <svg viewBox="0 0 1200 1200" aria-hidden="true" focusable="false">
+            <path
+                fill="currentColor"
+                d="M 233.959793 800.214905 L 468.644287 668.536987 L 472.590637 657.100647 L 468.644287 650.738403 L 457.208069 650.738403 L 417.986633 648.322144 L 283.892639 644.69812 L 167.597321 639.865845 L 54.926208 633.825623 L 26.577238 627.785339 L 3.3e-05 592.751709 L 2.73832 575.27533 L 26.577238 559.248352 L 60.724873 562.228149 L 136.187973 567.382629 L 249.422867 575.194763 L 331.570496 580.026978 L 453.261841 592.671082 L 472.590637 592.671082 L 475.328857 584.859009 L 468.724915 580.026978 L 463.570557 575.194763 L 346.389313 495.785217 L 219.543671 411.865906 L 153.100723 363.543762 L 117.181267 339.060425 L 99.060455 316.107361 L 91.248367 266.01355 L 123.865784 230.093994 L 167.677887 233.073853 L 178.872513 236.053772 L 223.248367 270.201477 L 318.040283 343.570496 L 441.825592 434.738342 L 459.946411 449.798706 L 467.194672 444.64447 L 468.080597 441.020203 L 459.946411 427.409485 L 392.617493 305.718323 L 320.778564 181.932983 L 288.80542 130.630859 L 280.348999 99.865845 C 277.369171 87.221436 275.194641 76.590698 275.194641 63.624268 L 312.322174 13.20813 L 332.8591 6.604126 L 382.389313 13.20813 L 403.248352 31.328979 L 434.013519 101.71814 L 483.865753 212.537048 L 561.181274 363.221497 L 583.812134 407.919434 L 595.892639 449.315491 L 600.40271 461.959839 L 608.214783 461.959839 L 608.214783 454.711609 L 614.577271 369.825623 L 626.335632 265.61084 L 637.771851 131.516846 L 641.718201 93.745117 L 660.402832 48.483276 L 697.530334 24.000122 L 726.52356 37.852417 L 750.362549 72 L 747.060486 94.067139 L 732.886047 186.201416 L 705.100708 330.52356 L 686.979919 427.167847 L 697.530334 427.167847 L 709.61084 415.087341 L 758.496704 350.174561 L 840.644348 247.490051 L 876.885925 206.738342 L 919.167847 161.71814 L 946.308838 140.29541 L 997.61084 140.29541 L 1035.38269 196.429626 L 1018.469849 254.416199 L 965.637634 321.422852 L 921.825562 378.201538 L 859.006714 462.765259 L 819.785278 530.41626 L 823.409424 535.812073 L 832.75177 534.92627 L 974.657776 504.724915 L 1051.328979 490.872559 L 1142.818848 475.167786 L 1184.214844 494.496582 L 1188.724854 514.147644 L 1172.456421 554.335693 L 1074.604126 578.496765 L 959.838989 601.449829 L 788.939636 641.879272 L 786.845764 643.409485 L 789.261841 646.389343 L 866.255127 653.637634 L 899.194702 655.409424 L 979.812134 655.409424 L 1129.932861 666.604187 L 1169.154419 692.537109 L 1192.671265 724.268677 L 1188.724854 748.429688 L 1128.322144 779.194641 L 1046.818848 759.865845 L 856.590759 714.604126 L 791.355774 698.335754 L 782.335693 698.335754 L 782.335693 703.731567 L 836.69812 756.885986 L 936.322205 846.845581 L 1061.073975 962.81897 L 1067.436279 991.490112 L 1051.409424 1014.120911 L 1034.496704 1011.704712 L 924.885986 929.234924 L 882.604126 892.107544 L 786.845764 811.48999 L 780.483276 811.48999 L 780.483276 819.946289 L 802.550415 852.241699 L 919.087341 1027.409424 L 925.127625 1081.127686 L 916.671204 1098.604126 L 886.469849 1109.154419 L 853.288696 1103.114136 L 785.073914 1007.355835 L 714.684631 899.516785 L 657.906067 802.872498 L 650.979858 806.81897 L 617.476624 1167.704834 L 601.771851 1186.147705 L 565.530212 1200 L 535.328857 1177.046997 L 519.302124 1139.919556 L 535.328857 1066.550537 L 554.657776 970.792053 L 570.362488 894.68457 L 584.536926 800.134277 L 592.993347 768.724976 L 592.429626 766.630859 L 585.503479 767.516968 L 514.22821 865.369263 L 405.825531 1011.865906 L 320.053711 1103.677979 L 299.516815 1111.812256 L 263.919525 1093.369263 L 267.221497 1060.429688 L 287.114136 1031.114136 L 405.825531 880.107361 L 477.422913 786.52356 L 523.651062 732.483276 L 523.328918 724.671265 L 520.590698 724.671265 L 205.288605 929.395935 L 149.154434 936.644409 L 124.993355 914.01355 L 127.973183 876.885986 L 139.409409 864.80542 L 234.201385 799.570435 L 233.879227 799.8927 Z"
+            />
+        </svg>
+    );
+}
+
+function AgentHeaderButtonIcon({ kind }: { kind: "codex" | "claude" }) {
+    return <span className={cn("agent-brand-mark", kind)}>{kind === "codex" ? <CodexBrandMark /> : <ClaudeBrandMark />}</span>;
+}
+
+function isModeToggleButton(elem: HeaderElem | IconButtonDecl | null | undefined): elem is IconButtonDecl {
+    return elem?.elemtype === "iconbutton" && elem.icon === MODE_TOGGLE_ICON;
+}
+
+export function getModeToggleButtonTitle(
+    currentView: string,
+    meta?: MetaType | null,
+    currentTitle?: string
+): string {
+    if (currentView === "workbench") {
+        const traditionalView = getTraditionalView(meta);
+        const traditionalViewName = blockViewToName(traditionalView);
+        return traditionalView === "term" ? "返回终端" : `返回${traditionalViewName}`;
+    }
+    if (currentView === "term") {
+        return "进入工作台";
+    }
+    if (currentView) {
+        return "进入工作台";
+    }
+    return currentTitle ?? "";
+}
+
+export function createWorkbenchModeToggleButton(
+    currentView: string,
+    blockId: string,
+    meta?: MetaType | null
+): IconButtonDecl | null {
+    const title = getModeToggleButtonTitle(currentView, meta);
+    if (!title) {
+        return null;
+    }
+    return {
+        elemtype: "iconbutton",
+        icon: MODE_TOGGLE_ICON,
+        iconColor: "var(--accent-color)",
+        className: cn("toggle", currentView === "workbench" && "active"),
+        title,
+        click: () => void toggleWorkbenchMode(blockId),
+    };
+}
+
+export function resolveTerminalSpeechAutoPlay(rawValue: unknown): boolean {
+    return typeof rawValue === "boolean" ? rawValue : true;
+}
+
+export function resolveTerminalSpeechAutoPlayVisualState(
+    rawValue: unknown,
+    optimisticValue: boolean | null | undefined
+): boolean {
+    return typeof optimisticValue === "boolean" ? optimisticValue : resolveTerminalSpeechAutoPlay(rawValue);
+}
+
+export function shouldSeedTerminalSpeechAutoPlayConfig(options: {
+    isTerminalBlock: boolean;
+    speechAutoPlayRaw: unknown;
+    hasSeeded: boolean;
+}): boolean {
+    return options.isTerminalBlock && !options.hasSeeded && typeof options.speechAutoPlayRaw !== "boolean";
+}
+
+type TerminalSpeechChainLabelInput = Pick<
+    ResolvedSpeechSettings,
+    "endpoint" | "localEngine" | "model" | "transport" | "voice" | "voiceAssistant"
+>;
+
+export function getTerminalSpeechChainLabel(settings: TerminalSpeechChainLabelInput): string {
+    const endpoint = settings.endpoint?.trim() ?? "";
+    const voice = (settings.voiceAssistant || settings.voice || "").trim();
+    const engineLabel =
+        endpoint.startsWith("wave://edge-tts/") || settings.localEngine === "edge"
+            ? "Edge 内置语音"
+            : settings.transport === "api"
+              ? "语音接口"
+              : "浏览器语音";
+    return [engineLabel, settings.model?.trim(), voice].filter(Boolean).join(" / ");
+}
+
+export function getTerminalSpeechAutoPlayTitle(_autoPlay: boolean): string {
+    return "自动播报";
+}
+
+export function getTerminalSpeechManualButtonTitle(speechActive: boolean): string {
+    return speechActive ? "停止当前播报" : "播放最近正式回复";
+}
+
+export function shouldShowSharedHeaderSpeechButton(isTerminalBlock: boolean): boolean {
+    return isTerminalBlock;
+}
+
+export function isTerminalLikeBlockView(currentView: string): boolean {
+    return currentView === "term" || currentView === "workbench";
+}
+
+export function shouldUseTerminalFormalReplySource(currentView: string): boolean {
+    return isTerminalLikeBlockView(currentView);
+}
+
+export function shouldRefreshTerminalFormalReplyFromScrollback(currentView: string): boolean {
+    return currentView === "term";
+}
+
+export function shouldRefreshWorkbenchFormalReplyFromFile(currentView: string): boolean {
+    return currentView === "workbench";
+}
+
+function getSharedHeaderFormalReplySourceMode(currentView: string): TerminalFormalReplySourceMode {
+    return currentView === "workbench" ? "workbench" : "terminal";
+}
+
+function isAbsoluteTerminalHeaderPath(value: string): boolean {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) {
+        return false;
+    }
+    return /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("/") || trimmed.startsWith("\\\\");
+}
+
+export function resolveTerminalHeaderPathLabel(
+    liveDisplayCwd: string | null | undefined,
+    meta?: MetaType | null
+): string {
+    const livePath = String(liveDisplayCwd ?? "").trim();
+    const persistedPath = String(getTerminalDisplayCwd(meta) ?? "").trim();
+    if (util.isBlank(livePath)) {
+        return persistedPath;
+    }
+    if (util.isBlank(persistedPath)) {
+        return livePath;
+    }
+    if (persistedPath.length > livePath.length && persistedPath.endsWith(livePath)) {
+        return persistedPath;
+    }
+    if (isAbsoluteTerminalHeaderPath(persistedPath) && !isAbsoluteTerminalHeaderPath(livePath)) {
+        return persistedPath;
+    }
+    return livePath;
+}
+
+export function shouldReplaceTerminalSpeechPayload(
+    currentPayload: TerminalFormalReplyPayload | null | undefined,
+    nextPayload: TerminalFormalReplyPayload
+): boolean {
+    if (!currentPayload) {
+        return true;
+    }
+    if (currentPayload.id === nextPayload.id) {
+        return false;
+    }
+    const currentText = String(currentPayload.text ?? "").trim();
+    const nextText = String(nextPayload.text ?? "").trim();
+    const currentOutputTs = Number(currentPayload.outputTs) || 0;
+    const nextOutputTs = Number(nextPayload.outputTs) || 0;
+    const duplicatePayloadWindowMs = 2000;
+    const isRapidDuplicatePayload =
+        currentText.length > 0 &&
+        currentText === nextText &&
+        currentOutputTs > 0 &&
+        nextOutputTs >= currentOutputTs &&
+        nextOutputTs - currentOutputTs <= duplicatePayloadWindowMs;
+    if (isRapidDuplicatePayload) {
+        return false;
+    }
+    return true;
+}
+
 const HeaderEndIcons = React.memo(
-    ({ viewModel, nodeModel, blockId, isTerminalBlock, shellState, lastOutputTs, lastCommandDoneTs }: HeaderEndIconsProps) => {
-    const { t } = useTranslation();
-    const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
-    const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
-    const aiModel = React.useMemo(() => WaveAIModel.getInstance(), []);
-    const currentMode = jotai.useAtomValue(aiModel.currentAIMode);
-    const aiModeConfigs = jotai.useAtomValue(aiModel.aiModeConfigs);
-    const currentModeConfig = aiModeConfigs?.[currentMode];
-    const latestAssistantText = jotai.useAtomValue(aiModel.latestAssistantMessageText);
-    const isAIStreaming = jotai.useAtomValue(aiModel.isAIStreaming);
-    const speechEnabled = jotai.useAtomValue(getSettingsKeyAtom("speech:enabled"));
-    const speechProvider = jotai.useAtomValue(getSettingsKeyAtom("speech:provider"));
-    const speechEndpoint = jotai.useAtomValue(getSettingsKeyAtom("speech:endpoint"));
-    const speechModel = jotai.useAtomValue(getSettingsKeyAtom("speech:model"));
-    const speechVoice = jotai.useAtomValue(getSettingsKeyAtom("speech:voice"));
-    const speechVoiceAssistant = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceassistant"));
-    const speechVoiceUser = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceuser"));
-    const speechVoiceSystem = jotai.useAtomValue(getSettingsKeyAtom("speech:voicesystem"));
-    const speechFilterUrls = jotai.useAtomValue(getSettingsKeyAtom("speech:filterurls"));
-    const speechFilterPaths = jotai.useAtomValue(getSettingsKeyAtom("speech:filterpaths"));
-    const speechFilterCode = jotai.useAtomValue(getSettingsKeyAtom("speech:filtercode"));
-    const speechAutoPlayRaw = jotai.useAtomValue(getSettingsKeyAtom("speech:autoplay"));
-    const speechAutoPlay = typeof speechAutoPlayRaw === "boolean" ? speechAutoPlayRaw : true;
-    const speechAutoPlayBaselineTsAtom = React.useMemo(() => {
+    ({
+        viewModel,
+        nodeModel,
+        blockId,
+        currentView,
+        isTerminalBlock,
+        shellState,
+        lastOutputTs,
+        lastCommandDoneTs,
+        liveDisplayCwd,
+    }: HeaderEndIconsProps) => {
+        const { t } = useTranslation();
+        const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
+        const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
+        const modeToggleButton = React.useMemo(
+            () => createWorkbenchModeToggleButton(currentView, blockId, blockData?.meta),
+            [blockData?.meta, blockId, currentView]
+        );
+        const filteredEndIconButtons = React.useMemo(() => {
+            if (!Array.isArray(endIconButtons)) {
+                return [];
+            }
+            return endIconButtons.filter((button) => !isModeToggleButton(button));
+        }, [endIconButtons]);
+        const usesTerminalFormalReplySource = shouldUseTerminalFormalReplySource(currentView);
+        const usesTerminalFormalReplyRefreshSource = shouldRefreshTerminalFormalReplyFromScrollback(currentView);
+        const usesWorkbenchFormalReplyFileSource = shouldRefreshWorkbenchFormalReplyFromFile(currentView);
+        const formalReplySourceMode = React.useMemo(
+            () => getSharedHeaderFormalReplySourceMode(currentView),
+            [currentView]
+        );
+        const currentMode = jotai.useAtomValue(waveAICurrentModeAtom);
+        const aiModeConfigs = jotai.useAtomValue(atoms.waveaiModeConfigAtom);
+        const currentModeConfig = aiModeConfigs?.[currentMode];
+        const latestAssistantText = jotai.useAtomValue(waveAILatestAssistantMessageTextAtom);
+        const isAIStreaming = jotai.useAtomValue(waveAIStreamingAtom);
+        const speechEnabled = jotai.useAtomValue(getSettingsKeyAtom("speech:enabled"));
+        const speechProvider = jotai.useAtomValue(getSettingsKeyAtom("speech:provider"));
+        const speechEndpoint = jotai.useAtomValue(getSettingsKeyAtom("speech:endpoint"));
+        const speechModel = jotai.useAtomValue(getSettingsKeyAtom("speech:model"));
+        const speechVoice = jotai.useAtomValue(getSettingsKeyAtom("speech:voice"));
+        const speechVoiceAssistant = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceassistant"));
+        const speechVoiceUser = jotai.useAtomValue(getSettingsKeyAtom("speech:voiceuser"));
+        const speechVoiceSystem = jotai.useAtomValue(getSettingsKeyAtom("speech:voicesystem"));
+        const speechFilterUrls = jotai.useAtomValue(getSettingsKeyAtom("speech:filterurls"));
+        const speechFilterPaths = jotai.useAtomValue(getSettingsKeyAtom("speech:filterpaths"));
+        const speechFilterCode = jotai.useAtomValue(getSettingsKeyAtom("speech:filtercode"));
+        const speechAutoPlayRaw = jotai.useAtomValue(getSettingsKeyAtom("speech:autoplay"));
+        const [speechAutoPlayOptimistic, setSpeechAutoPlayOptimistic] = React.useState<boolean | null>(null);
+        const speechAutoPlay = resolveTerminalSpeechAutoPlayVisualState(speechAutoPlayRaw, speechAutoPlayOptimistic);
+        const speechAutoPlayBaselineTsAtom = React.useMemo(() => {
         return useBlockAtom(blockId, "speech:autoplay-baseline-ts", () => {
             return jotai.atom(0) as jotai.PrimitiveAtom<number>;
         }) as jotai.PrimitiveAtom<number>;
     }, [blockId]);
-    const [speechAutoPlayBaselineTs, setSpeechAutoPlayBaselineTs] = jotai.useAtom(speechAutoPlayBaselineTsAtom);
-    const speechFormalReplyPayloadAtom = React.useMemo(() => {
-        return useBlockAtom(blockId, "speech:formal-reply-payload", () => {
-            return jotai.atom(null) as jotai.PrimitiveAtom<TerminalFormalReplyPayload | null>;
-        }) as jotai.PrimitiveAtom<TerminalFormalReplyPayload | null>;
-    }, [blockId]);
-    const [speechFormalReplyPayload, setSpeechFormalReplyPayload] = jotai.useAtom(speechFormalReplyPayloadAtom);
-    const speechLastSpokenPayloadIdAtom = React.useMemo(() => {
-        return useBlockAtom(blockId, "speech:last-spoken-payload-id", () => {
-            return jotai.atom("") as jotai.PrimitiveAtom<string>;
-        }) as jotai.PrimitiveAtom<string>;
-    }, [blockId]);
+        const [speechAutoPlayBaselineTs, setSpeechAutoPlayBaselineTs] = jotai.useAtom(speechAutoPlayBaselineTsAtom);
+        const speechFormalReplyPayloadAtom = React.useMemo(() => {
+            return useBlockAtom(blockId, "speech:formal-reply-payload", () => {
+                return jotai.atom(null) as jotai.PrimitiveAtom<TerminalFormalReplyPayload | null>;
+            }) as jotai.PrimitiveAtom<TerminalFormalReplyPayload | null>;
+        }, [blockId]);
+        const [speechFormalReplyPayload, setSpeechFormalReplyPayload] = jotai.useAtom(speechFormalReplyPayloadAtom);
+        const speechAttentionActiveAtom = React.useMemo(() => {
+            return useBlockAtom(blockId, "speech:attention-active", () => {
+                return jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
+            }) as jotai.PrimitiveAtom<boolean>;
+        }, [blockId]);
+        const [, setSpeechAttentionActive] = jotai.useAtom(speechAttentionActiveAtom);
+        const speechLastSpokenPayloadIdAtom = React.useMemo(() => {
+            return useBlockAtom(blockId, "speech:last-spoken-payload-id", () => {
+                return jotai.atom("") as jotai.PrimitiveAtom<string>;
+            }) as jotai.PrimitiveAtom<string>;
+        }, [blockId]);
     const [speechLastSpokenPayloadId, setSpeechLastSpokenPayloadId] = jotai.useAtom(speechLastSpokenPayloadIdAtom);
     const speechManualButton = jotai.useAtomValue(getSettingsKeyAtom("speech:manualbutton"));
     const speechRate = jotai.useAtomValue(getSettingsKeyAtom("speech:rate"));
     const speechLocalEngine = jotai.useAtomValue(getSettingsKeyAtom("speech:localengine"));
     const speechLocalModel = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodel"));
     const speechLocalModelPath = jotai.useAtomValue(getSettingsKeyAtom("speech:localmodelpath"));
-    const showCodexResumeButton = shouldShowCodexResumeButton(isTerminalBlock, blockData?.meta?.connection);
+    const showCodexResumeButton = shouldShowCodexResumeButton(
+        currentView,
+        blockData?.meta?.connection,
+        blockData?.meta?.["workbench:returnview"]
+    );
     const codexResumeAvailable = canRunCodexResume(shellState);
     const speechSettings = React.useMemo(
         () =>
@@ -284,7 +540,6 @@ const HeaderEndIcons = React.memo(
     React.useEffect(() => {
         return speechRuntime.subscribe(setSpeechActive, blockId);
     }, [blockId]);
-
     const reportSpeechError = React.useCallback((message: string) => {
         pushFlashError({
             id: "",
@@ -298,30 +553,72 @@ const HeaderEndIcons = React.memo(
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
     const numLeafs = jotai.useAtomValue(nodeModel.numLeafs);
     const magnifyDisabled = numLeafs <= 1;
-    const waitForBlockShellStateToStart = React.useCallback(async () => {
-        const timeoutAt = Date.now() + 4000;
-        while (Date.now() < timeoutAt) {
-            const shellStateAtom = useBlockAtom(blockId, "term:shellstate", () =>
-                jotai.atom(null) as jotai.PrimitiveAtom<"ready" | "running-command" | null>
+    const getBlockCodexResumeLines = React.useCallback(async () => {
+        try {
+            const result = await RpcApi.TermGetScrollbackLinesCommand(
+                TabRpcClient,
+                { linestart: 0, lineend: 160, lastcommand: false },
+                { route: `feblock:${blockId}` }
             );
-            if (globalStore.get(shellStateAtom) === "running-command") {
+            return result?.lines ?? [];
+        } catch {
+            return [];
+        }
+    }, [blockId]);
+    const waitForBlockCodexResumeToBecomeInteractive = React.useCallback(async (baselineOutputTs: number) => {
+        await waitForCodexResumeToBecomeInteractive({
+            getSnapshot: async () => ({
+                shellState: shellStateRef.current,
+                outputTs: lastOutputTsRef.current,
+                baselineOutputTs,
+                lines: await getBlockCodexResumeLines(),
+            }),
+        });
+    }, [getBlockCodexResumeLines]);
+    const runHeaderAction = React.useCallback((title: string, action: () => Promise<void>) => {
+        util.fireAndForget(async () => {
+            try {
+                await action();
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                pushFlashError({
+                    id: "",
+                    icon: "triangle-exclamation",
+                    title,
+                    message,
+                    expiration: Date.now() + 7000,
+                });
+            }
+        });
+    }, []);
+    const launchCodexInCurrentTerminal = React.useCallback(() => {
+        runHeaderAction("Codex 启动失败", async () => {
+            if (currentView !== "term") {
                 return;
             }
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-        throw new Error("Codex resume did not start within 4 seconds.");
-    }, [blockId]);
+            await launchAgentCommandInCurrentTerminalBlock(blockId, "codex");
+        });
+    }, [blockId, currentView, runHeaderAction]);
+    const launchClaudeInCurrentTerminal = React.useCallback(() => {
+        runHeaderAction("Claude 启动失败", async () => {
+            if (currentView !== "term") {
+                return;
+            }
+            await launchAgentCommandInCurrentTerminalBlock(blockId, "cloud");
+        });
+    }, [blockId, currentView, runHeaderAction]);
 
     const endIconsElem: React.ReactElement[] = [];
     const payloadBuildTimerRef = React.useRef<number | null>(null);
     const payloadBuildRunIdRef = React.useRef(0);
     const autoPlayPendingPayloadIdRef = React.useRef("");
-    const lastCommandDoneRefreshTsRef = React.useRef(0);
+    const lastPayloadRefreshKeyRef = React.useRef("");
     const speechSettingsRef = React.useRef(speechSettings);
     const speechActiveRef = React.useRef(speechActive);
     const speechFormalReplyPayloadRef = React.useRef<TerminalFormalReplyPayload | null>(speechFormalReplyPayload);
     const speechLastSpokenPayloadIdRef = React.useRef(speechLastSpokenPayloadId);
     const speechAutoPlayBaselineTsRef = React.useRef(speechAutoPlayBaselineTs);
+    const speechAutoPlayConfigSeededRef = React.useRef(typeof speechAutoPlayRaw === "boolean");
     const isTerminalBlockRef = React.useRef(isTerminalBlock);
     const lastOutputTsRef = React.useRef(Number(lastOutputTs) || 0);
     const lastCommandDoneTsRef = React.useRef(Number(lastCommandDoneTs) || 0);
@@ -341,6 +638,31 @@ const HeaderEndIcons = React.memo(
     React.useEffect(() => {
         speechAutoPlayBaselineTsRef.current = Number(speechAutoPlayBaselineTs) || 0;
     }, [speechAutoPlayBaselineTs]);
+    React.useEffect(() => {
+        if (speechAutoPlayOptimistic == null || typeof speechAutoPlayRaw !== "boolean") {
+            return;
+        }
+        if (speechAutoPlayOptimistic === speechAutoPlayRaw) {
+            setSpeechAutoPlayOptimistic(null);
+        }
+    }, [speechAutoPlayOptimistic, speechAutoPlayRaw]);
+    React.useEffect(() => {
+        if (typeof speechAutoPlayRaw === "boolean") {
+            speechAutoPlayConfigSeededRef.current = true;
+            return;
+        }
+        if (
+            !shouldSeedTerminalSpeechAutoPlayConfig({
+                isTerminalBlock,
+                speechAutoPlayRaw,
+                hasSeeded: speechAutoPlayConfigSeededRef.current,
+            })
+        ) {
+            return;
+        }
+        speechAutoPlayConfigSeededRef.current = true;
+        void RpcApi.SetConfigCommand(TabRpcClient, { "speech:autoplay": true });
+    }, [isTerminalBlock, speechAutoPlayRaw]);
     React.useEffect(() => {
         isTerminalBlockRef.current = isTerminalBlock;
     }, [isTerminalBlock]);
@@ -389,16 +711,40 @@ const HeaderEndIcons = React.memo(
         }
     }, [blockId, clearPayloadBuildTimer]);
 
-    if (endIconButtons && endIconButtons.length > 0) {
-        endIconsElem.push(...endIconButtons.map((button, idx) => <IconButton key={idx} decl={button} />));
+    if (modeToggleButton != null) {
+        endIconsElem.push(<IconButton key="workbench-mode-toggle" decl={modeToggleButton} />);
     }
-    const speechEngineLabel = "Edge";
-    const speechHintParts = [
-        speechEngineLabel,
-        speechSettings.transport === "api" ? speechSettings.model : "",
-        speechSettings.voiceAssistant || speechSettings.voice,
-    ].filter(Boolean);
-    const speechHint = speechHintParts.length > 0 ? `（${speechHintParts.join(" / ")}）` : "";
+    if (filteredEndIconButtons.length > 0) {
+        endIconsElem.push(...filteredEndIconButtons.map((button, idx) => <IconButton key={idx} decl={button} />));
+    }
+    if (currentView === "term") {
+        const codexLaunchDecl: IconButtonDecl = {
+            elemtype: "iconbutton",
+            icon: <AgentHeaderButtonIcon kind="codex" />,
+            title: "在当前终端启动 Codex",
+            click: () => launchCodexInCurrentTerminal(),
+        };
+        endIconsElem.push(
+            <IconButton key="codex-agent-launch" decl={codexLaunchDecl} className="block-frame-agent-launch" />
+        );
+        const claudeLaunchDecl: IconButtonDecl = {
+            elemtype: "iconbutton",
+            icon: <AgentHeaderButtonIcon kind="claude" />,
+            title: "在当前终端启动 Claude",
+            click: () => launchClaudeInCurrentTerminal(),
+        };
+        endIconsElem.push(
+            <IconButton key="claude-agent-launch" decl={claudeLaunchDecl} className="block-frame-agent-launch" />
+        );
+    }
+    const speechChainLabel = getTerminalSpeechChainLabel(speechSettings);
+    const speechHint = speechChainLabel ? `（${speechChainLabel}）` : "";
+    const speechDisabledTitle = "语音播报已关闭";
+    const stopSpeechTitle = getTerminalSpeechManualButtonTitle(true);
+    const readOutputTitle = getTerminalSpeechManualButtonTitle(false);
+    const readReplyTitle = "朗读最新回复";
+    const noTextContentTitle = "当前没有可朗读的回复";
+    const waitForFinalTitle = "仍在生成中，请等回复完成后再播报。";
     const speakTerminalPayload = React.useCallback(
         async (payload: TerminalFormalReplyPayload): Promise<boolean> => {
             const started = await playTerminalFormalReplyPayload({
@@ -409,7 +755,7 @@ const HeaderEndIcons = React.memo(
                     if (isIgnorableSpeechError(errorMessage)) {
                         return;
                     }
-                    aiModel.setError(errorMessage);
+                    globalStore.set(waveAIErrorAtom, errorMessage);
                     reportSpeechError(errorMessage);
                 },
             });
@@ -419,51 +765,85 @@ const HeaderEndIcons = React.memo(
             }
             return started;
         },
-        [aiModel, blockId, isIgnorableSpeechError, reportSpeechError, setSpeechLastSpokenPayloadId]
+        [blockId, isIgnorableSpeechError, reportSpeechError, setSpeechLastSpokenPayloadId]
     );
     const resolveTerminalFormalReplyPayload = React.useCallback(
-        async (outputTs: number, options?: { strictFreshness?: boolean }): Promise<TerminalFormalReplyPayload | null> => {
-            const normalizedOutputTs = Number(outputTs);
-            const hasOutputTs = Number.isFinite(normalizedOutputTs) && normalizedOutputTs > 0;
+        async (options?: {
+            freshnessTs?: number;
+            payloadTs?: number;
+            strictFreshness?: boolean;
+        }): Promise<TerminalFormalReplyPayload | null> => {
+            const normalizedFreshnessTs = Number(options?.freshnessTs);
+            const normalizedPayloadTs = Number(options?.payloadTs);
+            const hasFreshnessTs = Number.isFinite(normalizedFreshnessTs) && normalizedFreshnessTs > 0;
+            const hasPayloadTs = Number.isFinite(normalizedPayloadTs) && normalizedPayloadTs > 0;
             const strictFreshness = options?.strictFreshness ?? true;
-            const minLastUpdatedTs = strictFreshness && hasOutputTs ? normalizedOutputTs : 0;
+            const minLastUpdatedTs = strictFreshness && hasFreshnessTs ? Math.floor(normalizedFreshnessTs) : 0;
             const payload = await loadLatestTerminalFormalReplyPayload({
                 blockId,
                 preferLastCommand: shellStateRef.current !== null,
                 minLastUpdatedTs,
                 requirePromptAfterCodexReply: true,
-                outputTs: hasOutputTs ? normalizedOutputTs : Date.now(),
+                outputTs: hasPayloadTs
+                    ? Math.floor(normalizedPayloadTs)
+                    : hasFreshnessTs
+                      ? Math.floor(normalizedFreshnessTs)
+                      : Date.now(),
                 onError: (errorMessage) => {
                     if (isIgnorableSpeechError(errorMessage)) {
                         return;
                     }
-                    aiModel.setError(errorMessage);
+                    globalStore.set(waveAIErrorAtom, errorMessage);
                 },
             });
             if (payload) {
                 const currentPayload = speechFormalReplyPayloadRef.current;
-                if (currentPayload?.text === payload.text) {
-                    return currentPayload;
+                const shouldReplacePayload = shouldReplaceTerminalSpeechPayload(currentPayload, payload);
+                if (!shouldReplacePayload) {
+                    return currentPayload ?? payload;
                 }
-                if (currentPayload?.id !== payload.id) {
+                if (shouldReplacePayload) {
                     speechFormalReplyPayloadRef.current = payload;
                     setSpeechFormalReplyPayload(payload);
                 }
                 return payload;
             }
-            const currentPayload = speechFormalReplyPayloadRef.current;
-            if (!hasOutputTs) {
-                return currentPayload?.text?.trim() ? currentPayload : null;
-            }
-            if (currentPayload && currentPayload.outputTs >= normalizedOutputTs) {
-                return currentPayload;
-            }
             return null;
         },
-        [aiModel, blockId, isIgnorableSpeechError, setSpeechFormalReplyPayload]
+        [blockId, isIgnorableSpeechError, setSpeechFormalReplyPayload]
+    );
+    const resolveWorkbenchFormalReplyPayload = React.useCallback(
+        async (options?: { requireLatestEntryAssistant?: boolean }): Promise<TerminalFormalReplyPayload | null> => {
+            const payload = await loadLatestWorkbenchFormalReplyPayload({
+                blockId,
+                requireLatestEntryAssistant: options?.requireLatestEntryAssistant ?? false,
+                onError: (errorMessage) => {
+                    if (isIgnorableSpeechError(errorMessage)) {
+                        return;
+                    }
+                    globalStore.set(waveAIErrorAtom, errorMessage);
+                },
+            });
+            if (!payload) {
+                return null;
+            }
+            const currentPayload = speechFormalReplyPayloadRef.current;
+            const shouldReplacePayload = shouldReplaceTerminalSpeechPayload(currentPayload, payload);
+            if (!shouldReplacePayload) {
+                return currentPayload ?? payload;
+            }
+            speechFormalReplyPayloadRef.current = payload;
+            setSpeechFormalReplyPayload(payload);
+            return payload;
+        },
+        [blockId, isIgnorableSpeechError, setSpeechFormalReplyPayload]
     );
     const scheduleTerminalPayloadRefresh = React.useCallback(
-        (delayMs: number, outputTs: number) => {
+        (anchor: TerminalSpeechCompletionAnchor, attempt = 0) => {
+            const delayMs = getTerminalFormalReplyRefreshDelayMs(attempt);
+            if (delayMs == null) {
+                return;
+            }
             clearPayloadBuildTimer();
             const runId = ++payloadBuildRunIdRef.current;
             payloadBuildTimerRef.current = window.setTimeout(() => {
@@ -475,17 +855,39 @@ const HeaderEndIcons = React.memo(
                     if (!isTerminalBlockRef.current) {
                         return;
                     }
-                    const targetOutputTs = Number(outputTs);
-                    if (!Number.isFinite(targetOutputTs) || targetOutputTs <= 0) {
+                    const currentAnchor = getTerminalSpeechCompletionAnchor({
+                        shellState: shellStateRef.current,
+                        lastCommandDoneTs: lastCommandDoneTsRef.current,
+                        lastOutputTs: lastOutputTsRef.current,
+                    });
+                    if (!currentAnchor) {
                         return;
                     }
-                    // Output changed again; skip stale payload refresh.
-                    if (lastOutputTsRef.current > targetOutputTs) {
+                    if (anchor.source === "command-done") {
+                        if (currentAnchor.source !== "command-done" || currentAnchor.freshnessTs !== anchor.freshnessTs) {
+                            return;
+                        }
+                    }
+                    const payload = await resolveTerminalFormalReplyPayload({
+                        freshnessTs: anchor.freshnessTs,
+                        payloadTs: anchor.payloadTs,
+                        strictFreshness: true,
+                    });
+                    if (payload) {
                         return;
                     }
-                    await resolveTerminalFormalReplyPayload(targetOutputTs);
+                    if (anchor.source !== "command-done") {
+                        return;
+                    }
+                    if (shellStateRef.current !== "ready") {
+                        return;
+                    }
+                    if ((Number(lastCommandDoneTsRef.current) || 0) !== anchor.freshnessTs) {
+                        return;
+                    }
+                    scheduleTerminalPayloadRefresh(anchor, attempt + 1);
                 })();
-            }, Math.max(0, Math.floor(delayMs)));
+            }, delayMs);
         },
         [clearPayloadBuildTimer, resolveTerminalFormalReplyPayload]
     );
@@ -494,14 +896,14 @@ const HeaderEndIcons = React.memo(
         icon: speechActive ? "stop" : "volume-high",
         title:
             (!speechSettings.enabled
-                ? t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
+                ? speechDisabledTitle
                 : speechActive
-                  ? t("aipanel.feedback.stopSpeech")
+                  ? stopSpeechTitle
                   : isTerminalBlock
-                    ? t("aipanel.feedback.readLocal", { defaultValue: "Read output aloud" })
+                    ? readOutputTitle
                     : !latestAssistantText?.trim()
-                    ? t("aipanel.noTextContent")
-                    : t("aipanel.feedback.readLocal", { defaultValue: "Read reply aloud" })
+                    ? noTextContentTitle
+                    : readReplyTitle
             ).trim() + (speechHint ? ` ${speechHint}` : ""),
         click: () => {
             if (speechActive) {
@@ -509,27 +911,21 @@ const HeaderEndIcons = React.memo(
                 return;
             }
             if (!speechSettings.enabled) {
-                aiModel.setError(
-                    t("aipanel.feedback.speechDisabled", { defaultValue: "Speech is disabled in settings" })
-                );
-                reportSpeechError("语音播报已关闭。去 设置 -> 语音播报 打开“总开关”。");
+                globalStore.set(waveAIErrorAtom, speechDisabledTitle);
+                reportSpeechError("语音播报已关闭，请到“设置 -> 语音播报”打开总开关。");
                 return;
             }
             if (!isTerminalBlock) {
                 if (isAIStreaming) {
-                    aiModel.setError(
-                        t("aipanel.feedback.waitForFinal", {
-                            defaultValue: "Still generating. Wait for the reply to finish before speaking.",
-                        })
-                    );
-                    reportSpeechError("还在生成回复，等它结束再点朗读。");
+                    globalStore.set(waveAIErrorAtom, waitForFinalTitle);
+                    reportSpeechError("还在生成回复，等它结束再点播报。");
                     return;
                 }
                 void speechRuntime.play(latestAssistantText ?? "", speechSettings, "assistant", (errorMessage) => {
                     if (isIgnorableSpeechError(errorMessage)) {
                         return;
                     }
-                    aiModel.setError(errorMessage);
+                    globalStore.set(waveAIErrorAtom, errorMessage);
                     reportSpeechError(errorMessage);
                 }, { ownerId: blockId });
                 return;
@@ -537,24 +933,31 @@ const HeaderEndIcons = React.memo(
             cancelAutoSpeech(false);
             const currentOutputTs = Number(lastOutputTsRef.current);
             void (async () => {
-                let payload = await resolveTerminalFormalReplyPayload(currentOutputTs, {
-                    strictFreshness: true,
-                });
-                const canRelaxFreshness = shellStateRef.current !== "running-command";
-                if (!payload && canRelaxFreshness) {
-                    payload = await resolveTerminalFormalReplyPayload(currentOutputTs, {
-                        strictFreshness: false,
+                let payload = speechFormalReplyPayloadRef.current;
+                if (currentView === "term") {
+                    const currentAnchor = getTerminalSpeechCompletionAnchor({
+                        shellState: shellStateRef.current,
+                        lastCommandDoneTs: lastCommandDoneTsRef.current,
+                        lastOutputTs: currentOutputTs,
                     });
-                }
-                if (!payload && canRelaxFreshness) {
-                    const cachedPayload = speechFormalReplyPayloadRef.current;
-                    if (cachedPayload?.text?.trim()) {
-                        payload = cachedPayload;
+                    payload = await resolveTerminalFormalReplyPayload({
+                        freshnessTs: currentAnchor?.freshnessTs ?? currentOutputTs,
+                        payloadTs: currentAnchor?.payloadTs ?? currentOutputTs,
+                        strictFreshness: true,
+                    });
+                    const canRelaxFreshness = shellStateRef.current !== "running-command";
+                    if (!payload && canRelaxFreshness) {
+                        payload = await resolveTerminalFormalReplyPayload({
+                            payloadTs: currentAnchor?.payloadTs ?? currentOutputTs,
+                            strictFreshness: false,
+                        });
                     }
+                } else if (!payload || !payload.text.trim()) {
+                    payload = await resolveWorkbenchFormalReplyPayload();
                 }
                 if (!payload) {
                     const message = "没有检测到可播报的 AI 正式回复。";
-                    aiModel.setError(message);
+                    globalStore.set(waveAIErrorAtom, message);
                     reportSpeechError(message);
                     return;
                 }
@@ -564,39 +967,37 @@ const HeaderEndIcons = React.memo(
         disabled: false,
     };
     React.useEffect(() => {
-        if (!isTerminalBlock) {
+        if (!usesTerminalFormalReplyRefreshSource) {
             return;
         }
-        if (shellState !== null) {
+        const anchor = getTerminalSpeechCompletionAnchor({
+            shellState,
+            lastCommandDoneTs,
+            lastOutputTs,
+        });
+        if (!anchor) {
             return;
         }
-        const ts = Number(lastOutputTs);
-        if (!Number.isFinite(ts) || ts <= 0) {
+        const refreshKey = `${anchor.source}:${anchor.freshnessTs}:${anchor.payloadTs}`;
+        if (lastPayloadRefreshKeyRef.current === refreshKey) {
             return;
         }
-        const delayMs = shellState === "running-command" ? 700 : 420;
-        scheduleTerminalPayloadRefresh(delayMs, ts);
-    }, [isTerminalBlock, lastOutputTs, scheduleTerminalPayloadRefresh, shellState]);
+        lastPayloadRefreshKeyRef.current = refreshKey;
+        scheduleTerminalPayloadRefresh(anchor);
+    }, [lastCommandDoneTs, lastOutputTs, scheduleTerminalPayloadRefresh, shellState, usesTerminalFormalReplyRefreshSource]);
     React.useEffect(() => {
-        if (!isTerminalBlock) {
+        if (!usesWorkbenchFormalReplyFileSource) {
             return;
         }
-        if (shellState === null) {
-            return;
-        }
-        const doneTs = Number(lastCommandDoneTs);
-        if (!Number.isFinite(doneTs) || doneTs <= 0) {
-            return;
-        }
-        if (lastCommandDoneRefreshTsRef.current === doneTs) {
-            return;
-        }
-        lastCommandDoneRefreshTsRef.current = doneTs;
-        const outputTs = Number(lastOutputTsRef.current);
-        const targetOutputTs =
-            Number.isFinite(outputTs) && outputTs > 0 ? Math.max(doneTs, outputTs) : doneTs;
-        scheduleTerminalPayloadRefresh(180, targetOutputTs);
-    }, [isTerminalBlock, lastCommandDoneTs, scheduleTerminalPayloadRefresh, shellState]);
+        const fileSubject = getFileSubject(blockId, "aidata");
+        const subscription = fileSubject.subscribe(() => {
+            void resolveWorkbenchFormalReplyPayload({ requireLatestEntryAssistant: true });
+        });
+        return () => {
+            subscription.unsubscribe();
+            fileSubject.release();
+        };
+    }, [blockId, resolveWorkbenchFormalReplyPayload, usesWorkbenchFormalReplyFileSource]);
 
     const prevAutoPlayRef = React.useRef(speechSettings.autoPlay);
     const autoPlayBaselineInitializedRef = React.useRef(false);
@@ -605,7 +1006,7 @@ const HeaderEndIcons = React.memo(
     React.useEffect(() => {
         // Establish a per-session baseline so we never auto-play historical scrollback
         // restored during startup. This must not persist across app restarts.
-        if (!isTerminalBlock || !speechSettings.enabled || !speechSettings.autoPlay) {
+        if (!usesTerminalFormalReplySource || !speechSettings.enabled || !speechSettings.autoPlay) {
             autoPlayBaselineInitializedRef.current = false;
             autoPlayStartupSuppressedRef.current = false;
             return;
@@ -614,18 +1015,21 @@ const HeaderEndIcons = React.memo(
             return;
         }
         autoPlayBaselineInitializedRef.current = true;
-        const currentOutputTs = Number(lastOutputTsRef.current);
-        const commandDoneTs = Number(lastCommandDoneTsRef.current);
-        const outputTs = Number.isFinite(currentOutputTs) && currentOutputTs > 0 ? currentOutputTs : 0;
-        const doneTs = Number.isFinite(commandDoneTs) && commandDoneTs > 0 ? commandDoneTs : 0;
-        const baselineTs = doneTs > 0 || outputTs > 0 ? (doneTs > 0 ? Math.max(doneTs, outputTs) : outputTs) : Date.now();
+        const baselineTs = getTerminalSpeechAutoPlayBaselineTs(
+            {
+                shellState: shellStateRef.current,
+                lastCommandDoneTs: lastCommandDoneTsRef.current,
+                lastOutputTs: lastOutputTsRef.current,
+            },
+            Date.now()
+        );
         speechAutoPlayBaselineTsRef.current = baselineTs;
         setSpeechAutoPlayBaselineTs(baselineTs);
-    }, [isTerminalBlock, setSpeechAutoPlayBaselineTs, speechSettings.autoPlay, speechSettings.enabled]);
+    }, [setSpeechAutoPlayBaselineTs, speechSettings.autoPlay, speechSettings.enabled, usesTerminalFormalReplySource]);
     React.useEffect(() => {
         // Suppress auto-play for any formal reply payload restored from a previous session.
         // A new reply generated after startup should still auto-play normally.
-        if (!isTerminalBlock || !speechSettings.enabled || !speechSettings.autoPlay) {
+        if (!usesTerminalFormalReplySource || !speechSettings.enabled || !speechSettings.autoPlay) {
             autoPlayStartupSuppressedRef.current = false;
             return;
         }
@@ -657,23 +1061,23 @@ const HeaderEndIcons = React.memo(
         // First payload arrived during this session; do not suppress it (autoplay effect will handle).
         autoPlayStartupSuppressedRef.current = true;
     }, [
-        isTerminalBlock,
         setSpeechAutoPlayBaselineTs,
         setSpeechLastSpokenPayloadId,
         speechFormalReplyPayload,
         speechSettings.autoPlay,
         speechSettings.enabled,
+        usesTerminalFormalReplySource,
     ]);
     React.useEffect(() => {
         const prevAutoPlay = prevAutoPlayRef.current;
         prevAutoPlayRef.current = speechSettings.autoPlay;
-        if (!isTerminalBlock || !speechSettings.enabled || !speechSettings.autoPlay) {
+        if (!usesTerminalFormalReplySource || !speechSettings.enabled || !speechSettings.autoPlay) {
             const shouldStopActivePlayback =
-                isTerminalBlock &&
+                usesTerminalFormalReplySource &&
                 prevAutoPlay &&
                 (!speechSettings.autoPlay || !speechSettings.enabled);
             cancelAutoSpeech(shouldStopActivePlayback);
-            if (isTerminalBlock && !speechSettings.enabled) {
+            if (usesTerminalFormalReplySource && !speechSettings.enabled) {
                 speechAutoPlayBaselineTsRef.current = 0;
                 setSpeechAutoPlayBaselineTs(0);
             }
@@ -683,29 +1087,26 @@ const HeaderEndIcons = React.memo(
         if (!payload || !payload.text.trim()) {
             return;
         }
-        // Startup guard: never auto-play a restored formal reply payload until we've observed
-        // at least one command completion in this session (shell integration sets lastCommandDoneTs).
-        const sessionStartTs = Number(sessionStartTsRef.current) || 0;
-        const commandDoneTs = Number(lastCommandDoneTsRef.current) || 0;
-        if (sessionStartTs > 0 && commandDoneTs <= sessionStartTs) {
-            return;
-        }
-        const baselineTs = Number(speechAutoPlayBaselineTsRef.current) || 0;
-        if (baselineTs > 0 && payload.outputTs <= baselineTs) {
-            return;
-        }
-        if (payload.id === speechLastSpokenPayloadIdRef.current) {
-            return;
-        }
-        if (speechActiveRef.current) {
-            return;
-        }
-        if (autoPlayPendingPayloadIdRef.current === payload.id) {
+        if (
+            !shouldAutoPlayTerminalFormalReply({
+                payload,
+                sourceMode: formalReplySourceMode,
+                shellState: shellStateRef.current,
+                sessionStartTs: sessionStartTsRef.current,
+                lastCommandDoneTs: lastCommandDoneTsRef.current,
+                lastOutputTs: lastOutputTsRef.current,
+                baselineTs: speechAutoPlayBaselineTsRef.current,
+                lastSpokenPayloadId: speechLastSpokenPayloadIdRef.current,
+                pendingPayloadId: autoPlayPendingPayloadIdRef.current,
+                speechActive: speechActiveRef.current,
+            })
+        ) {
             return;
         }
         autoPlayPendingPayloadIdRef.current = payload.id;
         void (async () => {
             try {
+                setSpeechAttentionActive(true);
                 await speakTerminalPayload(payload);
             } finally {
                 if (autoPlayPendingPayloadIdRef.current === payload.id) {
@@ -715,11 +1116,13 @@ const HeaderEndIcons = React.memo(
         })();
     }, [
         cancelAutoSpeech,
-        isTerminalBlock,
         speakTerminalPayload,
         speechFormalReplyPayload,
         speechSettings.autoPlay,
         speechSettings.enabled,
+        formalReplySourceMode,
+        setSpeechAttentionActive,
+        usesTerminalFormalReplySource,
     ]);
 
     React.useEffect(() => {
@@ -732,17 +1135,27 @@ const HeaderEndIcons = React.memo(
         const autoPlayDecl: IconButtonDecl = {
             elemtype: "iconbutton",
             icon: "arrows-rotate",
+            className: speechAutoPlay ? "toggle active" : "toggle",
             iconColor: speechAutoPlay ? "var(--success-color)" : "var(--secondary-text-color)",
-            title: (t("aipanel.speech.autoPlay", { defaultValue: "Auto-play new replies" }) + `: ${speechAutoPlay ? "on" : "off"}`).trim(),
+            title: getTerminalSpeechAutoPlayTitle(speechAutoPlay),
             click: () => {
-                RpcApi.SetConfigCommand(TabRpcClient, { "speech:autoplay": !speechAutoPlay });
+                const nextAutoPlay = !speechAutoPlay;
+                speechAutoPlayConfigSeededRef.current = true;
+                setSpeechAutoPlayOptimistic(nextAutoPlay);
+                void Promise.resolve(RpcApi.SetConfigCommand(TabRpcClient, { "speech:autoplay": nextAutoPlay })).catch(
+                    (error) => {
+                        setSpeechAutoPlayOptimistic(null);
+                        const message = error instanceof Error ? error.message : String(error);
+                        reportSpeechError(`自动播报切换失败：${message}`);
+                    }
+                );
             },
             disabled: false,
         };
         endIconsElem.push(<IconButton key="speech-autoplay" decl={autoPlayDecl} className="block-frame-speech-autoplay" />);
     }
 
-    const showSpeechButton = isTerminalBlock ? true : speechSettings.showManualButton;
+    const showSpeechButton = shouldShowSharedHeaderSpeechButton(isTerminalBlock);
     if (showSpeechButton) {
         endIconsElem.push(<IconButton key="speech" decl={speechDecl} className="block-frame-speech" />);
     }
@@ -752,27 +1165,28 @@ const HeaderEndIcons = React.memo(
             icon: "clock-rotate-left",
             iconColor: codexResumeAvailable ? "var(--accent-color)" : "var(--secondary-text-color)",
             title: codexResumeAvailable
-                ? "Resume latest Codex session"
-                : "Wait for the current terminal command to finish before resuming Codex",
+                ? "恢复最近的 Codex 会话"
+                : "请等待当前终端命令结束后，再恢复 Codex 会话",
             click: () => {
                 if (!codexResumeAvailable) {
                     return;
                 }
                 util.fireAndForget(async () => {
                     try {
+                        const baselineOutputTs = Number(lastOutputTsRef.current) || 0;
                         await runCodexResumeSequence((input) =>
                             RpcApi.ControllerInputCommand(TabRpcClient, {
                                 blockid: blockId,
                                 inputdata64: util.stringToBase64(input),
                             })
-                        , { waitUntilReadyForFollowup: waitForBlockShellStateToStart });
+                        , { waitUntilReadyForFollowup: () => waitForBlockCodexResumeToBecomeInteractive(baselineOutputTs) });
                         recordTEvent("action:codexresume", { "block:view": "term" });
                     } catch (error) {
                         const message = error instanceof Error ? error.message : String(error);
                         pushFlashError({
                             id: "",
                             icon: "triangle-exclamation",
-                            title: "Codex resume failed",
+                            title: "恢复 Codex 会话失败",
                             message,
                             expiration: Date.now() + 7000,
                         });
@@ -786,7 +1200,7 @@ const HeaderEndIcons = React.memo(
     const settingsDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "cog",
-        title: t("block.settings"),
+        title: "打开设置",
         click: (e) => handleHeaderContextMenu(e, blockId, viewModel, nodeModel, t),
     };
     endIconsElem.push(<IconButton key="settings" decl={settingsDecl} className="block-frame-settings" />);
@@ -794,7 +1208,7 @@ const HeaderEndIcons = React.memo(
         const addToLayoutDecl: IconButtonDecl = {
             elemtype: "iconbutton",
             icon: "circle-plus",
-            title: t("block.addToLayout"),
+            title: "加入布局",
             click: () => {
                 nodeModel.addEphemeralNodeToLayout();
             },
@@ -814,7 +1228,7 @@ const HeaderEndIcons = React.memo(
     const closeDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "xmark-large",
-        title: t("common.close"),
+        title: "关闭",
         click: () => uxCloseBlock(nodeModel.blockId),
     };
     endIconsElem.push(<IconButton key="close" decl={closeDecl} className="block-frame-default-close" />);
@@ -844,7 +1258,9 @@ const BlockFrame_Header = ({
     const prevMagifiedState = React.useRef(magnified);
     const manageConnection = util.useAtomValueSafe(viewModel?.manageConnection);
     const dragHandleRef = preview ? null : nodeModel.dragHandleRef;
-    const isTerminalBlock = blockData?.meta?.view === "term";
+    const currentView = String(blockData?.meta?.view ?? "").trim();
+    const isBrowserChromeHeader = blockData?.meta?.["web:headerstyle"] === "browser-chrome";
+    const isTerminalBlock = isTerminalLikeBlockView(currentView);
     const unreadAtom = React.useMemo(() => {
         return useBlockAtom(nodeModel.blockId, "term:unread", () => jotai.atom(false) as jotai.PrimitiveAtom<boolean>);
     }, [nodeModel.blockId]);
@@ -855,6 +1271,8 @@ const BlockFrame_Header = ({
     viewIconUnion = blockData?.meta?.["frame:icon"] ?? viewIconUnion;
     const connName = blockData?.meta?.connection;
     const connStatus = jotai.useAtomValue(getConnStatusAtom(connName));
+    const rawHeaderTextUnion = util.useAtomValueSafe(viewModel?.viewText);
+    const headerTextUnion = blockData?.meta?.["frame:text"] ?? rawHeaderTextUnion;
     const shellStateAtom = React.useMemo(() => {
         if (!isTerminalBlock) {
             return null;
@@ -970,16 +1388,16 @@ const BlockFrame_Header = ({
         if (!isTerminalBlock) {
             return undefined;
         }
-        const pathLabel = liveDisplayCwd || getTerminalDisplayCwd(blockData?.meta);
+        const pathLabel = resolveTerminalHeaderPathLabel(liveDisplayCwd, blockData?.meta);
         return util.isBlank(pathLabel) ? undefined : pathLabel;
     }, [blockData?.meta, isTerminalBlock, liveDisplayCwd, lastOutputTs]);
     const terminalCwd = React.useMemo(() => {
         if (!isTerminalBlock) {
             return undefined;
         }
-        const cwd = getTerminalInheritableCwd(blockData?.meta);
+        const cwd = resolveTerminalActionCwd(blockData?.meta, liveDisplayCwd);
         return util.isBlank(cwd) ? undefined : cwd;
-    }, [blockData?.meta, isTerminalBlock]);
+    }, [blockData?.meta, isTerminalBlock, liveDisplayCwd]);
 
     const codexAuthReady = util.useAtomValueSafe(atoms.codexAuthReadyAtom) ?? false;
 
@@ -1033,6 +1451,7 @@ const BlockFrame_Header = ({
         <div
             className={cn(
                 "block-frame-default-header",
+                isBrowserChromeHeader && "browser-chrome-header",
                 useTermHeader && "!pl-[2px]",
                 termLifeClass,
                 isTerminalBlock && termLifeClass === "term-stopped" && codexAuthReady && "term-ai-ready",
@@ -1046,9 +1465,13 @@ const BlockFrame_Header = ({
             {!useTermHeader && (
                 <>
                     {preIconButton && <IconButton decl={preIconButton} className="block-frame-preicon-button" />}
-                    <div className="block-frame-default-header-iconview">
+                    <div className={cn("block-frame-default-header-iconview", isBrowserChromeHeader && "browser-chrome-iconview")}>
                         {viewIconElem}
-                        {viewName && !hideViewName && <div className="block-frame-view-type">{viewName}</div>}
+                        {viewName && !hideViewName && (
+                            <div className={cn("block-frame-view-type", isBrowserChromeHeader && "browser-chrome-title")}>
+                                {viewName}
+                            </div>
+                        )}
                     </div>
                 </>
             )}
@@ -1071,8 +1494,7 @@ const BlockFrame_Header = ({
                 </div>
             )}
             <HeaderTextElems
-                viewModel={viewModel}
-                blockData={blockData}
+                headerTextUnion={headerTextUnion}
                 preview={preview}
                 error={error}
                 onDoubleClick={isTerminalBlock ? handleHeaderTextDoubleClick : undefined}
@@ -1081,10 +1503,12 @@ const BlockFrame_Header = ({
                 viewModel={viewModel}
                 nodeModel={nodeModel}
                 blockId={nodeModel.blockId}
+                currentView={currentView}
                 isTerminalBlock={isTerminalBlock}
                 shellState={shellState}
                 lastOutputTs={lastOutputTs}
                 lastCommandDoneTs={lastCommandDoneTs}
+                liveDisplayCwd={liveDisplayCwd}
             />
         </div>
     );

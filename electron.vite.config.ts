@@ -12,6 +12,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 // from our electron build
 const CHROME = "chrome140";
 const NODE = "node22";
+const TSCONFIG_PATHS_SKIP_DIRS = new Set([".tmp"]);
 
 type UiBuildInfo = {
     commit: string;
@@ -31,6 +32,13 @@ function getUiBuildInfo(): UiBuildInfo {
 }
 
 const uiBuildInfo = getUiBuildInfo();
+
+function tsconfigPathsPlugin() {
+    return tsconfigPaths({
+        // Skip local sandbox/reference trees so test/build startup only scans the real repo tsconfig files.
+        skip: (dir) => TSCONFIG_PATHS_SKIP_DIRS.has(dir),
+    });
+}
 
 // for debugging
 // target is like -- path.resolve(__dirname, "frontend/app/workspace/workspace-layout-model.ts");
@@ -105,7 +113,7 @@ export default defineConfig({
             outDir: "dist/main",
             externalizeDeps: false,
         },
-        plugins: [tsconfigPaths()],
+        plugins: [tsconfigPathsPlugin()],
         resolve: {
             alias: {
                 "@": "frontend",
@@ -131,6 +139,7 @@ export default defineConfig({
                 input: {
                     index: "emain/preload.ts",
                     "preload-webview": "emain/preload-webview.ts",
+                    "preload-goose": "emain/preload-goose.ts",
                 },
                 output: {
                     format: "cjs",
@@ -142,7 +151,7 @@ export default defineConfig({
         server: {
             open: false,
         },
-        plugins: [tsconfigPaths()],
+        plugins: [tsconfigPathsPlugin()],
     },
     renderer: {
         root: ".",
@@ -200,7 +209,7 @@ export default defineConfig({
             },
         },
         plugins: [
-            tsconfigPaths(),
+            tsconfigPathsPlugin(),
             { ...ViteImageOptimizer(), apply: "build" },
             svgr({
                 svgrOptions: { exportType: "default", ref: true, svgo: false, titleProp: true },

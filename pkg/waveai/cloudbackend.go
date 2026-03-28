@@ -26,11 +26,13 @@ const OpenAICloudReqStr = "openai-cloudreq"
 const PacketEOFStr = "EOF"
 
 type WaveAICloudReqPacketType struct {
-	Type       string                           `json:"type"`
-	ClientId   string                           `json:"clientid"`
-	Prompt     []wshrpc.WaveAIPromptMessageType `json:"prompt"`
-	MaxTokens  int                              `json:"maxtokens,omitempty"`
-	MaxChoices int                              `json:"maxchoices,omitempty"`
+	Type          string                           `json:"type"`
+	ClientId      string                           `json:"clientid"`
+	Model         string                           `json:"model,omitempty"`
+	ThinkingLevel string                           `json:"thinkinglevel,omitempty"`
+	Prompt        []wshrpc.WaveAIPromptMessageType `json:"prompt"`
+	MaxTokens     int                              `json:"maxtokens,omitempty"`
+	MaxChoices    int                              `json:"maxchoices,omitempty"`
 }
 
 func MakeWaveAICloudReqPacket() *WaveAICloudReqPacketType {
@@ -83,6 +85,12 @@ func (WaveAICloudBackend) StreamCompletion(ctx context.Context, request wshrpc.W
 		}
 		reqPk := MakeWaveAICloudReqPacket()
 		reqPk.ClientId = request.ClientId
+		reqPk.Model = request.Opts.Model
+		if reqPk.Model == "" {
+			reqPk.Model = "default"
+		}
+		reqPk.ThinkingLevel = request.Opts.ThinkingLevel
+		log.Printf("wave cloud request model=%s thinking=%q\n", reqPk.Model, reqPk.ThinkingLevel)
 		reqPk.Prompt = sendablePromptMsgs
 		reqPk.MaxTokens = request.Opts.MaxTokens
 		reqPk.MaxChoices = request.Opts.MaxChoices

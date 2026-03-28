@@ -14,6 +14,7 @@ import { DefaultRouter, TabRpcClient } from "@/app/store/wshrpcutil";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms, createBlock, fetchWaveFile, getApi, globalStore, WOS } from "@/store/global";
 import { BlockService, ObjectService } from "@/store/services";
+import { isCompositionProtectedKeydown, useCompositionSafeTextarea } from "@/util/composition-input";
 import { adaptFromReactOrNativeKeyEvent, checkKeyPressed } from "@/util/keyutil";
 import { fireAndForget, isBlank, makeIconClass, mergeMeta } from "@/util/util";
 import { atom, Atom, PrimitiveAtom, useAtomValue, WritableAtom } from "jotai";
@@ -372,6 +373,7 @@ export class WaveAiModel implements ViewModel {
             const history = await this.fetchAiData();
             const beMsg: WaveAIStreamRequest = {
                 clientid: clientId,
+                blockid: this.blockId,
                 opts: opts,
                 prompt: [...history, newPrompt],
             };
@@ -632,13 +634,16 @@ interface ChatInputProps {
     value: string;
     baseFontSize: number;
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    onCompositionStart: () => void;
+    onCompositionEnd: (e: React.CompositionEvent<HTMLTextAreaElement>) => void;
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
     onMouseDown: (e: React.MouseEvent<HTMLTextAreaElement>) => void;
+    onBlur: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
     model: WaveAiModel;
 }
 
 const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
-    ({ value, onChange, onKeyDown, onMouseDown, baseFontSize, model }, ref) => {
+    ({ value, onChange, onCompositionStart, onCompositionEnd, onKeyDown, onMouseDown, onBlur, baseFontSize, model }, ref) => {
         const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
         useImperativeHandle(ref, () => textAreaRef.current as HTMLTextAreaElement);
@@ -684,7 +689,10 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 className="waveai-input"
                 onMouseDown={onMouseDown} // When the user clicks on the textarea
                 onChange={onChange}
+                onCompositionStart={onCompositionStart}
+                onCompositionEnd={onCompositionEnd}
                 onKeyDown={onKeyDown}
+                onBlur={onBlur}
                 style={{ fontSize: baseFontSize }}
                 placeholder="Ask anything..."
                 value={value}
@@ -701,6 +709,7 @@ const WaveAi = ({ model }: { model: WaveAiModel; blockId: string }) => {
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const [value, setValue] = useState("");
+    const composerInput = useCompositionSafeTextarea(value, setValue);
     const [selectedBlockIdx, setSelectedBlockIdx] = useState<number | null>(null);
 
     const baseFontSize: number = 14;
@@ -713,10 +722,6 @@ const WaveAi = ({ model }: { model: WaveAiModel; blockId: string }) => {
     useEffect(() => {
         fireAndForget(model.populateMessages.bind(model));
     }, []);
-
-    const handleTextAreaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setValue(e.target.value);
-    };
 
     const updatePreTagOutline = (clickedPre?: HTMLElement | null) => {
         const pres = chatWindowRef.current?.querySelectorAll("pre");
@@ -755,12 +760,13 @@ const WaveAi = ({ model }: { model: WaveAiModel; blockId: string }) => {
         // the unlock is detected. this automatically checks on the
         // callback firing instead
         const locked = globalStore.get(model.locked);
-        if (locked || value === "") return;
+        const nextValue = composerInput.commitDraftValue(inputRef.current?.value);
+        if (locked || nextValue.trim() === "") return;
 
-        sendMessage(value);
+        sendMessage(nextValue);
         setValue("");
         setSelectedBlockIdx(null);
-    }, [value]);
+    }, [composerInput, model, sendMessage]);
 
     const updateScrollTop = () => {
         const pres = chatWindowRef.current?.querySelectorAll("pre");
@@ -837,6 +843,10 @@ const WaveAi = ({ model }: { model: WaveAiModel; blockId: string }) => {
     };
 
     const handleTextAreaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        const isComposing = isCompositionProtectedKeydown(composerInput.isComposingRef.current.isComposing, e);
+        if (isComposing) {
+            return;
+        }
         const waveEvent = adaptFromReactOrNativeKeyEvent(e);
         if (checkKeyPressed(waveEvent, "Enter")) {
             e.preventDefault();
@@ -892,11 +902,14 @@ const WaveAi = ({ model }: { model: WaveAiModel; blockId: string }) => {
                 <div className="waveai-input-wrapper">
                     <ChatInput
                         ref={inputRef}
-                        value={value}
+                        value={composerInput.value}
                         model={model}
-                        onChange={handleTextAreaChange}
+                        onChange={composerInput.handleChange}
+                        onCompositionStart={composerInput.handleCompositionStart}
+                        onCompositionEnd={composerInput.handleCompositionEnd}
                         onKeyDown={handleTextAreaKeyDown}
                         onMouseDown={handleTextAreaMouseDown}
+                        onBlur={composerInput.handleBlurWhileComposing}
                         baseFontSize={baseFontSize}
                     />
                 </div>

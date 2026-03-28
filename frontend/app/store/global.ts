@@ -43,6 +43,16 @@ const ConnStatusMapAtom = atom(new Map<string, PrimitiveAtom<ConnStatus>>());
 const TabIndicatorMap = new Map<string, PrimitiveAtom<TabIndicator>>();
 const orefAtomCache = new Map<string, Map<string, Atom<any>>>();
 
+function isJotaiAtomLike(value: unknown): value is Atom<unknown> {
+    if (value == null) {
+        return false;
+    }
+    if (typeof value !== "object" && typeof value !== "function") {
+        return false;
+    }
+    return typeof (value as { read?: unknown }).read === "function";
+}
+
 function initGlobal(initOpts: GlobalInitOptions) {
     globalEnvironment = initOpts.environment;
     globalPrimaryTabStartup = initOpts.primaryTabStartup ?? false;
@@ -488,13 +498,40 @@ function getBlockTermDurableAtom(blockId: string): Atom<boolean> {
 
 function useBlockAtom<T>(blockId: string, name: string, makeFn: () => Atom<T>): Atom<T> {
     const blockCache = getSingleBlockAtomCache(blockId);
-    let atom = blockCache.get(name);
-    if (atom == null) {
-        atom = makeFn();
-        blockCache.set(name, atom);
+    let cachedValue = blockCache.get(name);
+    if (isJotaiAtomLike(cachedValue)) {
+        return cachedValue as Atom<T>;
+    }
+    if (cachedValue !== undefined) {
+        console.warn("Invalid BlockAtom cache entry, recreating atom", {
+            blockId,
+            name,
+            cachedValue,
+        });
+    }
+    let nextAtom = makeFn();
+    if (!isJotaiAtomLike(nextAtom)) {
+        console.warn("useBlockAtom factory returned a non-atom value, wrapping it in a primitive atom", {
+            blockId,
+            name,
+            nextAtom,
+        });
+        nextAtom = atom(nextAtom as T);
+    }
+    blockCache.set(name, nextAtom);
+    if (cachedValue === undefined) {
         console.log("New BlockAtom", blockId, name);
     }
-    return atom as Atom<T>;
+    return nextAtom as Atom<T>;
+}
+
+function __setBlockAtomCacheValueForTests(blockId: string, name: string, value: unknown) {
+    const blockCache = getSingleBlockAtomCache(blockId);
+    blockCache.set(name, value as Atom<any>);
+}
+
+function __clearBlockAtomCacheForTests() {
+    orefAtomCache.clear();
 }
 
 function useBlockDataLoaded(blockId: string): boolean {
@@ -1036,6 +1073,8 @@ export {
     useOverrideConfigAtom,
     useSettingsKeyAtom,
     WOS,
+    __clearBlockAtomCacheForTests,
+    __setBlockAtomCacheValueForTests,
 };
 
 

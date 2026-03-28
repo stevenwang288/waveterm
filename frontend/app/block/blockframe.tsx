@@ -118,6 +118,12 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
     const localConnBtnRef = React.useRef<HTMLDivElement>(null);
     const connBtnRef = viewModel?.connBtnRef ?? localConnBtnRef;
     const noHeader = util.useAtomValueSafe(viewModel?.noHeader);
+    const speechAttentionActiveAtom = React.useMemo(() => {
+        return useBlockAtom(nodeModel.blockId, "speech:attention-active", () => {
+            return jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
+        }) as jotai.PrimitiveAtom<boolean>;
+    }, [nodeModel.blockId]);
+    const speechAttentionActive = jotai.useAtomValue(speechAttentionActiveAtom);
 
     React.useEffect(() => {
         if (!manageConnection) {
@@ -172,6 +178,7 @@ const BlockFrame_Default_Component = (props: BlockFrameProps) => {
                 "block-focused": isFocused || preview,
                 "block-preview": preview,
                 "block-no-highlight": disableFocusHighlight && !preview,
+                "block-attention-active": speechAttentionActive,
                 "term-unread": isTerminalBlock && hasUnread,
                 ephemeral: isEphemeral,
                 magnified: isMagnified,

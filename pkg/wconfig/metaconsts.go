@@ -27,6 +27,7 @@ const (
 	ConfigKey_AiApiToken                     = "ai:apitoken"
 	ConfigKey_AiName                         = "ai:name"
 	ConfigKey_AiModel                        = "ai:model"
+	ConfigKey_AiThinkingLevel                = "ai:thinkinglevel"
 	ConfigKey_AiOrgID                        = "ai:orgid"
 	ConfigKey_AIApiVersion                   = "ai:apiversion"
 	ConfigKey_AiMaxTokens                    = "ai:maxtokens"
@@ -48,6 +49,7 @@ const (
 	ConfigKey_SpeechFilterPaths              = "speech:filterpaths"
 	ConfigKey_SpeechFilterCode               = "speech:filtercode"
 	ConfigKey_SpeechAutoPlay                 = "speech:autoplay"
+	ConfigKey_SpeechAutoplayMigrated         = "speech:autoplay-migrated"
 	ConfigKey_SpeechManualButton             = "speech:manualbutton"
 	ConfigKey_SpeechRate                     = "speech:rate"
 	ConfigKey_SpeechLocalEngine              = "speech:localengine"
@@ -146,3 +148,4 @@ const (
 	ConfigKey_TsunamiSdkVersion              = "tsunami:sdkversion"
 	ConfigKey_TsunamiGoPath                  = "tsunami:gopath"
 )
+

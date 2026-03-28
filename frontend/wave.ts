@@ -1,8 +1,6 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { App } from "@/app/app";
-import { loadMonaco } from "@/app/monaco/monaco-env";
 import { GlobalModel } from "@/app/store/global-model";
 import {
     globalRefocus,
@@ -15,7 +13,6 @@ import { modalsModel } from "@/app/store/modalmodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { makeBuilderRouteId, makeTabRouteId } from "@/app/store/wshrouter";
 import { initWshrpc, TabRpcClient } from "@/app/store/wshrpcutil";
-import { BuilderApp } from "@/builder/builder-app";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { countersClear, countersPrint } from "@/store/counters";
 import {
@@ -39,8 +36,11 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 
 const platform = getApi().getPlatform();
-document.title = `Wave Terminal`;
+const appDisplayNameOverride = getApi().getAboutModalDetails()?.appDisplayName?.trim?.() ?? "";
+const windowTitleBase = appDisplayNameOverride || "Wave Terminal";
+document.title = windowTitleBase;
 let savedInitOpts: WaveInitOpts = null;
+let bareInitStarted = false;
 
 (window as any).WOS = WOS;
 (window as any).globalStore = globalStore;
@@ -149,6 +149,10 @@ function updateZoomFactor(zoomFactor: number) {
 }
 
 async function initBare() {
+    if (bareInitStarted) {
+        return;
+    }
+    bareInitStarted = true;
     getApi().sendLog("Init Bare");
     installRendererDiagnostics();
     document.body.style.visibility = "hidden";
@@ -162,13 +166,21 @@ async function initBare() {
     getApi().onZoomFactorChange((zoomFactor) => {
         updateZoomFactor(zoomFactor);
     });
+    console.log("Init Bare Done");
+    getApi().setWindowInitStatus("ready");
     document.fonts.ready.then(() => {
-        console.log("Init Bare Done");
-        getApi().setWindowInitStatus("ready");
+        console.log("Init Bare Fonts Ready");
+        getApi().sendLog("Init Bare Fonts Ready");
     });
 }
 
-document.addEventListener("DOMContentLoaded", initBare);
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+        void initBare();
+    });
+} else {
+    void initBare();
+}
 
 async function initWaveWrap(initOpts: WaveInitOpts) {
     try {
@@ -206,7 +218,7 @@ async function reinitWave() {
     const initialTab = await WOS.reloadWaveObject<Tab>(WOS.makeORef("tab", savedInitOpts.tabId));
     await WOS.reloadWaveObject<LayoutState>(WOS.makeORef("layout", initialTab.layoutstate));
     reloadAllWorkspaceTabs(ws);
-    document.title = `Wave Terminal - ${initialTab.name}`; // TODO update with tab name change
+    document.title = `${windowTitleBase} - ${initialTab.name}`; // TODO update with tab name change
     getApi().setWindowInitStatus("wave-ready");
     globalStore.set(atoms.reinitVersion, globalStore.get(atoms.reinitVersion) + 1);
     globalStore.set(atoms.updaterStatusAtom, getApi().getUpdaterStatus());
@@ -260,18 +272,18 @@ async function initWave(initOpts: WaveInitOpts) {
 
     // ensures client/window/workspace are loaded into the cache before rendering
     try {
-        const [client, waveWindow, initialTab] = await Promise.all([
+        const [_client, waveWindow, initialTab] = await Promise.all([
             WOS.loadAndPinWaveObject<Client>(WOS.makeORef("client", initOpts.clientId)),
             WOS.loadAndPinWaveObject<WaveWindow>(WOS.makeORef("window", initOpts.windowId)),
             WOS.loadAndPinWaveObject<Tab>(WOS.makeORef("tab", initOpts.tabId)),
         ]);
-        const [ws, layoutState] = await Promise.all([
+        const [workspace, _layoutState] = await Promise.all([
             WOS.loadAndPinWaveObject<Workspace>(WOS.makeORef("workspace", waveWindow.workspaceid)),
             WOS.reloadWaveObject<LayoutState>(WOS.makeORef("layout", initialTab.layoutstate)),
         ]);
-        loadAllWorkspaceTabs(ws);
+        loadAllWorkspaceTabs(workspace);
         WOS.wpsSubscribeToObject(WOS.makeORef("workspace", waveWindow.workspaceid));
-        document.title = `Wave Terminal - ${initialTab.name}`; // TODO update with tab name change
+        document.title = `${windowTitleBase} - ${initialTab.name}`; // TODO update with tab name change
     } catch (e) {
         console.error("Failed initialization error", e);
         getApi().sendLog("Error in initialization (wave.ts, loading required objects) " + e.message + "\n" + e.stack);
@@ -279,13 +291,15 @@ async function initWave(initOpts: WaveInitOpts) {
     registerGlobalKeys();
     registerElectronReinjectKeyHandler();
     registerControlShiftStateUpdateHandler();
-    await loadMonaco();
     const fullConfig = await RpcApi.GetFullConfigCommand(TabRpcClient);
     console.log("fullconfig", fullConfig);
     await migrateSpeechAutoplayDefault(fullConfig);
     globalStore.set(atoms.fullConfigAtom, fullConfig);
     const waveaiModeConfig = await RpcApi.GetWaveAIModeConfigCommand(TabRpcClient);
     globalStore.set(atoms.waveaiModeConfigAtom, waveaiModeConfig.configs);
+    getApi().sendLog("Init Wave importing App");
+    const { App } = await import("@/app/app");
+    getApi().sendLog("Init Wave imported App");
     console.log("Wave First Render");
     let firstRenderResolveFn: () => void = null;
     let firstRenderPromise = new Promise<void>((resolve) => {
@@ -308,17 +322,10 @@ async function migrateSpeechAutoplayDefault(fullConfig: FullConfigType): Promise
     if (settings["speech:autoplay-migrated"] === true) {
         return;
     }
-    if (settings["speech:autoplay"] !== true) {
-        settings["speech:autoplay-migrated"] = true;
-        return;
-    }
-
     try {
         await RpcApi.SetConfigCommand(TabRpcClient, {
-            "speech:autoplay": false,
             "speech:autoplay-migrated": true,
         });
-        settings["speech:autoplay"] = false;
         settings["speech:autoplay-migrated"] = true;
     } catch (e) {
         console.log("Failed to migrate speech:autoplay default", e);
@@ -376,12 +383,14 @@ async function initBuilder(initOpts: BuilderInitOpts) {
 
     registerBuilderGlobalKeys();
     registerElectronReinjectKeyHandler();
-    await loadMonaco();
     const fullConfig = await RpcApi.GetFullConfigCommand(TabRpcClient);
     console.log("fullconfig", fullConfig);
     globalStore.set(atoms.fullConfigAtom, fullConfig);
     const waveaiModeConfig = await RpcApi.GetWaveAIModeConfigCommand(TabRpcClient);
     globalStore.set(atoms.waveaiModeConfigAtom, waveaiModeConfig.configs);
+    getApi().sendLog("Init Builder importing BuilderApp");
+    const { BuilderApp } = await import("@/builder/builder-app");
+    getApi().sendLog("Init Builder imported BuilderApp");
 
     console.log("Tsunami Builder First Render");
     let firstRenderResolveFn: () => void = null;

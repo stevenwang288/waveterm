@@ -20,6 +20,8 @@ async function* rpcResponseGenerator(
     timeout: number
 ): AsyncGenerator<any, void, boolean> {
     const msgQueue: RpcMessage[] = [];
+    let rpcIsOpen = true;
+    let cancelSent = false;
     let signalFn: () => void;
     let signalPromise = new Promise<void>((resolve) => (signalFn = resolve));
     let timeoutId: NodeJS.Timeout = null;
@@ -41,29 +43,40 @@ async function* rpcResponseGenerator(
         command: command,
         msgFn: msgFn,
     });
-    yield null;
     try {
+        yield null;
         while (true) {
             while (msgQueue.length > 0) {
                 const msg = msgQueue.shift()!;
                 if (msg.error != null) {
+                    rpcIsOpen = false;
                     throw new Error(msg.error);
                 }
                 if (!msg.cont && msg.data == null) {
+                    rpcIsOpen = false;
                     return;
+                }
+                const isTerminalMessage = !msg.cont;
+                if (isTerminalMessage) {
+                    rpcIsOpen = false;
                 }
                 const shouldTerminate = yield msg.data;
-                if (shouldTerminate) {
+                if (shouldTerminate && rpcIsOpen) {
                     sendRpcCancel(reqid);
+                    cancelSent = true;
+                    rpcIsOpen = false;
                     return;
                 }
-                if (!msg.cont) {
+                if (isTerminalMessage) {
                     return;
                 }
             }
             await signalPromise;
         }
     } finally {
+        if (rpcIsOpen && !cancelSent) {
+            sendRpcCancel(reqid);
+        }
         openRpcs.delete(reqid);
         if (timeoutId != null) {
             clearTimeout(timeoutId);

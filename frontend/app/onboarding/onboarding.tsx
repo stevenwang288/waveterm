@@ -1,7 +1,7 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import Logo from "@/app/asset/logo.svg";
+import Logo from "@/app/asset/logo.svg?react";
 import { Button } from "@/app/element/button";
 import { FlexiModal } from "@/app/modals/modal";
 import { OnboardingFeatures } from "@/app/onboarding/onboarding-features";

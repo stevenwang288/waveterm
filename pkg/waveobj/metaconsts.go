@@ -55,6 +55,9 @@ const (
 	MetaKey_CmdJwt                           = "cmd:jwt"
 	MetaKey_CmdEnv                           = "cmd:env"
 	MetaKey_CmdCwd                           = "cmd:cwd"
+
+	MetaKey_DisplayLaunchCwd                 = "display:launchcwd"
+
 	MetaKey_CmdInitScript                    = "cmd:initscript"
 	MetaKey_CmdInitScriptSh                  = "cmd:initscript.sh"
 	MetaKey_CmdInitScriptBash                = "cmd:initscript.bash"

@@ -1,7 +1,6 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { globalStore } from "@/app/store/jotaiStore";
 import * as WOS from "@/app/store/wos";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -20,17 +19,10 @@ const AIPANEL_DEFAULTWIDTHRATIO = 0.33;
 const AIPANEL_MINWIDTH = 180;
 const AIPANEL_MAXWIDTHRATIO = 0.95;
 
-export type SidePanelView = "ai" | "history" | "favorites" | "servers" | "layouts" | "git";
+export type SidePanelView = "ai" | "history" | "favorites" | "servers";
 
 function isSidePanelView(value: string): value is SidePanelView {
-    return (
-        value === "ai" ||
-        value === "history" ||
-        value === "favorites" ||
-        value === "servers" ||
-        value === "layouts" ||
-        value === "git"
-    );
+    return value === "ai" || value === "history" || value === "favorites" || value === "servers";
 }
 
 class WorkspaceLayoutModel {
@@ -268,7 +260,9 @@ class WorkspaceLayoutModel {
 
         if (view === "ai" && !opts?.nofocus) {
             this.focusTimeoutRef = setTimeout(() => {
-                WaveAIModel.getInstance().focusInput();
+                void import("@/app/aipanel/waveai-model").then(({ WaveAIModel }) => {
+                    WaveAIModel.getInstance().focusInput();
+                });
                 this.focusTimeoutRef = null;
             }, 120);
         }
@@ -308,7 +302,9 @@ class WorkspaceLayoutModel {
         if (visible) {
             if (!opts?.nofocus && sidePanelView === "ai") {
                 this.focusTimeoutRef = setTimeout(() => {
-                    WaveAIModel.getInstance().focusInput();
+                    void import("@/app/aipanel/waveai-model").then(({ WaveAIModel }) => {
+                        WaveAIModel.getInstance().focusInput();
+                    });
                     this.focusTimeoutRef = null;
                 }, 350);
             }

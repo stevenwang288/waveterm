@@ -41,8 +41,8 @@ const BEL = 0x07
 const ST = 0x9c
 const ESC = 0x1b
 
-const DefaultOutputChSize = 32
-const DefaultInputChSize = 32
+const DefaultOutputChSize = 256
+const DefaultInputChSize = 256
 
 const WaveJwtTokenVarName = wavebase.WaveJwtTokenVarName
 

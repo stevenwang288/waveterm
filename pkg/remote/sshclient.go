@@ -382,7 +382,89 @@ func createPublicKeyCallback(connCtx context.Context, sshKeywords *wconfig.ConnK
 	}
 }
 
-func createPasswordCallbackPrompt(connCtx context.Context, remoteDisplayName string, password *string, debugInfo *ConnectionDebugInfo) func() (secret string, err error) {
+func makeRemoteDisplayName(sshKeywords *wconfig.ConnKeywords) string {
+	chosenUser := utilfn.SafeDeref(sshKeywords.SshUser)
+	chosenHostName := utilfn.SafeDeref(sshKeywords.SshHostName)
+	chosenPort := utilfn.SafeDeref(sshKeywords.SshPort)
+	remoteName := xknownhosts.Normalize(chosenHostName + ":" + chosenPort)
+	if chosenUser != "" {
+		remoteName = chosenUser + "@" + remoteName
+	}
+	return remoteName
+}
+
+func getOrCreateSSHPasswordSecretName(connName string, sshKeywords *wconfig.ConnKeywords) string {
+	if sshKeywords.SshPasswordSecretName != nil && strings.TrimSpace(*sshKeywords.SshPasswordSecretName) != "" {
+		return strings.TrimSpace(*sshKeywords.SshPasswordSecretName)
+	}
+	return secretstore.MakeSSHPasswordSecretName(connName)
+}
+
+func persistSSHPasswordForConnection(connCtx context.Context, connName string, sshKeywords *wconfig.ConnKeywords, password string) (string, error) {
+	secretName := getOrCreateSSHPasswordSecretName(connName, sshKeywords)
+	if err := secretstore.SetSecret(secretName, password); err != nil {
+		return "", utilds.Errorf(ConnErrCode_SecretStore, "保存 SSH 长期密码失败: %w", err)
+	}
+	if err := wconfig.SetConnectionsConfigValue(connName, map[string]any{"ssh:passwordsecretname": secretName}); err != nil {
+		return "", utilds.Errorf(ConnErrCode_SecretStore, "绑定 ssh:passwordsecretname 失败: %w", err)
+	}
+	sshKeywords.SshPasswordSecretName = utilfn.Ptr(secretName)
+	blocklogger.Infof(connCtx, "[conndebug] persisted ssh password for %q using secret %q\n", connName, secretName)
+	return secretName, nil
+}
+
+func promptAndPersistSSHPassword(connCtx context.Context, connName string, remoteDisplayName string, sshKeywords *wconfig.ConnKeywords, isUpdate bool, debugInfo *ConnectionDebugInfo) (string, error) {
+	secretName := getOrCreateSSHPasswordSecretName(connName, sshKeywords)
+	title := "设置 SSH 长期密码"
+	queryText := fmt.Sprintf(
+		"将为连接  \n%s\n\n"+
+			"设置长期 SSH 密码。密码会加密保存在本地 secret store，\n"+
+			"并自动绑定到：\n`ssh:passwordsecretname = %s`\n\n"+
+			"请输入 SSH 密码：",
+		remoteDisplayName, secretName)
+	if isUpdate {
+		title = "更新 SSH 长期密码"
+		queryText = fmt.Sprintf(
+			"连接  \n%s\n\n"+
+				"当前保存的 SSH 长期密码不可用，或绑定的 secret 不存在。\n"+
+				"新的密码会加密保存在本地 secret store，并继续绑定到：\n"+
+				"`ssh:passwordsecretname = %s`\n\n"+
+				"请输入新的 SSH 密码：",
+			remoteDisplayName, secretName)
+	}
+	ctx, cancelFn := context.WithTimeout(connCtx, 60*time.Second)
+	defer cancelFn()
+	request := &userinput.UserInputRequest{
+		ResponseType: "text",
+		QueryText:    queryText,
+		Markdown:     true,
+		Title:        title,
+	}
+	response, err := userinput.GetUserInput(ctx, request)
+	if err != nil {
+		return "", ConnectionError{
+			ConnectionDebugInfo: debugInfo,
+			Err:                 utilds.MakeCodedError(ConnErrCode_UserCancelled, err),
+		}
+	}
+	if response.Text == "" {
+		return "", ConnectionError{
+			ConnectionDebugInfo: debugInfo,
+			Err:                 utilds.MakeCodedError(ConnErrCode_UserCancelled, fmt.Errorf("未输入 SSH 密码")),
+		}
+	}
+	if _, err := persistSSHPasswordForConnection(connCtx, connName, sshKeywords, response.Text); err != nil {
+		return "", ConnectionError{ConnectionDebugInfo: debugInfo, Err: err}
+	}
+	return response.Text, nil
+}
+
+func isLikelyPasswordQuestion(question string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	return strings.Contains(normalized, "password")
+}
+
+func createPasswordCallbackPrompt(connCtx context.Context, connName string, remoteDisplayName string, password *string, sshKeywords *wconfig.ConnKeywords, debugInfo *ConnectionDebugInfo) func() (secret string, err error) {
 	return func() (secret string, outErr error) {
 		defer func() {
 			panicErr := panichandler.PanicHandler("sshclient:password-callback", recover())
@@ -397,29 +479,17 @@ func createPasswordCallbackPrompt(connCtx context.Context, remoteDisplayName str
 			return *password, nil
 		}
 
-		ctx, cancelFn := context.WithTimeout(connCtx, 60*time.Second)
-		defer cancelFn()
-		queryText := fmt.Sprintf(
-			"Password Authentication requested from connection  \n"+
-				"%s\n\n"+
-				"Password:", remoteDisplayName)
-		request := &userinput.UserInputRequest{
-			ResponseType: "text",
-			QueryText:    queryText,
-			Markdown:     true,
-			Title:        "Password Authentication",
-		}
-		response, err := userinput.GetUserInput(ctx, request)
+		promptedPassword, err := promptAndPersistSSHPassword(connCtx, connName, remoteDisplayName, sshKeywords, false, debugInfo)
 		if err != nil {
 			blocklogger.Infof(connCtx, "[conndebug] ERROR Password Authentication failed: %v\n", SimpleMessageFromPossibleConnectionError(err))
-			return "", ConnectionError{ConnectionDebugInfo: debugInfo, Err: err}
+			return "", err
 		}
-		blocklogger.Infof(connCtx, "[conndebug] got password from user, sending to ssh\n")
-		return response.Text, nil
+		blocklogger.Infof(connCtx, "[conndebug] got password from user, saved to secret store, sending to ssh\n")
+		return promptedPassword, nil
 	}
 }
 
-func createInteractiveKbdInteractiveChallenge(connCtx context.Context, remoteName string, debugInfo *ConnectionDebugInfo) func(name, instruction string, questions []string, echos []bool) (answers []string, err error) {
+func createInteractiveKbdInteractiveChallenge(connCtx context.Context, connName string, remoteName string, sshKeywords *wconfig.ConnKeywords, password *string, debugInfo *ConnectionDebugInfo) func(name, instruction string, questions []string, echos []bool) (answers []string, err error) {
 	return func(name, instruction string, questions []string, echos []bool) (answers []string, outErr error) {
 		defer func() {
 			panicErr := panichandler.PanicHandler("sshclient:kbdinteractive-callback", recover())
@@ -430,8 +500,22 @@ func createInteractiveKbdInteractiveChallenge(connCtx context.Context, remoteNam
 		if len(questions) != len(echos) {
 			return nil, fmt.Errorf("bad response from server: questions has len %d, echos has len %d", len(questions), len(echos))
 		}
+		storedPassword := password
 		for i, question := range questions {
 			echo := echos[i]
+			if !echo && isLikelyPasswordQuestion(question) {
+				if storedPassword != nil {
+					answers = append(answers, *storedPassword)
+					continue
+				}
+				answer, err := promptAndPersistSSHPassword(connCtx, connName, remoteName, sshKeywords, false, debugInfo)
+				if err != nil {
+					return nil, err
+				}
+				storedPassword = &answer
+				answers = append(answers, answer)
+				continue
+			}
 			answer, err := promptChallengeQuestion(connCtx, question, echo, remoteName)
 			if err != nil {
 				return nil, ConnectionError{ConnectionDebugInfo: debugInfo, Err: utilds.MakeCodedError(ConnErrCode_UserCancelled, err)}
@@ -755,13 +839,9 @@ func createHostKeyCallback(ctx context.Context, sshKeywords *wconfig.ConnKeyword
 }
 
 func createClientConfig(connCtx context.Context, sshKeywords *wconfig.ConnKeywords, debugInfo *ConnectionDebugInfo) (*ssh.ClientConfig, error) {
-	chosenUser := utilfn.SafeDeref(sshKeywords.SshUser)
 	chosenHostName := utilfn.SafeDeref(sshKeywords.SshHostName)
 	chosenPort := utilfn.SafeDeref(sshKeywords.SshPort)
-	remoteName := xknownhosts.Normalize(chosenHostName + ":" + chosenPort)
-	if chosenUser != "" {
-		remoteName = chosenUser + "@" + remoteName
-	}
+	remoteName := makeRemoteDisplayName(sshKeywords)
 
 	var authSockSigners []ssh.Signer
 	var agentClient agent.ExtendedAgent
@@ -794,8 +874,8 @@ func createClientConfig(connCtx context.Context, sshKeywords *wconfig.ConnKeywor
 	}
 
 	publicKeyCallback := ssh.PublicKeysCallback(createPublicKeyCallback(connCtx, sshKeywords, authSockSigners, agentClient, debugInfo))
-	keyboardInteractive := ssh.KeyboardInteractive(createInteractiveKbdInteractiveChallenge(connCtx, remoteName, debugInfo))
-	passwordCallback := ssh.PasswordCallback(createPasswordCallbackPrompt(connCtx, remoteName, sshPassword, debugInfo))
+	keyboardInteractive := ssh.KeyboardInteractive(createInteractiveKbdInteractiveChallenge(connCtx, debugInfo.NextOpts.String(), remoteName, sshKeywords, sshPassword, debugInfo))
+	passwordCallback := ssh.PasswordCallback(createPasswordCallbackPrompt(connCtx, debugInfo.NextOpts.String(), remoteName, sshPassword, sshKeywords, debugInfo))
 
 	// exclude gssapi-with-mic and hostbased until implemented
 	authMethodMap := map[string]ssh.AuthMethod{
@@ -831,11 +911,26 @@ func createClientConfig(connCtx context.Context, sshKeywords *wconfig.ConnKeywor
 
 	networkAddr := chosenHostName + ":" + chosenPort
 	return &ssh.ClientConfig{
-		User:              chosenUser,
+		User:              utilfn.SafeDeref(sshKeywords.SshUser),
 		Auth:              authMethods,
 		HostKeyCallback:   hostKeyCallback,
 		HostKeyAlgorithms: hostKeyAlgorithms(networkAddr),
 	}, nil
+}
+
+func shouldPromptForPasswordRetry(sshKeywords *wconfig.ConnKeywords, err error) bool {
+	if err == nil || utilfn.SafeDeref(sshKeywords.SshBatchMode) {
+		return false
+	}
+	if !utilfn.SafeDeref(sshKeywords.SshPasswordAuthentication) && !utilfn.SafeDeref(sshKeywords.SshKbdInteractiveAuthentication) {
+		return false
+	}
+	if !utilfn.ContainsStr(sshKeywords.SshPreferredAuthentications, "password") &&
+		!utilfn.ContainsStr(sshKeywords.SshPreferredAuthentications, "keyboard-interactive") {
+		return false
+	}
+	code, _ := ClassifyConnError(err)
+	return code == ConnErrCode_AuthFailed || code == ConnErrCode_SecretNotFound
 }
 
 func connectInternal(ctx context.Context, networkAddr string, clientConfig *ssh.ClientConfig, currentClient *ssh.Client) (*ssh.Client, error) {
@@ -948,12 +1043,33 @@ func ConnectToClient(connCtx context.Context, opts *SSHOpts, currentClient *ssh.
 	}
 	clientConfig, err := createClientConfig(connCtx, sshKeywords, debugInfo)
 	if err != nil {
-		return nil, debugInfo.JumpNum, ConnectionError{ConnectionDebugInfo: debugInfo, Err: err}
+		if shouldPromptForPasswordRetry(sshKeywords, err) {
+			_, promptErr := promptAndPersistSSHPassword(connCtx, rawName, makeRemoteDisplayName(sshKeywords), sshKeywords, true, debugInfo)
+			if promptErr != nil {
+				return nil, debugInfo.JumpNum, promptErr
+			}
+			clientConfig, err = createClientConfig(connCtx, sshKeywords, debugInfo)
+		}
+		if err != nil {
+			return nil, debugInfo.JumpNum, ConnectionError{ConnectionDebugInfo: debugInfo, Err: err}
+		}
 	}
 	networkAddr := utilfn.SafeDeref(sshKeywords.SshHostName) + ":" + utilfn.SafeDeref(sshKeywords.SshPort)
 	client, err := connectInternal(connCtx, networkAddr, clientConfig, debugInfo.CurrentClient)
 	if err != nil {
-		return client, debugInfo.JumpNum, ConnectionError{ConnectionDebugInfo: debugInfo, Err: err}
+		if shouldPromptForPasswordRetry(sshKeywords, err) {
+			_, promptErr := promptAndPersistSSHPassword(connCtx, rawName, makeRemoteDisplayName(sshKeywords), sshKeywords, true, debugInfo)
+			if promptErr != nil {
+				return client, debugInfo.JumpNum, promptErr
+			}
+			clientConfig, err = createClientConfig(connCtx, sshKeywords, debugInfo)
+			if err == nil {
+				client, err = connectInternal(connCtx, networkAddr, clientConfig, debugInfo.CurrentClient)
+			}
+		}
+		if err != nil {
+			return client, debugInfo.JumpNum, ConnectionError{ConnectionDebugInfo: debugInfo, Err: err}
+		}
 	}
 	return client, debugInfo.JumpNum, nil
 }

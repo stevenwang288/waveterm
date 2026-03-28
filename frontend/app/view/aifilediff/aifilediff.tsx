@@ -6,10 +6,13 @@ import type { TabModel } from "@/app/store/tab-model";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { base64ToString } from "@/util/util";
-import { DiffViewer } from "@/app/view/codeeditor/diffviewer";
 import { globalStore, WOS } from "@/store/global";
 import * as jotai from "jotai";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
+
+const DiffViewer = lazy(() =>
+    import("@/app/view/codeeditor/diffviewer").then((module) => ({ default: module.DiffViewer }))
+);
 
 type DiffData = {
     original: string;
@@ -131,12 +134,20 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
     }
 
     return (
-        <DiffViewer
-            blockId={blockId}
-            original={diffData.original}
-            modified={diffData.modified}
-            fileName={diffData.fileName}
-        />
+        <Suspense
+            fallback={
+                <div className="flex items-center justify-center w-full h-full">
+                    <div className="text-secondary">Loading diff viewer...</div>
+                </div>
+            }
+        >
+            <DiffViewer
+                blockId={blockId}
+                original={diffData.original}
+                modified={diffData.modified}
+                fileName={diffData.fileName}
+            />
+        </Suspense>
     );
 }
 

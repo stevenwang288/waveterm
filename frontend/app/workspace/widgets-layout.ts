@@ -7,6 +7,7 @@ interface UtilityWidgetCountOptions {
     showAppsButton?: boolean;
     showDevIndicator?: boolean;
     showExplorerConnection?: boolean;
+    showWorkbenchButton?: boolean;
 }
 
 interface WidgetBarModeOptions {
@@ -22,13 +23,15 @@ export function getUtilityWidgetCount({
     showAppsButton = false,
     showDevIndicator = false,
     showExplorerConnection = false,
+    showWorkbenchButton = false,
 }: UtilityWidgetCountOptions): number {
-    const baseUtilityWidgets = 4; // git, codex resume, ai launcher, settings
+    const baseUtilityWidgets = 2; // codex resume, settings
     return (
         baseUtilityWidgets +
         Number(showAppsButton) +
         Number(showDevIndicator) +
-        Number(showExplorerConnection)
+        Number(showExplorerConnection) +
+        Number(showWorkbenchButton)
     );
 }
 

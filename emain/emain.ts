@@ -36,6 +36,7 @@ import {
     getWaveConfigDir,
     getWaveDataDir,
     isDev,
+    isDevVite,
     unameArch,
     unamePlatform,
 } from "./emain-platform";
@@ -545,7 +546,9 @@ async function appMain() {
     if (fullConfig?.settings?.["app:confirmquit"] != null) {
         confirmQuit = fullConfig.settings["app:confirmquit"];
     }
-    ensureHotSpareTab(fullConfig);
+    if (!isDevVite) {
+        ensureHotSpareTab(fullConfig);
+    }
     await relaunchBrowserWindows();
     setTimeout(runActiveTimer, 5000); // start active timer, wait 5s just to be safe
     setTimeout(sendDisplaysTDataEvent, 5000);

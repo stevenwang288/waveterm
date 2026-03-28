@@ -1,11 +1,6 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import {
-    getEligibleCodexResumeBlockIds,
-    runCodexResumeSequence,
-    type CodexResumeShellState,
-} from "@/app/block/codex-resume";
 import { Button } from "@/app/element/button";
 import { modalsModel } from "@/app/store/modalmodel";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -18,16 +13,12 @@ import {
     getApi,
     getSettingsKeyAtom,
     globalStore,
-    pushFlashError,
-    recordTEvent,
     setActiveTab,
-    useBlockAtom,
-    WOS,
 } from "@/store/global";
 import * as util from "@/util/util";
 import { isMacOS, isWindows } from "@/util/platformutil";
 import { fireAndForget } from "@/util/util";
-import { atom, useAtomValue } from "jotai";
+import { useAtomValue } from "jotai";
 import { OverlayScrollbars } from "overlayscrollbars";
 import { createRef, Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 import { debounce } from "throttle-debounce";
@@ -62,7 +53,7 @@ interface TabBarProps {
     workspace: Workspace;
 }
 
-const DefaultSidePanelButtonOrder: SidePanelView[] = ["ai", "history", "servers", "layouts", "git"];
+const DefaultSidePanelButtonOrder: SidePanelView[] = ["ai", "history", "servers"];
 
 function normalizeSidePanelButtonOrder(raw: unknown): SidePanelView[] {
     const normalized: SidePanelView[] = [];
@@ -158,35 +149,6 @@ const SidePanelToggleButton = memo(
 
 SidePanelToggleButton.displayName = "SidePanelToggleButton";
 
-const SidePanelActionButton = memo(
-    ({
-        buttonRef,
-        iconClass,
-        title,
-        onClick,
-    }: {
-        buttonRef: React.RefObject<HTMLDivElement>;
-        iconClass: string;
-        title: string;
-        onClick: () => void;
-    }) => {
-        return (
-            <div
-                ref={buttonRef}
-                className={`${sidePanelButtonClassName} text-secondary`}
-                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                title={title}
-                aria-label={title}
-                onClick={onClick}
-            >
-                <i className={iconClass} />
-            </div>
-        );
-    }
-);
-
-SidePanelActionButton.displayName = "SidePanelActionButton";
-
 const WaveAIButton = memo(() => {
     return <SidePanelToggleButton view="ai" iconClass="fa fa-sparkles" label="AI" labelClassName="font-mono" showLabel={false} />;
 });
@@ -211,32 +173,6 @@ const ServersQuickButton = memo(() => {
     );
 });
 ServersQuickButton.displayName = "ServersQuickButton";
-
-const LayoutQuickButton = memo(() => {
-    const { t } = useTranslation();
-    return <SidePanelToggleButton view="layouts" iconClass="fa fa-table-cells" label={t("clilayout.menu")} showLabel={false} />;
-});
-LayoutQuickButton.displayName = "LayoutQuickButton";
-
-const GitQuickButton = memo(() => {
-    const { t } = useTranslation();
-    return <SidePanelToggleButton view="git" iconClass="fa fa-code-branch" label={t("workspace.git")} showLabel={false} />;
-});
-GitQuickButton.displayName = "GitQuickButton";
-
-const CodexResumeAllButton = memo(
-    ({ buttonRef, onClick }: { buttonRef: React.RefObject<HTMLDivElement>; onClick: () => void }) => {
-        return (
-            <SidePanelActionButton
-                buttonRef={buttonRef}
-                iconClass="fa fa-clock-rotate-left"
-                title="Resume latest Codex in all local terminals on this page"
-                onClick={onClick}
-            />
-        );
-    }
-);
-CodexResumeAllButton.displayName = "CodexResumeAllButton";
 
 const ConfigErrorMessage = () => {
     const fullConfig = useAtomValue(atoms.fullConfigAtom);
@@ -358,7 +294,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         totalScrollOffset: null,
         dragged: false,
     });
-    const osInstanceRef = useRef<OverlayScrollbars>(null);
+    const osInstanceRef = useRef<OverlayScrollbars | null>(null);
     const draggerLeftRef = useRef<HTMLDivElement>(null);
     const draggerRightRef = useRef<HTMLDivElement>(null);
     const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
@@ -371,16 +307,12 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const historyButtonRef = useRef<HTMLDivElement>(null);
     const favoritesButtonRef = useRef<HTMLDivElement>(null);
     const serversButtonRef = useRef<HTMLDivElement>(null);
-    const layoutButtonRef = useRef<HTMLDivElement>(null);
-    const gitButtonRef = useRef<HTMLDivElement>(null);
-    const codexResumeAllButtonRef = useRef<HTMLDivElement>(null);
     const prevAllLoadedRef = useRef<boolean>(false);
     const activeTabId = useAtomValue(atoms.staticTabId);
     const isFullScreen = useAtomValue(atoms.isFullScreen);
     const zoomFactor = useAtomValue(atoms.zoomFactorAtom);
     const settings = useAtomValue(atoms.settingsAtom);
     const sidePanelOrderSetting = settings?.["tab:sidepanelbuttonorder"];
-    const [activeTabData] = WOS.useWaveObjectValue<Tab>(activeTabId ? WOS.makeORef("tab", activeTabId) : null);
 
     const [sidePanelButtonOrder, setSidePanelButtonOrder] = useState<SidePanelView[]>(() =>
         normalizeSidePanelButtonOrder(sidePanelOrderSetting)
@@ -464,96 +396,23 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         history: historyButtonRef,
         favorites: favoritesButtonRef,
         servers: serversButtonRef,
-        layouts: layoutButtonRef,
-        git: gitButtonRef,
     };
     const sidePanelButtonComponents: Record<SidePanelView, React.ComponentType> = {
         ai: WaveAIButton,
         history: PathHistoryQuickButton,
         favorites: FavoritesQuickButton,
         servers: ServersQuickButton,
-        layouts: LayoutQuickButton,
-        git: GitQuickButton,
     };
-    const getBlockData = useCallback((blockId: string): Block | undefined => {
-        if (util.isBlank(blockId)) {
-            return undefined;
-        }
-        const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
-        return globalStore.get(blockAtom);
-    }, []);
-    const getShellState = useCallback((blockId: string): CodexResumeShellState => {
-        if (util.isBlank(blockId)) {
-            return null;
-        }
-        const shellStateAtom = useBlockAtom(blockId, "term:shellstate", () => atom<CodexResumeShellState>(null));
-        return globalStore.get(shellStateAtom);
-    }, []);
-    const waitForBlockShellStateToStart = useCallback(
-        async (blockId: string) => {
-            const timeoutAt = Date.now() + 4000;
-            while (Date.now() < timeoutAt) {
-                if (getShellState(blockId) === "running-command") {
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-            throw new Error("Codex resume did not start within 4 seconds.");
-        },
-        [getShellState]
-    );
-    const handleResumeCodexForCurrentTab = useCallback(() => {
-        const tabBlockIds = activeTabData?.blockids ?? [];
-        const targetBlockIds = getEligibleCodexResumeBlockIds(tabBlockIds, getBlockData, getShellState);
-        const skippedCount = Math.max(0, tabBlockIds.length - targetBlockIds.length);
-        if (targetBlockIds.length === 0) {
-            pushFlashError({
-                id: "",
-                icon: "triangle-exclamation",
-                title: "Codex resume unavailable",
-                message: "当前页没有可恢复的本地终端。",
-                expiration: Date.now() + 7000,
-            });
+
+    const destroyOverlayScrollbars = useCallback(() => {
+        const osInstance = osInstanceRef.current;
+        if (!OverlayScrollbars.valid(osInstance)) {
+            osInstanceRef.current = null;
             return;
         }
-        fireAndForget(async () => {
-            try {
-                await Promise.all(
-                    targetBlockIds.map((blockId) =>
-                        runCodexResumeSequence((input) =>
-                            RpcApi.ControllerInputCommand(TabRpcClient, {
-                                blockid: blockId,
-                                inputdata64: util.stringToBase64(input),
-                            })
-                        , { waitUntilReadyForFollowup: () => waitForBlockShellStateToStart(blockId) })
-                    )
-                );
-                recordTEvent("action:codexresume", {
-                    "block:view": "term",
-                    blockcount: targetBlockIds.length,
-                    scope: "tab",
-                });
-                if (skippedCount > 0) {
-                    pushFlashError({
-                        id: "",
-                        icon: "circle-info",
-                        title: "Codex resume started",
-                        message: `已执行 ${targetBlockIds.length} 个终端，其余 ${skippedCount} 个块已跳过。`,
-                        expiration: Date.now() + 7000,
-                    });
-                }
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                pushFlashError({
-                    id: "",
-                    icon: "triangle-exclamation",
-                    title: "Codex resume failed",
-                    message,
-                    expiration: Date.now() + 7000,
-                });
-            }
-        });
-    }, [activeTabData?.blockids, getBlockData, getShellState, waitForBlockShellStateToStart]);
+        osInstance.destroy();
+        osInstanceRef.current = null;
+    }, []);
 
     let prevDelta: number;
     let prevDragDirection: string;
@@ -593,7 +452,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         setDragStartPositions(newStartPositions);
     }, []);
 
-    const setSizeAndPosition = (animate?: boolean) => {
+    const setSizeAndPosition = useCallback((animate?: boolean) => {
         const tabBar = tabBarRef.current;
         if (tabBar === null) return;
 
@@ -608,9 +467,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         const historyButtonWidth = historyButtonRef.current?.getBoundingClientRect().width ?? 0;
         const favoritesButtonWidth = favoritesButtonRef.current?.getBoundingClientRect().width ?? 0;
         const serversButtonWidth = serversButtonRef.current?.getBoundingClientRect().width ?? 0;
-        const layoutButtonWidth = layoutButtonRef.current?.getBoundingClientRect().width ?? 0;
-        const gitButtonWidth = gitButtonRef.current?.getBoundingClientRect().width ?? 0;
-        const codexResumeAllButtonWidth = codexResumeAllButtonRef.current?.getBoundingClientRect().width ?? 0;
         const workspaceSwitcherWidth = workspaceSwitcherRef.current?.getBoundingClientRect().width ?? 0;
 
         const nonTabElementsWidth =
@@ -624,9 +480,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             historyButtonWidth +
             favoritesButtonWidth +
             serversButtonWidth +
-            layoutButtonWidth +
-            gitButtonWidth +
-            codexResumeAllButtonWidth +
             workspaceSwitcherWidth;
         const spaceForTabs = tabbarWrapperWidth - nonTabElementsWidth;
 
@@ -667,13 +520,16 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
 
         // Initialize/destroy overlay scrollbars
         if (newScrollable) {
-            osInstanceRef.current = OverlayScrollbars(tabBarRef.current, { ...(OSOptions as any) });
-        } else {
-            if (osInstanceRef.current) {
-                osInstanceRef.current.destroy();
+            const osInstance = osInstanceRef.current;
+            if (OverlayScrollbars.valid(osInstance)) {
+                osInstance.update();
+            } else {
+                osInstanceRef.current = OverlayScrollbars(tabBar, { ...(OSOptions as any) });
             }
+        } else {
+            destroyOverlayScrollbars();
         }
-    };
+    }, [destroyOverlayScrollbars, tabIds]);
 
     const saveTabsPositionDebounced = useCallback(
         debounce(100, () => saveTabsPosition()),
@@ -683,21 +539,27 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const handleResizeTabs = useCallback(() => {
         setSizeAndPosition();
         saveTabsPositionDebounced();
-    }, [tabIds, newTabId, isFullScreen]);
+    }, [saveTabsPositionDebounced, setSizeAndPosition]);
 
     const reinitVersion = useAtomValue(atoms.reinitVersion);
     useEffect(() => {
         if (reinitVersion > 0) {
             setSizeAndPosition();
         }
-    }, [reinitVersion]);
+    }, [reinitVersion, setSizeAndPosition]);
 
     useEffect(() => {
-        window.addEventListener("resize", () => handleResizeTabs());
+        window.addEventListener("resize", handleResizeTabs);
         return () => {
-            window.removeEventListener("resize", () => handleResizeTabs());
+            window.removeEventListener("resize", handleResizeTabs);
         };
     }, [handleResizeTabs]);
+
+    useEffect(() => {
+        return () => {
+            destroyOverlayScrollbars();
+        };
+    }, [destroyOverlayScrollbars]);
 
     useEffect(() => {
         // Check if all tabs are loaded
@@ -709,7 +571,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                 prevAllLoadedRef.current = true;
             }
         }
-    }, [tabIds, tabsLoaded, newTabId, saveTabsPosition]);
+    }, [tabIds, tabsLoaded, newTabId, saveTabsPosition, setSizeAndPosition]);
 
     const getDragDirection = (currentX: number) => {
         let dragDirection: string;
@@ -768,20 +630,23 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
 
         // Scroll the tab bar if the dragged tab overflows the container bounds
         if (scrollable) {
-            const { viewport } = osInstanceRef.current.elements();
-            const currentScrollLeft = viewport.scrollLeft;
+            const osInstance = osInstanceRef.current;
+            if (OverlayScrollbars.valid(osInstance)) {
+                const { viewport } = osInstance.elements();
+                const currentScrollLeft = viewport.scrollLeft;
 
-            if (event.clientX <= tabBarRectLeftOffset) {
-                viewport.scrollLeft = Math.max(0, currentScrollLeft - incrementDecrement); // Scroll left
-                if (viewport.scrollLeft !== currentScrollLeft) {
-                    // Only adjust if the scroll actually changed
-                    draggingTabDataRef.current.totalScrollOffset += currentScrollLeft - viewport.scrollLeft;
-                }
-            } else if (event.clientX >= tabBarRectWidth + tabBarRectLeftOffset) {
-                viewport.scrollLeft = Math.min(viewport.scrollWidth, currentScrollLeft + incrementDecrement); // Scroll right
-                if (viewport.scrollLeft !== currentScrollLeft) {
-                    // Only adjust if the scroll actually changed
-                    draggingTabDataRef.current.totalScrollOffset -= viewport.scrollLeft - currentScrollLeft;
+                if (event.clientX <= tabBarRectLeftOffset) {
+                    viewport.scrollLeft = Math.max(0, currentScrollLeft - incrementDecrement); // Scroll left
+                    if (viewport.scrollLeft !== currentScrollLeft) {
+                        // Only adjust if the scroll actually changed
+                        draggingTabDataRef.current.totalScrollOffset += currentScrollLeft - viewport.scrollLeft;
+                    }
+                } else if (event.clientX >= tabBarRectWidth + tabBarRectLeftOffset) {
+                    viewport.scrollLeft = Math.min(viewport.scrollWidth, currentScrollLeft + incrementDecrement); // Scroll right
+                    if (viewport.scrollLeft !== currentScrollLeft) {
+                        // Only adjust if the scroll actually changed
+                        draggingTabDataRef.current.totalScrollOffset -= viewport.scrollLeft - currentScrollLeft;
+                    }
                 }
             }
         }
@@ -932,8 +797,9 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
 
     const updateScrollDebounced = useCallback(
         debounce(30, () => {
-            if (scrollableRef.current) {
-                const { viewport } = osInstanceRef.current.elements();
+            const osInstance = osInstanceRef.current;
+            if (scrollableRef.current && OverlayScrollbars.valid(osInstance)) {
+                const { viewport } = osInstance.elements();
                 viewport.scrollLeft = tabIds.length * tabWidthRef.current;
             }
         }),
@@ -1057,7 +923,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                     </Fragment>
                 );
             })}
-            <CodexResumeAllButton buttonRef={codexResumeAllButtonRef} onClick={handleResumeCodexForCurrentTab} />
             <WorkspaceSwitcher ref={workspaceSwitcherRef} />
             <div className="tab-bar" ref={tabBarRef} data-overlayscrollbars-initialize>
                 <div className="tabs-wrapper" ref={tabsWrapperRef} style={{ width: `${tabsWrapperWidth}px` }}>

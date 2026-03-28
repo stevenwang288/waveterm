@@ -195,6 +195,22 @@ describe("speechRuntime race handling", () => {
         unsubB();
     });
 
+    it("dedupes concurrent identical speech requests for the same owner", async () => {
+        const { speechRuntime } = await import("@/app/aipanel/speechruntime");
+        const settings = makeSettings();
+        const onError = vi.fn();
+
+        const firstPlay = speechRuntime.play("owner a reply", settings, "assistant", onError, { ownerId: "term-a" });
+        const secondPlay = speechRuntime.play("owner a reply", settings, "assistant", onError, { ownerId: "term-a" });
+        const [firstStarted, secondStarted] = await Promise.all([firstPlay, secondPlay]);
+
+        expect(firstStarted).toBe(true);
+        expect(secondStarted).toBe(true);
+        expect(MockAudio.instances.length).toBe(1);
+        expect(MockAudio.instances[0]?.pause).not.toHaveBeenCalled();
+        expect(onError).not.toHaveBeenCalled();
+    });
+
     it("logs spoken chunks and completion for api transport", async () => {
         const { speechRuntime } = await import("@/app/aipanel/speechruntime");
         const settings = makeSettings();

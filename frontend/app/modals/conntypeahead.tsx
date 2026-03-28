@@ -10,6 +10,7 @@ import {
     getConnStatusAtom,
     getLocalHostDisplayNameAtom,
     globalStore,
+    pushNotification,
     WOS,
 } from "@/app/store/global";
 import { globalRefocusWithTimeout } from "@/app/store/keymodel";
@@ -25,6 +26,29 @@ import { useTranslation } from "react-i18next";
 
 // newConnList -> connList => filteredList -> remoteItems -> sortedRemoteItems => remoteSuggestion
 // filteredList -> createNew
+
+function getConnectionErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message.trim() !== "") {
+        return error.message.trim();
+    }
+    if (typeof error === "string" && error.trim() !== "") {
+        return error.trim();
+    }
+    return "连接失败，请检查 SSH 配置或网络状态。";
+}
+
+function notifyConnectionError(connName: string | null | undefined, error: unknown) {
+    const now = Date.now();
+    const displayName = util.isBlank(connName) ? "目标连接" : connName;
+    pushNotification({
+        icon: "triangle-exclamation",
+        title: `SSH 连接失败：${displayName}`,
+        message: getConnectionErrorMessage(error),
+        timestamp: new Date(now).toISOString(),
+        expiration: now + 5000,
+        type: "error",
+    });
+}
 
 function filterConnections(
     connList: Array<string>,
@@ -135,7 +159,10 @@ function getReconnectItem(
                 { host: connStatus.connection, logblockid: blockId },
                 { timeout: 60000 }
             );
-            prtn.catch((e) => console.log("error reconnecting", connStatus.connection, e));
+            prtn.catch((e) => {
+                console.log("error reconnecting", connStatus.connection, e);
+                notifyConnectionError(connStatus.connection, e);
+            });
         },
     };
     return reconnectSuggestionItem;
@@ -370,6 +397,7 @@ const ChangeConnectionBlockModal = React.memo(
                     );
                 } catch (e) {
                     console.log("error connecting", blockId, connName, e);
+                    notifyConnectionError(connName, e);
                 }
             },
             [blockId, blockData]

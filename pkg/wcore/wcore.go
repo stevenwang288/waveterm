@@ -82,6 +82,12 @@ func EnsureInitialData() (bool, error) {
 	if err != nil {
 		return firstLaunch, fmt.Errorf("error creating window: %w", err)
 	}
+	if firstLaunch {
+		err = BootstrapStarterLayout(ctx)
+		if err != nil {
+			return firstLaunch, fmt.Errorf("error bootstrapping starter layout: %w", err)
+		}
+	}
 	return firstLaunch, nil
 }
 
@@ -89,6 +95,7 @@ func CreateClient(ctx context.Context) (*waveobj.Client, error) {
 	client := &waveobj.Client{
 		OID:       uuid.NewString(),
 		WindowIds: []string{},
+		TosAgreed: time.Now().UnixMilli(),
 	}
 	err := wstore.DBInsert(ctx, client)
 	if err != nil {

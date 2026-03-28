@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld("api", {
     getSystemPath: (name: string) => ipcRenderer.sendSync("get-system-path", name),
     getAboutModalDetails: () => ipcRenderer.sendSync("get-about-modal-details"),
     getWebviewPreload: () => ipcRenderer.sendSync("get-webview-preload"),
+    getGooseWebviewPreload: () => ipcRenderer.sendSync("get-goose-webview-preload"),
+    getGooseFrontendUrl: () => ipcRenderer.sendSync("get-goose-frontend-url"),
+    syncCcSwitchConfig: (target) => ipcRenderer.invoke("ccswitch:sync-config", target),
+    optimizePromptInput: (prompt) => ipcRenderer.invoke("promptoptimizer:optimize-prompt", prompt),
     getZoomFactor: () => ipcRenderer.sendSync("get-zoom-factor"),
     runGit: (cwd: string, args: string[]) => ipcRenderer.invoke("git-run", cwd, args),
     openNewWindow: () => ipcRenderer.send("open-new-window"),
@@ -70,6 +74,15 @@ contextBridge.exposeInMainWorld("api", {
     nativePaste: () => ipcRenderer.send("native-paste"),
     codexTranslate: (text: string) => ipcRenderer.invoke("codex-translate", text),
     codexAuthReady: () => ipcRenderer.invoke("codex-auth-ready"),
+    codexLastSessionId: (cwd: string) => ipcRenderer.invoke("codex-last-session-id", cwd),
+    pickDirectory: (opts?: { title?: string; defaultPath?: string; buttonLabel?: string }) =>
+        ipcRenderer.invoke("pick-directory", opts),
+    httpRequest: (req: {
+        url: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: string;
+    }) => ipcRenderer.invoke("http-request", req),
     speechRequest: (req: {
         url: string;
         method?: string;

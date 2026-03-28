@@ -39,6 +39,86 @@ function getDevWindowCaptureScript(): string {
             const elem = document.querySelector(selector);
             return elem instanceof HTMLElement ? (elem.innerText || elem.textContent || "").trim() : "";
         };
+        const q = (selector, root = document) => root.querySelector(selector);
+        const qa = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+        const findWorkbenchToggleButton = () => {
+            const workbenchRoot = q(".workbench-shell");
+            const scopedRoot = workbenchRoot?.closest(".block") ?? document;
+            const buttons = qa(".block-frame-default-header .wave-iconbutton", scopedRoot);
+            return buttons.find((candidate) => {
+                if (!(candidate instanceof HTMLElement)) {
+                    return false;
+                }
+                const icon = candidate.querySelector("i");
+                const title = candidate.getAttribute("title") ?? candidate.getAttribute("aria-label") ?? "";
+                return (
+                    icon?.classList.contains("fa-gauge-high") ||
+                    title.includes("工作台") ||
+                    title.includes("返回终端")
+                );
+            });
+        };
+        const readWorkbenchMessages = () =>
+            Array.from(document.querySelectorAll(".workbench-shell .messageList .flatMessage"))
+                .map((elem) => {
+                    const htmlElem = elem instanceof HTMLElement ? elem : null;
+                    const text = htmlElem ? (htmlElem.innerText || htmlElem.textContent || "").trim() : "";
+                    let role = "system";
+                    if (htmlElem?.classList.contains("flatMsgUser")) {
+                        role = "user";
+                    } else if (htmlElem?.classList.contains("flatMsgAssistant")) {
+                        role = "assistant";
+                    } else if (htmlElem?.classList.contains("flatMsgError")) {
+                        role = "error";
+                    }
+                return {
+                    role,
+                    text: text.slice(0, 400),
+                };
+            })
+                .slice(-8);
+        const readButtonTexts = (selector) =>
+            qa(selector)
+                .map((elem) => (elem instanceof HTMLElement ? (elem.innerText || elem.textContent || "").trim() : ""))
+                .filter(Boolean);
+        const readWorkbenchTheme = () => {
+            const root = document.querySelector(".workbench-shell");
+            if (!(root instanceof HTMLElement)) {
+                return null;
+            }
+            const styles = window.getComputedStyle(root);
+            return {
+                colorScheme: styles.colorScheme,
+                background: styles.background,
+                text: styles.color,
+                bg: styles.getPropertyValue("--wb-bg").trim() || styles.getPropertyValue("--bg").trim(),
+                accent: styles.getPropertyValue("--wb-accent").trim() || styles.getPropertyValue("--accent").trim(),
+                optionBg: styles.getPropertyValue("--wb-option-bg").trim() || styles.getPropertyValue("--option-bg").trim(),
+                optionFg: styles.getPropertyValue("--wb-option-fg").trim() || styles.getPropertyValue("--option-fg").trim(),
+            };
+        };
+        const readWorkbenchSelects = (selector) =>
+            qa(selector)
+                .map((elem) => {
+                    if (!(elem instanceof HTMLSelectElement)) {
+                        return null;
+                    }
+                    const selectStyles = window.getComputedStyle(elem);
+                    const selectedOption = elem.options[elem.selectedIndex] ?? elem.options[0] ?? null;
+                    const optionStyles = selectedOption ? window.getComputedStyle(selectedOption) : null;
+                    const pickerRoot = elem.closest(".compactPicker, .settingRow");
+                    const labelElem = pickerRoot?.querySelector(".compactPickerLabel, .settingRow__meta strong");
+                    return {
+                        label: labelElem instanceof HTMLElement ? (labelElem.innerText || labelElem.textContent || "").trim() : "",
+                        value: elem.value,
+                        color: selectStyles.color,
+                        background: selectStyles.backgroundColor,
+                        borderColor: selectStyles.borderColor,
+                        optionColor: optionStyles?.color ?? "",
+                        optionBackground: optionStyles?.backgroundColor ?? "",
+                    };
+                })
+                .filter(Boolean);
         const allDisplayIcons = Array.from(document.querySelectorAll("i.fa-display"));
         const endDisplayIcons = allDisplayIcons.filter((icon) => icon.closest(".block-frame-end-icons") != null);
         const strayDisplayIcons = allDisplayIcons.filter((icon) => icon.closest(".block-frame-end-icons") == null);
@@ -143,6 +223,45 @@ function getDevWindowCaptureScript(): string {
                 overlayVisible: document.querySelector('[data-testid="pvevnc-overlay"]') != null,
                 canvas: canvasInfo,
             },
+            workbench: {
+                rootCount: document.querySelectorAll(".workbench-shell").length,
+                topBarButtons: readButtonTexts(".workbench-shell .chatTopBar .chatTopBarBtn"),
+                drawerTabs: readButtonTexts(".workbench-shell .drawerTabs .drawerTabs__item"),
+                drawerCardTitles: Array.from(document.querySelectorAll(".workbench-shell .panelCard__header strong")).map((elem) =>
+                    elem instanceof HTMLElement ? (elem.innerText || elem.textContent || "").trim() : ""
+                ),
+                drawerActionButtons: readButtonTexts(".workbench-shell .convSidebar .secondaryAction"),
+                returnButtonText: readText(".workbench-shell .chatTopBar .chatTopBarBtnPrimary"),
+                modeToggleTitle: (() => {
+                    const toggleButton = findWorkbenchToggleButton();
+                    return toggleButton instanceof HTMLElement
+                        ? (toggleButton.getAttribute("title") ?? toggleButton.getAttribute("aria-label") ?? "")
+                        : "";
+                })(),
+                drawerOpen: !!document.querySelector(".workbench-shell .convSidebar:not(.is-collapsed)"),
+                drawerWidth: (() => {
+                    const sidebar = document.querySelector(".workbench-shell .convSidebar");
+                    if (!(sidebar instanceof HTMLElement)) {
+                        return 0;
+                    }
+                    return Math.round(sidebar.getBoundingClientRect().width);
+                })(),
+                composerPlaceholder:
+                    document.querySelector(".workbench-shell .chatInputTextarea") instanceof HTMLTextAreaElement
+                        ? document.querySelector(".workbench-shell .chatInputTextarea").getAttribute("placeholder") ?? ""
+                        : "",
+                footerButtons: readButtonTexts(".workbench-shell .chatInputFooterBar button"),
+                footerMeta: Array.from(document.querySelectorAll(".workbench-shell .chatInputFooterBar .composerMeta span")).map((elem) =>
+                    elem instanceof HTMLElement ? (elem.innerText || elem.textContent || "").trim() : ""
+                ),
+                connectionHeroTitle: readText(".workbench-shell .connectionHero__copy strong"),
+                connectionHeroSubtitle: readText(".workbench-shell .connectionHero__copy span"),
+                connectionBadge: readText(".workbench-shell .connectionBadge"),
+                theme: readWorkbenchTheme(),
+                composerSelects: readWorkbenchSelects(".workbench-shell .chatInputPrimaryBar select"),
+                drawerSelects: readWorkbenchSelects(".workbench-shell .convSidebar select"),
+                messages: readWorkbenchMessages(),
+            },
         };
     })();`;
 }
@@ -194,6 +313,135 @@ function captureDevWindowSnapshot(win: WaveBrowserWindow, label: string, delayMs
     }, delayMs);
 }
 
+function getDevWorkbenchQuickStateScript(): string {
+    return `(() => {
+        const root = document.querySelector(".workbench-shell");
+        const block = root?.closest(".block");
+        const sidebar = document.querySelector(".workbench-shell .convSidebar");
+        const layoutModel = typeof window.getLayoutModelForStaticTab === "function" ? window.getLayoutModelForStaticTab() : null;
+        const numLeafs =
+            layoutModel && window.globalStore && layoutModel.numLeafs
+                ? Number(window.globalStore.get(layoutModel.numLeafs) ?? 0)
+                : 0;
+        return {
+            hasWorkbench: !!root,
+            magnified: block instanceof HTMLElement ? block.classList.contains("magnified") : false,
+            drawerWidth: sidebar instanceof HTMLElement ? Math.round(sidebar.getBoundingClientRect().width) : 0,
+            numLeafs,
+        };
+    })();`;
+}
+
+async function readDevWorkbenchQuickState(
+    wc: Electron.WebContents
+): Promise<{ hasWorkbench: boolean; magnified: boolean; drawerWidth: number; numLeafs: number } | null> {
+    if (!wc || wc.isDestroyed()) {
+        return null;
+    }
+    return (await wc.executeJavaScript(getDevWorkbenchQuickStateScript(), true)) as {
+        hasWorkbench: boolean;
+        magnified: boolean;
+        drawerWidth: number;
+        numLeafs: number;
+    } | null;
+}
+
+async function sendDevShortcut(
+    win: WaveBrowserWindow,
+    keyCode: string,
+    modifiers: Array<"shift" | "control" | "alt" | "meta" | "command" | "cmd"> = []
+): Promise<boolean> {
+    const wc = win?.activeTabView?.webContents;
+    if (!wc || wc.isDestroyed() || win == null || win.isDestroyed()) {
+        return false;
+    }
+    if (win.isMinimized()) {
+        win.restore();
+    }
+    win.show();
+    win.focus();
+    wc.focus();
+    await delay(120);
+    console.log("dev send shortcut", { keyCode, modifiers });
+    wc.sendInputEvent({ type: "rawKeyDown", keyCode, modifiers });
+    wc.sendInputEvent({ type: "keyUp", keyCode, modifiers });
+    await delay(260);
+    return true;
+}
+
+async function runDevWorkbenchRealHotkeyChecks(win: WaveBrowserWindow): Promise<Record<string, any>> {
+    const wc = win?.activeTabView?.webContents;
+    if (!wc || wc.isDestroyed()) {
+        return { ok: false, reason: "webcontents-missing" };
+    }
+    const before = await readDevWorkbenchQuickState(wc);
+    if (!before?.hasWorkbench) {
+        return { ok: false, reason: "workbench-missing" };
+    }
+
+    const drawerInitiallyOpen = (before.drawerWidth ?? 0) > 0;
+
+    await sendDevShortcut(win, "S", ["alt"]);
+    const afterFirstDrawerToggle = await readDevWorkbenchQuickState(wc);
+    const firstDrawerToggleWorked = drawerInitiallyOpen
+        ? (afterFirstDrawerToggle?.drawerWidth ?? 0) < before.drawerWidth
+        : (afterFirstDrawerToggle?.drawerWidth ?? 0) > before.drawerWidth;
+
+    if (firstDrawerToggleWorked) {
+        await sendDevShortcut(win, "S", ["alt"]);
+    }
+    const afterDrawerRestore = await readDevWorkbenchQuickState(wc);
+    const secondDrawerToggleWorked = firstDrawerToggleWorked
+        ? drawerInitiallyOpen
+            ? (afterDrawerRestore?.drawerWidth ?? 0) > (afterFirstDrawerToggle?.drawerWidth ?? 0)
+            : (afterDrawerRestore?.drawerWidth ?? 0) < (afterFirstDrawerToggle?.drawerWidth ?? 0)
+        : false;
+    const drawerHotkeyWorked = firstDrawerToggleWorked && secondDrawerToggleWorked;
+
+    const magnifyUnavailable = (before.numLeafs ?? 0) <= 1;
+    let afterCtrlOn = before;
+    let afterCtrlOff = before;
+    let afterAltOn = before;
+    let afterAltOff = before;
+    if (!magnifyUnavailable) {
+        await sendDevShortcut(win, "Q", ["control"]);
+        afterCtrlOn = await readDevWorkbenchQuickState(wc);
+        await sendDevShortcut(win, "Q", ["control"]);
+        afterCtrlOff = await readDevWorkbenchQuickState(wc);
+
+        await sendDevShortcut(win, "Q", ["alt"]);
+        afterAltOn = await readDevWorkbenchQuickState(wc);
+        await sendDevShortcut(win, "Q", ["alt"]);
+        afterAltOff = await readDevWorkbenchQuickState(wc);
+    }
+
+    const magnifyOk =
+        magnifyUnavailable ||
+        (!!afterCtrlOn?.magnified &&
+            !(afterCtrlOff?.magnified ?? true) &&
+            !!afterAltOn?.magnified &&
+            !(afterAltOff?.magnified ?? true));
+
+    return {
+        ok: drawerHotkeyWorked && magnifyOk,
+        drawer: {
+            before: before.drawerWidth,
+            afterHotkey: afterFirstDrawerToggle?.drawerWidth ?? 0,
+            restored: afterDrawerRestore?.drawerWidth ?? 0,
+            hotkeyWorked: drawerHotkeyWorked,
+        },
+        magnifyShortcuts: {
+            ctrlQOn: !!afterCtrlOn?.magnified,
+            ctrlQOff: !(afterCtrlOff?.magnified ?? true),
+            altQOn: !!afterAltOn?.magnified,
+            altQOff: !(afterAltOff?.magnified ?? true),
+            skipped: magnifyUnavailable,
+            reason: magnifyUnavailable ? "single-block-root-node" : "",
+            ok: magnifyOk,
+        },
+    };
+}
+
 function getDevClickToolbarIconScript(iconClass: string): string {
     return `(() => {
         const buttons = Array.from(document.querySelectorAll(".block-frame-end-icons .wave-iconbutton"));
@@ -228,6 +476,348 @@ function getDevClickToolbarIconScript(iconClass: string): string {
     })();`;
 }
 
+function getDevWorkbenchAutotestScript(message: string, token: string): string {
+    return `(() => {
+        const TEST_MESSAGE = ${JSON.stringify(message)};
+        const TEST_TOKEN = ${JSON.stringify(token)};
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const q = (selector, root = document) => root.querySelector(selector);
+        const qa = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+        const text = (elem) => (elem instanceof HTMLElement ? (elem.innerText || elem.textContent || "").trim() : "");
+        const normalize = (value) => String(value ?? "").replace(/\\s+/g, " ").trim();
+        const getWorkbenchBlock = () => q(".workbench-shell")?.closest(".block");
+        const isWorkbenchMagnified = () => {
+            const block = getWorkbenchBlock();
+            return block instanceof HTMLElement ? block.classList.contains("magnified") : false;
+        };
+        const findWorkbenchToggleButton = () => {
+            const scopedRoot = getWorkbenchBlock() ?? document;
+            const buttons = qa(".block-frame-default-header .wave-iconbutton", scopedRoot);
+            return buttons.find((candidate) => {
+                if (!(candidate instanceof HTMLElement) || !isVisible(candidate)) {
+                    return false;
+                }
+                const icon = candidate.querySelector("i");
+                const title = candidate.getAttribute("title") ?? candidate.getAttribute("aria-label") ?? "";
+                return (
+                    icon?.classList.contains("fa-gauge-high") ||
+                    title.includes("工作台") ||
+                    title.includes("返回终端")
+                );
+            });
+        };
+        const isVisible = (elem) => {
+            if (!(elem instanceof HTMLElement)) {
+                return false;
+            }
+            const rect = elem.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0;
+        };
+        const readMessages = () =>
+            qa(".workbench-shell .messageList .flatMessage").map((elem) => {
+                const htmlElem = elem instanceof HTMLElement ? elem : null;
+                const value = normalize(text(htmlElem));
+                let role = "system";
+                if (htmlElem?.classList.contains("flatMsgUser")) {
+                    role = "user";
+                } else if (htmlElem?.classList.contains("flatMsgAssistant")) {
+                    role = "assistant";
+                } else if (htmlElem?.classList.contains("flatMsgError")) {
+                    role = "error";
+                }
+                return {
+                    role,
+                    text: value,
+                };
+            });
+        const readState = () => {
+            const sidebar = q(".workbench-shell .convSidebar");
+            const sidebarRect = sidebar instanceof HTMLElement ? sidebar.getBoundingClientRect() : null;
+            const modelSelect = q(".workbench-shell .chatInputPrimaryLeft select");
+            return {
+                hasWorkbench: !!q(".workbench-shell"),
+                drawerOpen: !!q(".workbench-shell .convSidebar:not(.is-collapsed)"),
+                drawerWidth: sidebarRect ? Math.round(sidebarRect.width) : 0,
+                drawerMeta: text(q(".workbench-shell .convSidebarHeader .convSidebarMeta")),
+                topBarButtons: qa(".workbench-shell .chatTopBar .chatTopBarBtn").map((elem) => text(elem)).filter(Boolean),
+                drawerTabs: qa(".workbench-shell .drawerTabs .drawerTabs__item").map((elem) => text(elem)).filter(Boolean),
+                magnified: isWorkbenchMagnified(),
+                selectedModel: modelSelect instanceof HTMLSelectElement ? modelSelect.value : "",
+                placeholder: q(".workbench-shell .chatInputTextarea") instanceof HTMLTextAreaElement
+                    ? q(".workbench-shell .chatInputTextarea").getAttribute("placeholder") ?? ""
+                    : "",
+                messages: readMessages().slice(-10),
+            };
+        };
+        const waitFor = async (predicate, timeoutMs, intervalMs = 250) => {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                const value = predicate();
+                if (value) {
+                    return value;
+                }
+                await sleep(intervalMs);
+            }
+            return null;
+        };
+        const clickWorkbenchToggle = () => {
+            const button = findWorkbenchToggleButton();
+            if (!(button instanceof HTMLElement)) {
+                return false;
+            }
+            button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+            return true;
+        };
+        const ensureWorkbench = async () => {
+            const existingRoot = await waitFor(() => q(".workbench-shell"), 20000, 300);
+            if (existingRoot) {
+                return { ok: true, source: "existing" };
+            }
+            const toggleReady = await waitFor(() => {
+                return qa(".block-frame-default-header .wave-iconbutton").some((candidate) => {
+                    if (!(candidate instanceof HTMLElement) || !isVisible(candidate)) {
+                        return false;
+                    }
+                    const icon = candidate.querySelector("i");
+                    const title = candidate.getAttribute("title") ?? candidate.getAttribute("aria-label") ?? "";
+                    return icon?.classList.contains("fa-gauge-high") || title.includes("工作台");
+                });
+            }, 15000, 300);
+            if (!toggleReady) {
+                return { ok: false, reason: "toggle-missing" };
+            }
+            const clicked = clickWorkbenchToggle();
+            if (!clicked) {
+                return { ok: false, reason: "toggle-missing" };
+            }
+            const root = await waitFor(() => q(".workbench-shell"), 15000, 300);
+            return root ? { ok: true, source: "toggle" } : { ok: false, reason: "toggle-timeout" };
+        };
+        const dispatchAltHotkey = async (code, key) => {
+            const root = q(".workbench-shell") ?? document.body;
+            if (root instanceof HTMLElement) {
+                root.focus();
+            }
+            root.dispatchEvent(
+                new KeyboardEvent("keydown", {
+                    altKey: true,
+                    bubbles: true,
+                    cancelable: true,
+                    code,
+                    key,
+                })
+            );
+            await sleep(220);
+            return readState().drawerWidth;
+        };
+        const dispatchMagnifyHotkey = async ({ ctrlKey = false, altKey = false } = {}) => {
+            const target = q(".workbench-shell .chatInputTextarea") ?? q(".workbench-shell") ?? document.body;
+            if (target instanceof HTMLElement) {
+                target.focus();
+            }
+            target.dispatchEvent(
+                new KeyboardEvent("keydown", {
+                    bubbles: true,
+                    cancelable: true,
+                    ctrlKey,
+                    altKey,
+                    code: "KeyQ",
+                    key: "q",
+                })
+            );
+            await sleep(260);
+            return isWorkbenchMagnified();
+        };
+        const setTextareaValue = (textarea, value) => {
+            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+            if (setter) {
+                setter.call(textarea, value);
+            } else {
+                textarea.value = value;
+            }
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        const submitMessage = async () => {
+            const textarea = await waitFor(() => q(".workbench-shell .chatInputTextarea"), 8000, 200);
+            if (!(textarea instanceof HTMLTextAreaElement)) {
+                return { ok: false, reason: "textarea-missing" };
+            }
+            setTextareaValue(textarea, TEST_MESSAGE);
+            await sleep(80);
+            const sendButton = q(".workbench-shell .chatInputPrimaryRight .chatInputSendBtn:not(.chatInputStopBtn)");
+            if (!(sendButton instanceof HTMLElement)) {
+                return { ok: false, reason: "send-button-missing" };
+            }
+            sendButton.click();
+            return { ok: true };
+        };
+        const waitForAssistant = async () => {
+            const deadline = Date.now() + 120000;
+            while (Date.now() < deadline) {
+                const messages = readMessages();
+                const userIndex = messages
+                    .map((msg, index) => ({ msg, index }))
+                    .filter(({ msg }) => msg.role === "user" && msg.text.includes(TEST_TOKEN))
+                    .slice(-1)?.[0]?.index ?? -1;
+                if (userIndex >= 0) {
+                    const afterUser = messages.slice(userIndex + 1);
+                    const errorMsg = afterUser.find((msg) => msg.role === "error" && msg.text.length > 0);
+                    if (errorMsg) {
+                        return { ok: false, reason: "assistant-error", error: errorMsg.text, messages: afterUser };
+                    }
+                    const assistantMsg = afterUser
+                        .filter((msg) => msg.role === "assistant" && msg.text.length > 0 && !msg.text.includes("正在回复"))
+                        .slice(-1)?.[0];
+                    const stillSending = !!q(".workbench-shell .chatInputStopBtn");
+                    if (assistantMsg && !stillSending) {
+                        return { ok: true, assistant: assistantMsg.text, messages: afterUser };
+                    }
+                }
+                await sleep(750);
+            }
+            return { ok: false, reason: "assistant-timeout", messages: readMessages().slice(-10) };
+        };
+        const switchToTerminal = async () => {
+            const clicked = clickWorkbenchToggle();
+            if (!clicked) {
+                return { ok: false, reason: "return-toggle-missing" };
+            }
+            const switched = await waitFor(() => !q(".workbench-shell"), 10000, 200);
+            return switched ? { ok: true } : { ok: false, reason: "return-timeout" };
+        };
+        const switchBackToWorkbench = async () => {
+            const clicked = clickWorkbenchToggle();
+            if (!clicked) {
+                return { ok: false, reason: "reopen-toggle-missing" };
+            }
+            const root = await waitFor(() => q(".workbench-shell"), 10000, 200);
+            return root ? { ok: true } : { ok: false, reason: "reopen-timeout" };
+        };
+        const result = {
+            ok: false,
+            message: TEST_MESSAGE,
+            token: TEST_TOKEN,
+            startedAt: new Date().toISOString(),
+            initial: readState(),
+        };
+        const done = (patch) => Object.assign(result, patch, { completedAt: new Date().toISOString(), final: readState() });
+        return (async () => {
+            try {
+                result.ensureWorkbench = await ensureWorkbench();
+                if (!result.ensureWorkbench?.ok) {
+                    return done({ ok: false, step: "ensure-workbench" });
+                }
+
+                await sleep(700);
+                result.afterWorkbenchOpen = readState();
+
+                const drawerBefore = readState().drawerWidth;
+                const drawerInitiallyOpen = drawerBefore > 0;
+                const drawerAfterHotkey = await dispatchAltHotkey("KeyS", "s");
+                const drawerAfterRestore =
+                    (drawerInitiallyOpen ? drawerAfterHotkey < drawerBefore : drawerAfterHotkey > drawerBefore)
+                        ? await dispatchAltHotkey("KeyS", "s")
+                        : readState().drawerWidth;
+                result.drawer = {
+                    before: drawerBefore,
+                    afterHotkey: drawerAfterHotkey,
+                    restored: drawerAfterRestore,
+                    hotkeyWorked: drawerInitiallyOpen
+                        ? drawerAfterHotkey < drawerBefore && drawerAfterRestore > drawerAfterHotkey
+                        : drawerAfterHotkey > drawerBefore && drawerAfterRestore < drawerAfterHotkey,
+                };
+                const ctrlQOn = await dispatchMagnifyHotkey({ ctrlKey: true });
+                const ctrlQOff = !(await dispatchMagnifyHotkey({ ctrlKey: true }));
+                const altQOn = await dispatchMagnifyHotkey({ altKey: true });
+                const altQOff = !(await dispatchMagnifyHotkey({ altKey: true }));
+                result.magnifyShortcuts = {
+                    ctrlQOn,
+                    ctrlQOff,
+                    altQOn,
+                    altQOff,
+                    ok: ctrlQOn && ctrlQOff && altQOn && altQOff,
+                };
+
+                result.submit = await submitMessage();
+                if (!result.submit?.ok) {
+                    return done({ ok: false, step: "submit" });
+                }
+
+                result.response = await waitForAssistant();
+                if (!result.response?.ok) {
+                    return done({ ok: false, step: "assistant-response" });
+                }
+
+                result.switchToTerminal = await switchToTerminal();
+                if (!result.switchToTerminal?.ok) {
+                    return done({ ok: false, step: "return-terminal" });
+                }
+
+                await sleep(800);
+                result.afterTerminal = {
+                    hasWorkbench: !!q(".workbench-shell"),
+                    workbenchToggleVisible: qa(".block-frame-default-header .wave-iconbutton").some((candidate) => {
+                        if (!(candidate instanceof HTMLElement) || !isVisible(candidate)) {
+                            return false;
+                        }
+                        const icon = candidate.querySelector("i");
+                        const title = candidate.getAttribute("title") ?? candidate.getAttribute("aria-label") ?? "";
+                        return icon?.classList.contains("fa-gauge-high") || title.includes("工作台");
+                    }),
+                };
+
+                result.switchBack = await switchBackToWorkbench();
+                if (!result.switchBack?.ok) {
+                    return done({ ok: false, step: "reopen-workbench" });
+                }
+
+                await sleep(1200);
+                const finalMessages = readMessages();
+                const finalUserIndex = finalMessages
+                    .map((msg, index) => ({ msg, index }))
+                    .filter(({ msg }) => msg.role === "user" && msg.text.includes(TEST_TOKEN))
+                    .slice(-1)?.[0]?.index ?? -1;
+                const finalAssistantAfterUser =
+                    finalUserIndex >= 0
+                        ? finalMessages
+                              .slice(finalUserIndex + 1)
+                              .filter((msg) => msg.role === "assistant" && msg.text.length > 0)
+                              .slice(-1)?.[0]
+                        : null;
+                const normalizedAssistant = normalize(result.response?.assistant ?? "");
+                result.history = {
+                    persistedUser: finalUserIndex >= 0,
+                    persistedAssistant:
+                        !!finalAssistantAfterUser &&
+                        (finalAssistantAfterUser.text.includes(TEST_TOKEN) ||
+                            (!!normalizedAssistant &&
+                                (finalAssistantAfterUser.text.includes(normalizedAssistant.slice(0, 40)) ||
+                                    normalizedAssistant.includes(finalAssistantAfterUser.text.slice(0, 40))))),
+                    finalMessages: finalMessages.slice(-10),
+                };
+
+                return done({
+                    ok:
+                        !!result.drawer?.hotkeyWorked &&
+                        !!result.magnifyShortcuts?.ok &&
+                        !!result.response?.ok &&
+                        !!result.switchToTerminal?.ok &&
+                        !!result.switchBack?.ok &&
+                        !!result.history?.persistedUser &&
+                        !!result.history?.persistedAssistant,
+                    step: "complete",
+                });
+            } catch (error) {
+                return done({
+                    ok: false,
+                    step: "exception",
+                    error: String(error),
+                });
+            }
+        })();
+    })();`;
+}
+
 function scheduleDevRemoteGuiAutotest(win: WaveBrowserWindow): void {
     if (process.env.WAVETERM_PROFILE !== "dev" || process.env.WAVETERM_DEV_AUTOTEST_REMOTE_GUI !== "1") {
         return;
@@ -255,6 +845,62 @@ function scheduleDevRemoteGuiAutotest(win: WaveBrowserWindow): void {
     scheduleClick("split", 26000, "fa-table-columns");
     captureDevWindowSnapshot(win, `${win.waveWindowId}-after-autoclick-split-2s`, 28000);
     captureDevWindowSnapshot(win, `${win.waveWindowId}-after-autoclick-split-8s`, 34000);
+}
+
+function scheduleDevWorkbenchAutotest(win: WaveBrowserWindow): void {
+    if (process.env.WAVETERM_PROFILE !== "dev" || process.env.WAVETERM_DEV_AUTOTEST_WORKBENCH !== "1") {
+        return;
+    }
+    setTimeout(() => {
+        fireAndForget(async () => {
+            try {
+                const wc = win?.activeTabView?.webContents;
+                if (!wc || wc.isDestroyed()) {
+                    return;
+                }
+                const outputDir = path.join(process.env.WAVETERM_DATA_HOME ?? app.getPath("userData"), "dev-captures");
+                fs.mkdirSync(outputDir, { recursive: true });
+                const label = `${win.waveWindowId}-workbench-autotest`;
+                const result = (await wc.executeJavaScript(
+                    getDevWorkbenchAutotestScript(
+                        "Please reply with WORKBENCH_E2E_OK_20260320 only.",
+                        "WORKBENCH_E2E_OK_20260320"
+                    ),
+                    true
+                )) as Record<string, any> | null;
+                if (result == null) {
+                    console.log("dev workbench autotest returned no data", label);
+                    return;
+                }
+                const realHotkeys = await runDevWorkbenchRealHotkeyChecks(win);
+                result.realHotkeys = realHotkeys;
+                if (realHotkeys?.drawer) {
+                    result.drawer = {
+                        ...(result.drawer ?? {}),
+                        ...realHotkeys.drawer,
+                    };
+                }
+                if (realHotkeys?.magnifyShortcuts) {
+                    result.magnifyShortcuts = realHotkeys.magnifyShortcuts;
+                }
+                if (typeof result.ok === "boolean") {
+                    result.ok =
+                        !!result.response?.ok &&
+                        !!result.switchToTerminal?.ok &&
+                        !!result.switchBack?.ok &&
+                        !!result.history?.persistedUser &&
+                        !!result.history?.persistedAssistant &&
+                        !!realHotkeys?.ok;
+                }
+                const jsonOutputPath = path.join(outputDir, `${label}.json`);
+                fs.writeFileSync(jsonOutputPath, JSON.stringify(result, null, 2), "utf8");
+                console.log("dev workbench autotest saved", jsonOutputPath);
+                captureDevWindowSnapshot(win, `${win.waveWindowId}-after-workbench-autotest-2s`, 2000);
+            } catch (error) {
+                console.log("dev workbench autotest failed", error);
+            }
+        });
+    }, 12000);
 }
 
 function scheduleDevWindowReadyCaptures(win: WaveBrowserWindow): void {
@@ -683,7 +1329,6 @@ export class WaveBrowserWindow extends BaseWindow {
         }
         tabView.savedInitOpts = { ...initOpts };
         tabView.savedInitOpts.activate = false;
-        delete tabView.savedInitOpts.primaryTabStartup;
         let startTime = Date.now();
         console.log(
             "before wave ready, init tab, sending wave-init",
@@ -1232,6 +1877,7 @@ export async function relaunchBrowserWindows() {
         captureDevWindowSnapshot(win, `${win.waveWindowId}-after-show-12s`, 12000);
         scheduleDevWindowReadyCaptures(win);
         scheduleDevRemoteGuiAutotest(win);
+        scheduleDevWorkbenchAutotest(win);
     }
 }
 

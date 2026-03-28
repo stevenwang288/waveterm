@@ -1096,7 +1096,6 @@ declare global {
         "term:localshellopts"?: string[];
         "term:scrollback"?: number;
         "term:vdomblockid"?: string;
-        "term:guiblockid"?: string;
         "term:vdomtoolbarblockid"?: string;
         "term:transparency"?: number;
         "term:allowbracketedpaste"?: boolean;
@@ -1110,11 +1109,6 @@ declare global {
         "web:hidenav"?: boolean;
         "web:partition"?: string;
         "web:useragenttype"?: string;
-        "pvevnc:origin"?: string;
-        "pvevnc:node"?: string;
-        "pvevnc:vmid"?: number;
-        "pvevnc:type"?: string;
-        "pvevnc:name"?: string;
         "markdown:fontsize"?: number;
         "markdown:fixedfontsize"?: number;
         "tsunami:*"?: boolean;
@@ -1277,6 +1271,7 @@ declare global {
         "ai:apitoken"?: string;
         "ai:name"?: string;
         "ai:model"?: string;
+        "ai:thinkinglevel"?: string;
         "ai:orgid"?: string;
         "ai:apiversion"?: string;
         "ai:maxtokens"?: number;
@@ -1343,8 +1338,8 @@ declare global {
         "markdown:fixedfontsize"?: number;
         "preview:showhiddenfiles"?: boolean;
         "tab:preset"?: string;
-        "tab:sidepanelbuttonorder"?: string[];
         "tab:confirmclose"?: boolean;
+        "tab:sidepanelbuttonorder"?: string[];
         "widget:*"?: boolean;
         "widget:showhelp"?: boolean;
         "window:*"?: boolean;
@@ -1930,6 +1925,7 @@ declare global {
         proxyurl?: string;
         maxtokens?: number;
         maxchoices?: number;
+        thinkinglevel?: string;
         timeoutms?: number;
     };
 
@@ -1955,6 +1951,7 @@ declare global {
     // wshrpc.WaveAIStreamRequest
     type WaveAIStreamRequest = {
         clientid?: string;
+        blockid?: string;
         opts: WaveAIOptsType;
         prompt: WaveAIPromptMessageType[];
     };

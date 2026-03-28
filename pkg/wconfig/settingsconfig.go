@@ -43,6 +43,7 @@ type AiSettingsType struct {
 	AiApiToken      string  `json:"ai:apitoken,omitempty"`
 	AiName          string  `json:"ai:name,omitempty"`
 	AiModel         string  `json:"ai:model,omitempty"`
+	AiThinkingLevel string  `json:"ai:thinkinglevel,omitempty" jsonschema:"enum=low,enum=medium,enum=high,enum=xhigh"`
 	AiOrgID         string  `json:"ai:orgid,omitempty"`
 	AIApiVersion    string  `json:"ai:apiversion,omitempty"`
 	AiMaxTokens     float64 `json:"ai:maxtokens,omitempty"`
@@ -76,6 +77,7 @@ type SettingsType struct {
 	AiApiToken      string  `json:"ai:apitoken,omitempty"`
 	AiName          string  `json:"ai:name,omitempty"`
 	AiModel         string  `json:"ai:model,omitempty"`
+	AiThinkingLevel string  `json:"ai:thinkinglevel,omitempty" jsonschema:"enum=low,enum=medium,enum=high,enum=xhigh"`
 	AiOrgID         string  `json:"ai:orgid,omitempty"`
 	AIApiVersion    string  `json:"ai:apiversion,omitempty"`
 	AiMaxTokens     float64 `json:"ai:maxtokens,omitempty"`
@@ -206,6 +208,7 @@ func (s *SettingsType) GetAiSettings() *AiSettingsType {
 		AiApiToken:      s.AiApiToken,
 		AiName:          s.AiName,
 		AiModel:         s.AiModel,
+		AiThinkingLevel: s.AiThinkingLevel,
 		AiOrgID:         s.AiOrgID,
 		AIApiVersion:    s.AIApiVersion,
 		AiMaxTokens:     s.AiMaxTokens,
@@ -249,6 +252,9 @@ func MergeAiSettings(settings ...*AiSettingsType) *AiSettingsType {
 		}
 		if s.AiModel != "" {
 			result.AiModel = s.AiModel
+		}
+		if s.AiThinkingLevel != "" {
+			result.AiThinkingLevel = s.AiThinkingLevel
 		}
 		if s.AiOrgID != "" {
 			result.AiOrgID = s.AiOrgID

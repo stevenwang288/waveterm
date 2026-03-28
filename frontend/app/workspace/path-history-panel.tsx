@@ -13,7 +13,7 @@ import { atoms, createBlock, globalStore, refocusNode, WOS } from "@/store/globa
 import { getTerminalDisplayCwd } from "@/util/launchcwd";
 import { isBlank, isLocalConnName } from "@/util/util";
 import clsx from "clsx";
-import { useAtomValue } from "jotai";
+import { atom, useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -121,8 +121,9 @@ const PathHistoryPanel = memo(() => {
     const { t } = useTranslation();
     const pathHistoryModel = useMemo(() => LocalPathHistoryModel.getInstance(), []);
     const layoutModel = useMemo(() => getLayoutModelForStaticTab(), []);
+    const fallbackStaticTabIdAtom = useMemo(() => atom(""), []);
     const focusedLayoutNode = useAtomValue(layoutModel.focusedNode);
-    const staticTabId = useAtomValue(atoms.staticTabId);
+    const staticTabId = useAtomValue(atoms?.staticTabId ?? fallbackStaticTabIdAtom);
     const [revision, setRevision] = useState(0);
     const [tabData] = WOS.useWaveObjectValue<Tab>(staticTabId ? WOS.makeORef("tab", staticTabId) : null);
 

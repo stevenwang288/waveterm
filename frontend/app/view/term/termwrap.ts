@@ -1985,6 +1985,10 @@ export class TermWrap {
         }
     }
 
+    getDisplayCwd(): string {
+        return String(this.lastDisplayCwd || this.lastPersistedDisplayCwd || "").trim();
+    }
+
     getScrollbackContent(): string {
         if (!this.terminal) {
             return "";

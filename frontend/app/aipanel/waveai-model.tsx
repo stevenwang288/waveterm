@@ -21,6 +21,13 @@ import { ChatStatus } from "ai";
 import * as jotai from "jotai";
 import type React from "react";
 import {
+    waveAICurrentModeAtom,
+    waveAIErrorAtom,
+    waveAILatestAssistantMessageTextAtom,
+    waveAIPreviousAssistantMessageTextAtom,
+    waveAIStreamingAtom,
+} from "./waveai-shared";
+import {
     createDataUrl,
     createImagePreview,
     formatFileSizeError,
@@ -53,7 +60,7 @@ export class WaveAIModel {
     realMessage: AIMessage | null = null;
     orefContext: ORef;
     inBuilder: boolean = false;
-    isAIStreaming = jotai.atom(false);
+    isAIStreaming = waveAIStreamingAtom;
 
     widgetAccessAtom!: jotai.Atom<boolean>;
     droppedFiles: jotai.PrimitiveAtom<DroppedFile[]> = jotai.atom([]);
@@ -62,12 +69,12 @@ export class WaveAIModel {
     aiModeConfigs!: jotai.Atom<Record<string, AIModeConfigType>>;
     hasPremiumAtom!: jotai.Atom<boolean>;
     defaultModeAtom!: jotai.Atom<string>;
-    errorMessage: jotai.PrimitiveAtom<string> = jotai.atom(null) as jotai.PrimitiveAtom<string>;
+    errorMessage: jotai.PrimitiveAtom<string> = waveAIErrorAtom;
     containerWidth: jotai.PrimitiveAtom<number> = jotai.atom(0);
     codeBlockMaxWidth!: jotai.Atom<number>;
     inputAtom: jotai.PrimitiveAtom<string> = jotai.atom("");
-    latestAssistantMessageText: jotai.PrimitiveAtom<string> = jotai.atom("");
-    previousAssistantMessageText: jotai.PrimitiveAtom<string> = jotai.atom("");
+    latestAssistantMessageText: jotai.PrimitiveAtom<string> = waveAILatestAssistantMessageTextAtom;
+    previousAssistantMessageText: jotai.PrimitiveAtom<string> = waveAIPreviousAssistantMessageTextAtom;
     lastAutoPlayedMessageId: jotai.PrimitiveAtom<string | null> = jotai.atom<string | null>(null) as jotai.PrimitiveAtom<
         string | null
     >;
@@ -147,7 +154,8 @@ export class WaveAIModel {
         });
 
         const defaultMode = globalStore.get(this.defaultModeAtom);
-        this.currentAIMode = jotai.atom(defaultMode);
+        this.currentAIMode = waveAICurrentModeAtom;
+        globalStore.set(this.currentAIMode, defaultMode);
     }
 
     getPanelVisibleAtom(): jotai.Atom<boolean> {

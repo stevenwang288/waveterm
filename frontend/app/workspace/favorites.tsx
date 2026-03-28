@@ -7,10 +7,9 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { atoms, createBlock, getFocusedBlockId, globalStore, WOS } from "@/store/global";
-import { isWindows } from "@/util/platformutil";
 import { fireAndForget, isBlank, stringToBase64 } from "@/util/util";
 import clsx from "clsx";
-import { useAtomValue } from "jotai";
+import { atom, useAtomValue } from "jotai";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,15 +17,6 @@ interface FavoritesUIState {
     items: FavoriteItem[];
     expandedIds: Set<string>;
 }
-
-const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
-    { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
-    { label: "Claude", command: "claude" },
-    { label: "Gemini", command: "gemini" },
-    { label: "Amp", command: "amp" },
-    { label: "IFlow", command: "iflow" },
-    { label: "OpenCode", command: "opencode" },
-];
 
 function isCategoryPath(path: string): boolean {
     return path.endsWith("/__category__") || path.endsWith("\\__category__");
@@ -52,7 +42,7 @@ const FavoritesItemNode = memo(
         onNavigate: (item: FavoriteItem) => void;
         onOpenInFileManager: (item: FavoriteItem) => void;
         onCopyPath: (item: FavoriteItem) => void;
-        onApplyToTerminal: (item: FavoriteItem, cliCommand?: string) => void;
+        onApplyToTerminal: (item: FavoriteItem) => void;
     }) => {
         const { t } = useTranslation();
         const hasChildren = (item.children?.length ?? 0) > 0;
@@ -63,8 +53,6 @@ const FavoritesItemNode = memo(
                 e.preventDefault();
                 e.stopPropagation();
 
-                const defaultCmd = typeof item.autoCmd === "string" ? item.autoCmd.trim() : "";
-                const currentMarker = t("favorites.currentMarker");
                 const menu: ContextMenuItem[] = [
                     {
                         label: t("common.open"),
@@ -85,42 +73,6 @@ const FavoritesItemNode = memo(
                     {
                         label: t("favorites.applyToCurrentTerminal"),
                         click: () => onApplyToTerminal(item),
-                    },
-                    {
-                        label: t("favorites.defaultCommand"),
-                        submenu: [
-                            ...AI_LAUNCH_COMMANDS.map((cmd) => ({
-                                label:
-                                    !isBlank(defaultCmd) && defaultCmd === cmd.command
-                                        ? `${cmd.label}${currentMarker}`
-                                        : cmd.label,
-                                click: () => {
-                                    const model = FavoritesModel.getInstance();
-                                    model.updateFavoriteAutoCmd(item.id, cmd.command);
-                                    window.dispatchEvent(new Event("favorites-updated"));
-                                },
-                            })),
-                            ...(!isBlank(defaultCmd)
-                                ? ([
-                                      { type: "separator" as const },
-                                      {
-                                          label: t("favorites.clearDefaultCommand"),
-                                          click: () => {
-                                              const model = FavoritesModel.getInstance();
-                                              model.updateFavoriteAutoCmd(item.id, undefined);
-                                              window.dispatchEvent(new Event("favorites-updated"));
-                                          },
-                                      },
-                                  ] as ContextMenuItem[])
-                                : []),
-                        ],
-                    },
-                    {
-                        label: t("favorites.autoCommand"),
-                        submenu: AI_LAUNCH_COMMANDS.map((cmd) => ({
-                            label: cmd.label,
-                            click: () => onApplyToTerminal(item, cmd.command),
-                        })),
                     },
                     {
                         type: "separator",
@@ -214,6 +166,7 @@ const FavoritesPanel = memo(() => {
     });
     const favoritesModel = FavoritesModel.getInstance();
     const layoutModel = useMemo(() => getLayoutModelForStaticTab(), []);
+    const fallbackStaticTabIdAtom = useMemo(() => atom(""), []);
     const focusedLayoutNode = useAtomValue(layoutModel.focusedNode);
     const lastFocusedTermBlockIdRef = useRef<string>(null);
 
@@ -249,7 +202,7 @@ const FavoritesPanel = memo(() => {
             return lastFocusedTermBlockId;
         }
 
-        const staticTabId = globalStore.get(atoms.staticTabId);
+        const staticTabId = globalStore.get(atoms?.staticTabId ?? fallbackStaticTabIdAtom);
         if (isBlank(staticTabId)) {
             return null;
         }
@@ -263,7 +216,7 @@ const FavoritesPanel = memo(() => {
             }
         }
         return null;
-    }, [getBlockById]);
+    }, [fallbackStaticTabIdAtom, getBlockById]);
 
     useEffect(() => {
         const updateFavorites = () => {
@@ -311,11 +264,6 @@ const FavoritesPanel = memo(() => {
         if (item.connection) {
             meta.connection = item.connection;
         }
-        const autoCmd = typeof item.autoCmd === "string" ? item.autoCmd.trim() : "";
-        if (!isBlank(autoCmd)) {
-            meta["term:autoCmd"] = autoCmd;
-            meta["cmd:initscript"] = `${autoCmd}\n`;
-        }
         createBlock({ meta });
     }, []);
 
@@ -344,7 +292,7 @@ const FavoritesPanel = memo(() => {
     }, []);
 
     const handleApplyToTerminal = useCallback(
-        (item: FavoriteItem, cliCommand?: string) => {
+        (item: FavoriteItem) => {
             if (isCategoryPath(item.path)) {
                 return;
             }
@@ -358,16 +306,12 @@ const FavoritesPanel = memo(() => {
             }
 
             const escapedPath = normalizedPath.replace(/"/g, '\\"');
-            const command = typeof cliCommand === "string" ? cliCommand.trim() : "";
-            const inputScript = isBlank(command) ? `cd "${escapedPath}"\n` : `cd "${escapedPath}"\n${command}\n`;
+            const inputScript = `cd "${escapedPath}"\n`;
 
             fireAndForget(async () => {
                 const meta: Record<string, any> = {
                     "cmd:cwd": normalizedPath,
                 };
-                if (!isBlank(command)) {
-                    meta["term:autoCmd"] = command;
-                }
                 await RpcApi.SetMetaCommand(TabRpcClient, {
                     oref: WOS.makeORef("block", targetTermBlockId),
                     meta,
@@ -376,10 +320,6 @@ const FavoritesPanel = memo(() => {
                     blockid: targetTermBlockId,
                     inputdata64: stringToBase64(inputScript),
                 });
-                if (!isBlank(command)) {
-                    favoritesModel.updateFavoriteAutoCmd(item.id, command);
-                    window.dispatchEvent(new Event("favorites-updated"));
-                }
             });
         },
         [findTargetTerminalBlockId]

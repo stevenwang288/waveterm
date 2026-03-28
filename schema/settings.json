@@ -67,6 +67,15 @@
         "ai:model": {
           "type": "string"
         },
+        "ai:thinkinglevel": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ]
+        },
         "ai:orgid": {
           "type": "string"
         },
@@ -129,6 +138,9 @@
           "type": "boolean"
         },
         "speech:autoplay": {
+          "type": "boolean"
+        },
+        "speech:autoplay-migrated": {
           "type": "boolean"
         },
         "speech:manualbutton": {

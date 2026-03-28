@@ -26,6 +26,20 @@ function handleWindowsMenuAccelerators(
     tabView: WaveTabView,
     fullConfig: FullConfigType
 ): boolean {
+    const shouldLogDevWorkbenchShortcut =
+        process.env.WAVETERM_DEV_AUTOTEST_WORKBENCH === "1" &&
+        ["KeyQ", "KeyS", "BracketLeft", "BracketRight", "Backslash"].includes(waveEvent.code ?? "");
+    if (shouldLogDevWorkbenchShortcut) {
+        console.log("dev workbench shortcut probe", {
+            type: waveEvent.type,
+            key: waveEvent.key,
+            code: waveEvent.code,
+            control: waveEvent.control,
+            alt: waveEvent.alt,
+            meta: waveEvent.meta,
+            shift: waveEvent.shift,
+        });
+    }
     const waveWindow = getWaveWindowById(tabView.waveWindowId);
 
     if (checkKeyPressed(waveEvent, "Ctrl:Shift:n")) {
@@ -67,6 +81,23 @@ function handleWindowsMenuAccelerators(
         if (waveWindow) {
             waveWindow.setFullScreen(!waveWindow.isFullScreen());
         }
+        return true;
+    }
+
+    const shouldReinjectReservedShortcut =
+        (!waveEvent.shift &&
+            !waveEvent.alt &&
+            !waveEvent.meta &&
+            waveEvent.control &&
+            waveEvent.code === "KeyQ") ||
+        (!waveEvent.shift &&
+            !waveEvent.control &&
+            !waveEvent.meta &&
+            waveEvent.alt &&
+            ["KeyQ", "KeyS", "BracketLeft", "BracketRight", "Backslash"].includes(waveEvent.code));
+
+    if (shouldReinjectReservedShortcut) {
+        tabView.webContents.send("reinject-key", waveEvent);
         return true;
     }
 
@@ -144,6 +175,208 @@ function logTabViewWebContentsEvent(tabView: WaveTabView, eventName: string, det
     });
 }
 
+type PendingStartupRequest = {
+    url: string;
+    method: string;
+    resourceType: string;
+    startTs: number;
+    slowTimer: NodeJS.Timeout | null;
+};
+
+const SlowStartupRequestMs = 15000;
+
+function getDevRendererOrigin(): string {
+    const rendererUrl = process.env.ELECTRON_RENDERER_URL ?? "";
+    if (!rendererUrl) {
+        return "";
+    }
+    try {
+        return new URL(rendererUrl).origin;
+    } catch {
+        return "";
+    }
+}
+
+function shouldTraceStartupRequest(url: string): boolean {
+    if (!isDevVite) {
+        return false;
+    }
+    const rendererOrigin = getDevRendererOrigin();
+    if (!rendererOrigin) {
+        return false;
+    }
+    try {
+        return new URL(url).origin === rendererOrigin;
+    } catch {
+        return false;
+    }
+}
+
+function attachStartupNetworkDiagnostics(tabView: WaveTabView) {
+    if (!isDevVite) {
+        return;
+    }
+    const wc = tabView.webContents;
+    const debuggerInstance = wc.debugger;
+    if (!debuggerInstance || debuggerInstance.isAttached()) {
+        return;
+    }
+
+    const pendingRequests = new Map<string, PendingStartupRequest>();
+    const clearPendingRequest = (requestId: string) => {
+        const pending = pendingRequests.get(requestId);
+        if (!pending) {
+            return null;
+        }
+        if (pending.slowTimer) {
+            clearTimeout(pending.slowTimer);
+        }
+        pendingRequests.delete(requestId);
+        return pending;
+    };
+    const detachDebugger = () => {
+        for (const requestId of Array.from(pendingRequests.keys())) {
+            clearPendingRequest(requestId);
+        }
+        if (!wc.isDestroyed() && debuggerInstance.isAttached()) {
+            try {
+                debuggerInstance.detach();
+            } catch {
+                // Ignore detach races during teardown.
+            }
+        }
+    };
+
+    try {
+        debuggerInstance.attach("1.3");
+    } catch (error) {
+        const attachError = error as Error;
+        logTabViewWebContentsEvent(tabView, "startup-network-debugger-attach-failed", {
+            errorName: attachError?.name,
+            errorMessage: attachError?.message,
+        });
+        return;
+    }
+
+    debuggerInstance.on("detach", (_event, reason) => {
+        for (const requestId of Array.from(pendingRequests.keys())) {
+            clearPendingRequest(requestId);
+        }
+        logTabViewWebContentsEvent(tabView, "startup-network-debugger-detached", { reason });
+    });
+    debuggerInstance.on("message", (_event, method, params) => {
+        if (method === "Network.requestWillBeSent") {
+            const requestUrl = params?.request?.url ?? "";
+            if (!shouldTraceStartupRequest(requestUrl)) {
+                return;
+            }
+            const requestId = String(params?.requestId ?? "");
+            if (!requestId) {
+                return;
+            }
+            const startTs = Date.now();
+            const pending: PendingStartupRequest = {
+                url: requestUrl,
+                method: params?.request?.method ?? "GET",
+                resourceType: params?.type ?? "",
+                startTs,
+                slowTimer: setTimeout(() => {
+                    const stillPending = pendingRequests.get(requestId);
+                    if (!stillPending) {
+                        return;
+                    }
+                    logTabViewWebContentsEvent(tabView, "startup-network-request-pending", {
+                        requestId,
+                        url: stillPending.url,
+                        method: stillPending.method,
+                        resourceType: stillPending.resourceType,
+                        pendingMs: Date.now() - stillPending.startTs,
+                    });
+                }, SlowStartupRequestMs),
+            };
+            pendingRequests.set(requestId, pending);
+            logTabViewWebContentsEvent(tabView, "startup-network-request-start", {
+                requestId,
+                url: pending.url,
+                method: pending.method,
+                resourceType: pending.resourceType,
+            });
+            return;
+        }
+
+        if (method === "Network.responseReceived") {
+            const requestId = String(params?.requestId ?? "");
+            const pending = pendingRequests.get(requestId);
+            if (!pending) {
+                return;
+            }
+            logTabViewWebContentsEvent(tabView, "startup-network-response", {
+                requestId,
+                url: pending.url,
+                method: pending.method,
+                resourceType: pending.resourceType,
+                status: params?.response?.status,
+                mimeType: params?.response?.mimeType,
+                fromDiskCache: params?.response?.fromDiskCache,
+                fromServiceWorker: params?.response?.fromServiceWorker,
+            });
+            return;
+        }
+
+        if (method === "Network.loadingFinished") {
+            const requestId = String(params?.requestId ?? "");
+            const pending = clearPendingRequest(requestId);
+            if (!pending) {
+                return;
+            }
+            logTabViewWebContentsEvent(tabView, "startup-network-request-finished", {
+                requestId,
+                url: pending.url,
+                method: pending.method,
+                resourceType: pending.resourceType,
+                durationMs: Date.now() - pending.startTs,
+                encodedDataLength: params?.encodedDataLength,
+            });
+            return;
+        }
+
+        if (method === "Network.loadingFailed") {
+            const requestId = String(params?.requestId ?? "");
+            const pending = clearPendingRequest(requestId);
+            if (!pending) {
+                return;
+            }
+            logTabViewWebContentsEvent(tabView, "startup-network-request-failed", {
+                requestId,
+                url: pending.url,
+                method: pending.method,
+                resourceType: pending.resourceType,
+                durationMs: Date.now() - pending.startTs,
+                errorText: params?.errorText,
+                canceled: params?.canceled,
+                blockedReason: params?.blockedReason,
+            });
+        }
+    });
+
+    try {
+        debuggerInstance.sendCommand("Network.enable");
+        logTabViewWebContentsEvent(tabView, "startup-network-debugger-attached", {
+            origin: getDevRendererOrigin(),
+        });
+    } catch (error) {
+        const enableError = error as Error;
+        logTabViewWebContentsEvent(tabView, "startup-network-enable-failed", {
+            errorName: enableError?.name,
+            errorMessage: enableError?.message,
+        });
+        detachDebugger();
+        return;
+    }
+
+    wc.once("destroyed", detachDebugger);
+}
+
 export class WaveTabView extends WebContentsView {
     waveWindowId: string; // this will be set for any tabviews that are initialized. (unset for the hot spare)
     isActiveTab: boolean;
@@ -171,6 +404,7 @@ export class WaveTabView extends WebContentsView {
                 webviewTag: true,
             },
         });
+        attachStartupNetworkDiagnostics(this);
         this.createdTs = Date.now();
         this.isWaveAIOpen = false;
         this.savedInitOpts = null;
@@ -188,6 +422,9 @@ export class WaveTabView extends WebContentsView {
             this.isWaveReady = true;
         });
         wcIdToWaveTabMap.set(this.webContents.id, this);
+        // Embedded IDE runtimes keep a VS Code remote socket alive inside <webview>;
+        // Chromium background throttling can starve its ack loop and force reconnects.
+        this.webContents.setBackgroundThrottling(false);
 
         // Attach listeners before the initial navigation so we don't miss early failures.
         this.webContents.on("render-process-gone", (_event, details) => {
@@ -406,6 +643,7 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
     tabView.webContents.on("will-navigate", shNavHandler);
     tabView.webContents.on("will-frame-navigate", shFrameNavHandler);
     tabView.webContents.on("did-attach-webview", (event, wc) => {
+        wc.setBackgroundThrottling(false);
         wc.setWindowOpenHandler((details) => {
             tabView.webContents.send("webview-new-window", wc.id, details);
             return { action: "deny" };
@@ -471,7 +709,9 @@ export function ensureHotSpareTab(fullConfig: FullConfigType) {
 }
 
 export function getSpareTab(fullConfig: FullConfigType): WaveTabView {
-    setTimeout(() => ensureHotSpareTab(fullConfig), 500);
+    if (!isDevVite) {
+        setTimeout(() => ensureHotSpareTab(fullConfig), 500);
+    }
     if (HotSpareTab != null) {
         const rtn = HotSpareTab;
         HotSpareTab = null;

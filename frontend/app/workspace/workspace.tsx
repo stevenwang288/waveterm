@@ -8,14 +8,12 @@ import { ModalsRenderer } from "@/app/modals/modalsrenderer";
 import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
 import { FavoritesPanel } from "@/app/workspace/favorites";
-import { GitPanel } from "@/app/workspace/git-panel";
-import { LayoutsPanel } from "@/app/workspace/layouts-panel";
 import { PathHistoryPanel } from "@/app/workspace/path-history-panel";
 import { ServersPanel } from "@/app/workspace/servers-panel";
 import { Widgets } from "@/app/workspace/widgets";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms, getApi } from "@/store/global";
-import { useAtomValue } from "jotai";
+import { atom, useAtomValue } from "jotai";
 import { memo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -29,8 +27,10 @@ import {
 const WorkspaceElem = memo(() => {
     const { t } = useTranslation();
     const workspaceLayoutModel = WorkspaceLayoutModel.getInstance();
-    const tabId = useAtomValue(atoms.staticTabId);
-    const ws = useAtomValue(atoms.workspace);
+    const fallbackStaticTabIdAtom = useRef(atom("")).current;
+    const fallbackWorkspaceAtom = useRef(atom<Workspace | null>(null)).current;
+    const tabId = useAtomValue(atoms?.staticTabId ?? fallbackStaticTabIdAtom);
+    const ws = useAtomValue(atoms?.workspace ?? fallbackWorkspaceAtom);
     const sidePanelView = useAtomValue(workspaceLayoutModel.panelViewAtom);
     const initialAiPanelPercentage = workspaceLayoutModel.getAIPanelPercentage(window.innerWidth);
     const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
@@ -61,7 +61,7 @@ const WorkspaceElem = memo(() => {
 
     return (
         <div className="flex flex-col w-full flex-grow overflow-hidden">
-            <TabBar key={ws.oid} workspace={ws} />
+            {ws ? <TabBar key={ws.oid} workspace={ws} /> : <CenteredDiv>{t("workspace.loading", { defaultValue: "加载中..." })}</CenteredDiv>}
             <div ref={panelContainerRef} className="flex flex-row flex-grow overflow-hidden">
                 <ErrorBoundary key={tabId}>
                     <PanelGroup
@@ -84,12 +84,8 @@ const WorkspaceElem = memo(() => {
                                         <PathHistoryPanel />
                                     ) : sidePanelView === "favorites" ? (
                                         <FavoritesPanel />
-                                    ) : sidePanelView === "servers" ? (
-                                        <ServersPanel />
-                                    ) : sidePanelView === "layouts" ? (
-                                        <LayoutsPanel />
                                     ) : (
-                                        <GitPanel />
+                                        <ServersPanel />
                                     ))}
                             </div>
                         </Panel>
