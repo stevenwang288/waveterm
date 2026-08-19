@@ -31,7 +31,9 @@ jobs:
       - name: Sync main with upstream
         run: |
           git checkout main || git checkout -b main origin/main
-          git merge --ff-only upstream/main && echo "main 已同步到上游最新" || echo "main 无法 fast-forward"
+          git config user.name "stevenwang288"
+          git config user.email "stevenwang288@users.noreply.github.com"
+          git merge upstream/main --no-edit && echo "main 已合并上游最新" || echo "main 合并冲突"
 
       - name: Push synced main
         if: success()
