@@ -7,6 +7,7 @@ import { offset, useFloating } from "@floating-ui/react";
 import clsx from "clsx";
 import { Atom, useAtomValue } from "jotai";
 import React, { ReactNode, useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface SuggestionControlProps {
     anchorRef: React.RefObject<HTMLElement>;
@@ -150,17 +151,19 @@ function BlockHeaderSuggestionControl(props: BlockHeaderSuggestionControlProps) 
  * If no children are provided to SuggestionControl, this default empty state will be used.
  */
 function SuggestionControlNoResults({ children }: { children?: React.ReactNode }) {
+    const { t } = useTranslation();
     return (
         <div className="flex items-center justify-center min-h-[120px] p-4">
-            {children ?? <span className="text-gray-500">No Suggestions</span>}
+            {children ?? <span className="text-gray-500">{t("suggestion.noSuggestions")}</span>}
         </div>
     );
 }
 
 function SuggestionControlNoData({ children }: { children?: React.ReactNode }) {
+    const { t } = useTranslation();
     return (
         <div className="flex items-center justify-center min-h-[120px] p-4">
-            {children ?? <span className="text-gray-500">No Suggestions</span>}
+            {children ?? <span className="text-gray-500">{t("suggestion.noSuggestions")}</span>}
         </div>
     );
 }

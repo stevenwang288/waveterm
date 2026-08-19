@@ -1,7 +1,9 @@
 // Copyright 2025, Command Line Inc.
+import { useTranslation } from "react-i18next";
 // SPDX-License-Identifier: Apache-2.0
 
 const UpgradeOnboardingModal_v0_12_3_Content = () => {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-col items-start gap-6 w-full mb-4 unselectable">
             <div className="text-secondary leading-relaxed">
@@ -16,7 +18,7 @@ const UpgradeOnboardingModal_v0_12_3_Content = () => {
                     <i className="text-[24px] text-accent fa-solid fa-sparkles"></i>
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
-                    <div className="text-foreground text-base font-semibold leading-[18px]">Wave AI Updates</div>
+                    <div className="text-foreground text-base font-semibold leading-[18px]">{t("onboarding.upgrade.v0131.waveAi.title")}</div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
                             <li>
@@ -27,7 +29,7 @@ const UpgradeOnboardingModal_v0_12_3_Content = () => {
                                 <strong>Thinking Mode Toggle</strong> - New dropdown to select between Quick, Balanced,
                                 and Deep thinking modes
                             </li>
-                            <li>Fixed path mismatch issue when restoring AI write file backups</li>
+                            <li>{t("onboarding.upgrade.v0123.waveAi.bullet3")}</li>
                         </ul>
                     </div>
                 </div>
@@ -38,7 +40,7 @@ const UpgradeOnboardingModal_v0_12_3_Content = () => {
                     <i className="text-[24px] text-accent fa-solid fa-terminal"></i>
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
-                    <div className="text-foreground text-base font-semibold leading-[18px]">Terminal Improvements</div>
+                    <div className="text-foreground text-base font-semibold leading-[18px]">{t("onboarding.upgrade.v0131.terminal.title")}</div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
                             <li>
@@ -48,8 +50,8 @@ const UpgradeOnboardingModal_v0_12_3_Content = () => {
                                 <strong>Image Paste Support</strong> - Paste images directly into terminal (saved to
                                 temp files)
                             </li>
-                            <li>Shift+Enter now inserts newlines by default for multi-line commands</li>
-                            <li>Fixed duplicate text issue when switching input methods (IME)</li>
+                            <li>{t("onboarding.upgrade.v0123.terminal.bullet3")}</li>
+                            <li>{t("onboarding.upgrade.v0123.terminal.bullet4")}</li>
                         </ul>
                     </div>
                 </div>
@@ -60,7 +62,7 @@ const UpgradeOnboardingModal_v0_12_3_Content = () => {
                     <i className="text-[24px] text-accent fa-solid fa-key"></i>
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
-                    <div className="text-foreground text-base font-semibold leading-[18px]">Secret Store</div>
+                    <div className="text-foreground text-base font-semibold leading-[18px]">{t("onboarding.upgrade.v0123.secretStore.title")}</div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
                             <li>

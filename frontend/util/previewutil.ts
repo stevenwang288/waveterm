@@ -1,7 +1,66 @@
-import { createBlock, getApi } from "@/app/store/global";
-import { makeNativeLabel } from "./platformutil";
-import { fireAndForget } from "./util";
+﻿import { createBlock, getApi, getFocusedBlockId, globalStore, WOS } from "@/app/store/global";
+import i18next from "@/app/i18n";
+import { RpcApi } from "@/app/store/wshclientapi";
+import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { isWindows, makeNativeLabel } from "./platformutil";
+import { fireAndForget, isBlank, stringToBase64 } from "./util";
 import { formatRemoteUri } from "./waveutil";
+
+function findFocusedTerminalBlockId(): string {
+    const focusedBlockId = getFocusedBlockId();
+    if (isBlank(focusedBlockId)) {
+        return null;
+    }
+    const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", focusedBlockId));
+    const block = globalStore.get(blockAtom);
+    if (block?.meta?.view !== "term") {
+        return null;
+    }
+    return focusedBlockId;
+}
+
+function runCliInExistingTerminal(cliCommand: string): boolean {
+    const targetBlockId = findFocusedTerminalBlockId();
+    if (isBlank(targetBlockId) || isBlank(cliCommand)) {
+        return false;
+    }
+    fireAndForget(async () => {
+        await RpcApi.SetMetaCommand(TabRpcClient, {
+            oref: WOS.makeORef("block", targetBlockId),
+            meta: { "term:autoCmd": cliCommand } as any,
+        });
+        await RpcApi.ControllerInputCommand(TabRpcClient, {
+            blockid: targetBlockId,
+            inputdata64: stringToBase64(`${cliCommand}\n`),
+        });
+    });
+    return true;
+}
+
+const AI_LAUNCH_COMMANDS: Array<{ label: string; command: string }> = [
+    { label: "Codex", command: isWindows() ? "codex.cmd" : "codex" },
+    { label: "Claude", command: "claude" },
+    { label: "Gemini", command: "gemini" },
+    { label: "OpenCode", command: "opencode" },
+];
+
+function makeAiLaunchMenuItems(): ContextMenuItem[] {
+    return AI_LAUNCH_COMMANDS.map((item) => ({
+        label: i18next.t("preview.openAiHere", { ai: item.label }),
+        click: () => {
+            runCliInExistingTerminal(item.command);
+        },
+    }));
+}
+
+function makeAutoCommandMenuItems(): ContextMenuItem[] {
+    return AI_LAUNCH_COMMANDS.map((item) => ({
+        label: item.label,
+        click: () => {
+            runCliInExistingTerminal(item.command);
+        },
+    }));
+}
 
 export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: FileInfo): ContextMenuItem[] {
     if (!finfo) {
@@ -30,7 +89,7 @@ export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: F
         }
     } else {
         menu.push({
-            label: "Download File",
+            label: i18next.t("preview.downloadFile"),
             click: () => {
                 const remoteUri = formatRemoteUri(finfo.path, conn);
                 getApi().downloadFile(remoteUri);
@@ -42,7 +101,7 @@ export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: F
     });
     if (!finfo.isdir) {
         menu.push({
-            label: "Open Preview in New Block",
+            label: i18next.t("preview.openPreviewInNewBlock"),
             click: () =>
                 fireAndForget(async () => {
                     const blockDef: BlockDef = {
@@ -56,19 +115,30 @@ export function addOpenMenuItems(menu: ContextMenuItem[], conn: string, finfo: F
                 }),
         });
     }
+    const targetCwd = finfo.isdir ? finfo.path : finfo.dir;
     menu.push({
-        label: "Open Terminal Here",
+        label: i18next.t("preview.openTerminalHere"),
         click: () => {
             const termBlockDef: BlockDef = {
                 meta: {
                     controller: "shell",
                     view: "term",
-                    "cmd:cwd": finfo.isdir ? finfo.path : finfo.dir,
+                    "cmd:cwd": targetCwd,
                     connection: conn,
                 },
             };
             fireAndForget(() => createBlock(termBlockDef));
         },
     });
+    menu.push(
+        {
+            label: "自动命令",
+            submenu: makeAutoCommandMenuItems(),
+        },
+        {
+            label: i18next.t("preview.openWithAi"),
+            submenu: makeAiLaunchMenuItems(),
+        }
+    );
     return menu;
 }

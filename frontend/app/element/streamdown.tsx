@@ -1,6 +1,5 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
-
 import { CopyButton } from "@/app/element/copybutton";
 import { IconButton } from "@/app/element/iconbutton";
 import { cn, useAtomValueSafe } from "@/util/util";
@@ -9,9 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bundledLanguages, codeToHtml } from "shiki/bundle/web";
 import { Streamdown } from "streamdown";
 import { throttle } from "throttle-debounce";
-
+import { useTranslation } from "react-i18next";
 const ShikiTheme = "github-dark-high-contrast";
-
 function extractText(node: React.ReactNode): string {
     if (node == null || typeof node === "boolean") return "";
     if (typeof node === "string" || typeof node === "number") return String(node);
@@ -20,25 +18,22 @@ function extractText(node: React.ReactNode): string {
     if (typeof node === "object" && node.props) return extractText(node.props.children);
     return "";
 }
-
 function CodePlain({ className = "", isCodeBlock, text }: { className?: string; isCodeBlock: boolean; text: string }) {
+    const { t } = useTranslation();
     if (isCodeBlock) {
         return <code className={cn("font-mono text-[12px]", className)}>{text}</code>;
     }
-
     return (
         <code className={cn("text-secondary font-mono text-[12px] rounded-sm bg-zinc-800/80 px-1.5 py-0.5", className)}>
             {text}
         </code>
     );
 }
-
 function CodeHighlight({ className = "", lang, text }: { className?: string; lang: string; text: string }) {
     const [html, setHtml] = useState<string>("");
     const [hasError, setHasError] = useState(false);
     const codeRef = useRef<HTMLElement>(null);
     const seqRef = useRef(0);
-
     const highlightCode = useCallback(
         async (textToHighlight: string, language: string, disposedRef: { current: boolean }, seq: number) => {
             try {
@@ -60,26 +55,20 @@ function CodeHighlight({ className = "", lang, text }: { className?: string; lan
         },
         []
     );
-
     const throttledHighlight = useMemo(() => throttle(300, highlightCode, { noLeading: false }), [highlightCode]);
-
     useEffect(() => {
         const disposedRef = { current: false };
-
         if (!text) {
             setHtml("");
             return;
         }
-
         seqRef.current++;
         const currentSeq = seqRef.current;
         throttledHighlight(text, lang, disposedRef, currentSeq);
-
         return () => {
             disposedRef.current = true;
         };
     }, [text, lang, throttledHighlight]);
-
     if (hasError) {
         return (
             <code ref={codeRef} className={cn("font-mono text-[12px]", className)}>
@@ -87,7 +76,6 @@ function CodeHighlight({ className = "", lang, text }: { className?: string; lan
             </code>
         );
     }
-
     if (!html && text) {
         return (
             <code ref={codeRef} className={cn("font-mono text-[12px] text-transparent", className)}>
@@ -95,7 +83,6 @@ function CodeHighlight({ className = "", lang, text }: { className?: string; lan
             </code>
         );
     }
-
     return (
         <code
             ref={codeRef}
@@ -104,26 +91,21 @@ function CodeHighlight({ className = "", lang, text }: { className?: string; lan
         />
     );
 }
-
 export function Code({ className = "", children }: { className?: string; children: React.ReactNode }) {
     const m = className?.match(/language-([\w+-]+)/i);
     const isCodeBlock = !!m;
     const lang = m?.[1] || "text";
     const text = extractText(children);
-
     if (isCodeBlock && lang in bundledLanguages) {
         return <CodeHighlight className={className} lang={lang} text={text} />;
     }
-
     return <CodePlain className={className} isCodeBlock={isCodeBlock} text={text} />;
 }
-
 type CodeBlockProps = {
     children: React.ReactNode;
     onClickExecute?: (cmd: string) => void;
     codeBlockMaxWidthAtom?: Atom<number>;
 };
-
 const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBlockProps) => {
     const codeBlockMaxWidth = useAtomValueSafe(codeBlockMaxWidthAtom);
     const getLanguage = (children: any): string => {
@@ -133,12 +115,10 @@ const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBloc
         }
         return "text";
     };
-
     const handleCopy = async (e: React.MouseEvent) => {
         const textToCopy = extractText(children).replace(/\n$/, "");
         await navigator.clipboard.writeText(textToCopy);
     };
-
     const handleExecute = (e: React.MouseEvent) => {
         const cmd = extractText(children).replace(/\n$/, "");
         if (onClickExecute) {
@@ -146,9 +126,8 @@ const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBloc
             return;
         }
     };
-
     const language = getLanguage(children);
-
+        const { t } = useTranslation();
     return (
         <div
             className={cn("rounded-lg overflow-hidden bg-black my-4", codeBlockMaxWidth && "max-w-full")}
@@ -161,7 +140,7 @@ const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBloc
             <div className="flex items-center justify-between pl-3 pr-2 pt-2 pb-1.5">
                 <span className="text-[11px] text-white/50">{language}</span>
                 <div className="flex items-center gap-2">
-                    <CopyButton onClick={handleCopy} title="Copy" />
+                    <CopyButton onClick={handleCopy} title={t("common.copy")} />
                     {onClickExecute && (
                         <IconButton
                             decl={{
@@ -177,10 +156,8 @@ const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBloc
         </div>
     );
 };
-
 function Collapsible({ title, children, defaultOpen = false }) {
     const [isOpen, setIsOpen] = useState(defaultOpen);
-
     return (
         <div className="my-3">
             <button
@@ -196,7 +173,6 @@ function Collapsible({ title, children, defaultOpen = false }) {
         </div>
     );
 }
-
 interface WaveStreamdownProps {
     text: string;
     parseIncompleteMarkdown?: boolean;
@@ -204,7 +180,6 @@ interface WaveStreamdownProps {
     onClickExecute?: (cmd: string) => void;
     codeBlockMaxWidthAtom?: Atom<number>;
 }
-
 export const WaveStreamdown = ({
     text,
     parseIncompleteMarkdown,
@@ -277,12 +252,10 @@ export const WaveStreamdown = ({
             ),
             details: ({ children, ...props }) => {
                 const childArray = Array.isArray(children) ? children : [children];
-
                 // Extract summary text and content
                 const summary = childArray.find((c) => c?.props?.node?.tagName === "summary");
                 const summaryText = summary?.props?.children || "Details";
                 const content = childArray.filter((c) => c?.props?.node?.tagName !== "summary");
-
                 return (
                     <Collapsible title={summaryText} defaultOpen={props.open}>
                         {content}
@@ -300,7 +273,6 @@ export const WaveStreamdown = ({
         }),
         [onClickExecute, codeBlockMaxWidthAtom]
     );
-
     return (
         <Streamdown
             parseIncompleteMarkdown={parseIncompleteMarkdown}

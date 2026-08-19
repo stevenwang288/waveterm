@@ -17,10 +17,12 @@ interface AIPanelMessagesProps {
 export const AIPanelMessages = memo(({ messages, status, onContextMenu }: AIPanelMessagesProps) => {
     const model = WaveAIModel.getInstance();
     const isPanelOpen = useAtomValue(model.getPanelVisibleAtom());
+    const isWaveAIFocused = useAtomValue(model.isWaveAIFocusedAtom);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const prevStatusRef = useRef<string>(status);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+    const lineScrollPx = 24;
 
     const checkIfAtBottom = () => {
         const container = messagesContainerRef.current;
@@ -45,6 +47,16 @@ export const AIPanelMessages = memo(({ messages, status, onContextMenu }: AIPane
         }
     };
 
+    const scrollByLine = (direction: "up" | "down") => {
+        const container = messagesContainerRef.current;
+        if (!container) {
+            return;
+        }
+        const delta = direction === "up" ? -lineScrollPx : lineScrollPx;
+        container.scrollTop += delta;
+        setShouldAutoScroll(checkIfAtBottom());
+    };
+
     useEffect(() => {
         const container = messagesContainerRef.current;
         if (!container) return;
@@ -55,7 +67,40 @@ export const AIPanelMessages = memo(({ messages, status, onContextMenu }: AIPane
 
     useEffect(() => {
         model.registerScrollToBottom(scrollToBottom);
+        model.registerScrollByLine(scrollByLine);
     }, [model]);
+
+    useEffect(() => {
+        const onWindowKeyDown = (event: KeyboardEvent) => {
+            if (!isPanelOpen || !isWaveAIFocused) {
+                return;
+            }
+            if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
+                return;
+            }
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+                return;
+            }
+            const target = event.target as HTMLElement | null;
+            if (target != null) {
+                const tagName = target.tagName;
+                const isEditor =
+                    tagName === "TEXTAREA" ||
+                    tagName === "INPUT" ||
+                    tagName === "SELECT" ||
+                    target.isContentEditable;
+                if (isEditor) {
+                    return;
+                }
+            }
+            scrollByLine(event.key === "ArrowUp" ? "up" : "down");
+            event.preventDefault();
+        };
+        window.addEventListener("keydown", onWindowKeyDown);
+        return () => {
+            window.removeEventListener("keydown", onWindowKeyDown);
+        };
+    }, [isPanelOpen, isWaveAIFocused]);
 
     useEffect(() => {
         if (shouldAutoScroll) {

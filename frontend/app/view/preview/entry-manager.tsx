@@ -4,6 +4,7 @@
 import { Button } from "@/app/element/button";
 import { Input } from "@/app/element/input";
 import React, { memo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export enum EntryManagerType {
     NewFile = "New File",
@@ -31,6 +32,7 @@ export const EntryManagerOverlay = memo(
         style,
         getReferenceProps,
     }: EntryManagerOverlayProps) => {
+    const { t } = useTranslation();
         const [value, setValue] = useState(startingValue);
         return (
             <div className="entry-manager-overlay" ref={forwardRef} style={style} {...(getReferenceProps?.() ?? {})}>
@@ -51,10 +53,10 @@ export const EntryManagerOverlay = memo(
                 </div>
                 <div className="entry-manager-buttons">
                     <Button className="py-[4px]" onClick={() => onSave(value)}>
-                        Save
+                        {t("waveconfig.save")}
                     </Button>
                     <Button className="py-[4px] red outlined" onClick={onCancel}>
-                        Cancel
+                        {t("common.cancel")}
                     </Button>
                 </div>
             </div>

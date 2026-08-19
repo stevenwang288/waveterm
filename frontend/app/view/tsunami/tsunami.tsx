@@ -1,6 +1,5 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
-
 import { getApi, globalStore, WOS } from "@/app/store/global";
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -9,7 +8,7 @@ import { WebView, WebViewModel } from "@/app/view/webview/webview";
 import * as services from "@/store/services";
 import * as jotai from "jotai";
 import { memo, useEffect } from "react";
-
+import { useTranslation } from "react-i18next";
 class TsunamiViewModel extends WebViewModel {
     shellProcFullStatus: jotai.PrimitiveAtom<BlockControllerRuntimeStatus>;
     shellProcStatusUnsubFn: () => void;
@@ -18,18 +17,14 @@ class TsunamiViewModel extends WebViewModel {
     isRestarting: jotai.PrimitiveAtom<boolean>;
     viewIcon: jotai.Atom<IconButtonDecl>;
     viewName: jotai.Atom<string>;
-
     constructor(initOpts: ViewModelInitType) {
         super(initOpts);
         this.viewType = "tsunami";
         this.isRestarting = jotai.atom(false);
-
         // Hide navigation bar (URL bar, back/forward/home buttons)
         this.hideNav = jotai.atom(true);
-
         // Set custom partition for tsunami WebView isolation
         this.partitionOverride = jotai.atom(`tsunami:${this.blockId}`);
-
         this.shellProcFullStatus = jotai.atom(null) as jotai.PrimitiveAtom<BlockControllerRuntimeStatus>;
         const initialShellProcStatus = services.BlockService.GetControllerStatus(this.blockId);
         initialShellProcStatus.then((rts) => {
@@ -42,7 +37,6 @@ class TsunamiViewModel extends WebViewModel {
                 this.updateShellProcStatus(event.data);
             },
         });
-
         this.appMeta = jotai.atom(null) as jotai.PrimitiveAtom<AppMeta>;
         this.viewIcon = jotai.atom((get) => {
             const meta = get(this.appMeta);
@@ -74,11 +68,9 @@ class TsunamiViewModel extends WebViewModel {
             },
         });
     }
-
     get viewComponent(): ViewComponent {
         return TsunamiView;
     }
-
     updateShellProcStatus(fullStatus: BlockControllerRuntimeStatus) {
         console.log("tsunami-status", fullStatus);
         if (fullStatus == null) {
@@ -89,14 +81,12 @@ class TsunamiViewModel extends WebViewModel {
             globalStore.set(this.shellProcFullStatus, fullStatus);
         }
     }
-
     triggerRestartAtom() {
         globalStore.set(this.isRestarting, true);
         setTimeout(() => {
             globalStore.set(this.isRestarting, false);
         }, 300);
     }
-
     private doControllerResync(forceRestart: boolean, logContext: string, triggerRestart: boolean = true) {
         if (triggerRestart) {
             if (globalStore.get(this.isRestarting)) {
@@ -111,16 +101,13 @@ class TsunamiViewModel extends WebViewModel {
         });
         prtn.catch((e) => console.log(`error controller resync (${logContext})`, e));
     }
-
     resyncController() {
         this.doControllerResync(false, "resync", false);
     }
-
     destroyController() {
         const prtn = RpcApi.ControllerDestroyCommand(TabRpcClient, this.blockId);
         prtn.catch((e) => console.log("error destroying controller", e));
     }
-
     async restartController() {
         if (globalStore.get(this.isRestarting)) {
             return;
@@ -141,34 +128,27 @@ class TsunamiViewModel extends WebViewModel {
             console.log("error restarting controller", e);
         }
     }
-
     restartAndForceRebuild() {
         this.doControllerResync(true, "force rebuild");
     }
-
     forceRestartController() {
         // Keep this for backward compatibility with the Start button
         this.doControllerResync(true, "force restart");
     }
-
     async remixInBuilder() {
         const blockData = globalStore.get(this.blockAtom);
         const appId = blockData?.meta?.["tsunami:appid"];
-
         if (!appId || !appId.startsWith("local/")) {
             return;
         }
-
         try {
             const result = await RpcApi.MakeDraftFromLocalCommand(TabRpcClient, { localappid: appId });
             const draftAppId = result.draftappid;
-
             getApi().openBuilder(draftAppId);
         } catch (err) {
             console.error("Failed to create draft from local app:", err);
         }
     }
-
     dispose() {
         if (this.shellProcStatusUnsubFn) {
             this.shellProcStatusUnsubFn();
@@ -177,7 +157,6 @@ class TsunamiViewModel extends WebViewModel {
             this.appMetaUnsubFn();
         }
     }
-
     getSettingsMenuItems(): ContextMenuItem[] {
         const items = super.getSettingsMenuItems();
         // Filter out homepage and navigation-related menu items for tsunami view
@@ -190,12 +169,10 @@ class TsunamiViewModel extends WebViewModel {
                 !label.includes("nav")
             );
         });
-
         // Check if we should show the Remix option
         const blockData = globalStore.get(this.blockAtom);
         const appId = blockData?.meta?.["tsunami:appid"];
         const showRemixOption = appId && appId.startsWith("local/");
-
         // Add tsunami-specific menu items at the beginning
         const tsunamiItems: ContextMenuItem[] = [
             {
@@ -214,7 +191,6 @@ class TsunamiViewModel extends WebViewModel {
                 type: "separator",
             },
         ];
-
         if (showRemixOption) {
             tsunamiItems.push(
                 {
@@ -226,26 +202,21 @@ class TsunamiViewModel extends WebViewModel {
                 }
             );
         }
-
         return [...tsunamiItems, ...filteredItems];
     }
 }
-
 const TsunamiView = memo((props: ViewComponentProps<TsunamiViewModel>) => {
     const { model } = props;
     const shellProcFullStatus = jotai.useAtomValue(model.shellProcFullStatus);
     const blockData = jotai.useAtomValue(model.blockAtom);
     const isRestarting = jotai.useAtomValue(model.isRestarting);
     const domReady = jotai.useAtomValue(model.domReady);
-
     useEffect(() => {
         model.resyncController();
     }, [model]);
-
     const appPath = blockData?.meta?.["tsunami:apppath"];
     const appId = blockData?.meta?.["tsunami:appid"];
     const controller = blockData?.meta?.controller;
-
     // Check for configuration errors
     const errors = [];
     if (!appPath && !appId) {
@@ -254,7 +225,6 @@ const TsunamiView = memo((props: ViewComponentProps<TsunamiViewModel>) => {
     if (controller !== "tsunami") {
         errors.push("Invalid controller (must be 'tsunami')");
     }
-
     // Show errors if any exist
     if (errors.length > 0) {
         return (
@@ -270,13 +240,11 @@ const TsunamiView = memo((props: ViewComponentProps<TsunamiViewModel>) => {
             </div>
         );
     }
-
     // Check if we should show the webview
     const shouldShowWebView =
         shellProcFullStatus?.shellprocstatus === "running" &&
         shellProcFullStatus?.tsunamiport &&
         shellProcFullStatus.tsunamiport !== 0;
-
     if (shouldShowWebView) {
         const tsunamiUrl = `http://localhost:${shellProcFullStatus.tsunamiport}/?clientid=wave:${model.blockId}`;
         return (
@@ -285,10 +253,9 @@ const TsunamiView = memo((props: ViewComponentProps<TsunamiViewModel>) => {
             </div>
         );
     }
-
     const status = shellProcFullStatus?.shellprocstatus ?? "init";
     const isNotRunning = status === "done" || status === "init";
-
+        const { t } = useTranslation();
     return (
         <div className="w-full h-full flex flex-col items-center justify-center gap-4">
             <h1 className="text-4xl font-bold text-main-text-color">Tsunami</h1>
@@ -298,14 +265,12 @@ const TsunamiView = memo((props: ViewComponentProps<TsunamiViewModel>) => {
                     onClick={() => model.forceRestartController()}
                     className="px-4 py-2 bg-accent-color text-primary-text-color rounded hover:bg-accent-color/80 transition-colors cursor-pointer"
                 >
-                    Start
+                    {t("waveapp.start")}
                 </button>
             )}
             {isRestarting && <div className="text-sm text-success-color">Starting...</div>}
         </div>
     );
 });
-
 TsunamiView.displayName = "TsunamiView";
-
 export { TsunamiViewModel };

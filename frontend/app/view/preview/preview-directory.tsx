@@ -45,6 +45,7 @@ import {
 } from "./preview-directory-utils";
 import { type PreviewModel } from "./preview-model";
 import type { PreviewEnv } from "./previewenv";
+import { useTranslation } from "react-i18next";
 
 const PageJumpSize = 20;
 
@@ -56,8 +57,8 @@ function DirectoryTableHeaderCell({ header }: DirectoryTableHeaderCellProps) {
     return (
         <div
             className="dir-table-head-cell"
-            key={header.id}
-            style={{ width: `calc(var(--header-${header.id}-size) * 1px)` }}
+                        key={header.id}
+                        style={{ width: `calc(var(--header-${header.id}-size) * 1px)` }}
         >
             <div className="dir-table-head-cell-content" onClick={() => header.column.toggleSorting()}>
                 {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
@@ -111,6 +112,7 @@ function DirectoryTable({
     newFile,
     newDirectory,
 }: DirectoryTableProps) {
+    const { t } = useTranslation();
     const env = useWaveEnv<PreviewEnv>();
     const fullConfig = useAtomValue(env.atoms.fullConfigAtom);
     const defaultSort = useAtomValue(env.getSettingsKeyAtom("preview:defaultsort")) ?? "name";
@@ -148,14 +150,14 @@ function DirectoryTable({
             }),
             columnHelper.accessor("name", {
                 cell: (info) => <span className="dir-table-name ellipsis">{info.getValue()}</span>,
-                header: () => <span className="dir-table-head-name">Name</span>,
+                header: () => <span className="dir-table-head-name">{t("preview.directory.columns.name")}</span>,
                 sortingFn: "alphanumeric",
                 size: 200,
                 minSize: 90,
             }),
             columnHelper.accessor("modestr", {
                 cell: (info) => <span className="dir-table-modestr">{info.getValue()}</span>,
-                header: () => <span>Perm</span>,
+                header: () => <span>{t("preview.directory.columns.perm")}</span>,
                 size: 91,
                 minSize: 90,
                 sortingFn: "alphanumeric",
@@ -169,14 +171,14 @@ function DirectoryTable({
             }),
             columnHelper.accessor("size", {
                 cell: (info) => <span className="dir-table-size">{getBestUnit(info.getValue())}</span>,
-                header: () => <span className="dir-table-head-size">Size</span>,
+                header: () => <span className="dir-table-head-size">{t("preview.directory.columns.size")}</span>,
                 size: 55,
                 minSize: 50,
                 sortingFn: "auto",
             }),
             columnHelper.accessor("mimetype", {
                 cell: (info) => <span className="dir-table-type ellipsis">{cleanMimetype(info.getValue() ?? "")}</span>,
-                header: () => <span className="dir-table-head-type">Type</span>,
+                header: () => <span className="dir-table-head-type">{t("preview.directory.columns.type")}</span>,
                 size: 97,
                 minSize: 97,
                 sortingFn: "alphanumeric",

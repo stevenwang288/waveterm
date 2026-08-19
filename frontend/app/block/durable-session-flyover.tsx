@@ -1,6 +1,5 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
-
 import { recordTEvent } from "@/app/store/global";
 import { TermViewModel } from "@/app/view/term/term-model";
 import { useWaveEnv } from "@/app/waveenv/waveenv";
@@ -20,35 +19,32 @@ import {
 import * as jotai from "jotai";
 import { useEffect, useRef, useState } from "react";
 import { BlockEnv } from "./blockenv";
-
+import { useTranslation } from "react-i18next";
 function isTermViewModel(viewModel: ViewModel): viewModel is TermViewModel {
     return viewModel?.viewType === "term";
 }
-
 function LearnMoreButton() {
     const waveEnv = useWaveEnv<BlockEnv>();
+        const { t } = useTranslation();
     return (
         <button
             className="text-muted text-xs hover:underline cursor-pointer text-left"
             onClick={() => waveEnv.electron.openExternal("https://docs.waveterm.dev/durable-sessions")}
         >
-            Learn More
+            {t("common.learnMore")}
         </button>
     );
 }
-
 interface StandardSessionContentProps {
     viewModel: TermViewModel;
     onClose: () => void;
 }
-
 function StandardSessionContent({ viewModel, onClose }: StandardSessionContentProps) {
     const handleRestartAsDurable = () => {
         recordTEvent("action:termdurable", { "action:type": "restartdurable" });
         onClose();
         util.fireAndForget(() => viewModel.restartSessionWithDurability(true));
     };
-
     return (
         <div className="flex flex-col gap-2 max-w-[280px]">
             <div className="font-semibold text-sm flex items-center gap-2 text-secondary">
@@ -70,17 +66,16 @@ function StandardSessionContent({ viewModel, onClose }: StandardSessionContentPr
         </div>
     );
 }
-
 interface DurableAttachedContentProps {
     onClose: () => void;
 }
-
 function DurableAttachedContent({ onClose }: DurableAttachedContentProps) {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-col gap-2 max-w-[280px]">
             <div className="font-semibold text-sm flex items-center gap-2 text-secondary">
                 <i className="fa-sharp fa-solid fa-shield text-sky-500" />
-                Durable Session (Attached)
+                {t("block.durableSession.attached")}
             </div>
             <div className="text-xs text-secondary leading-relaxed">
                 Your shell state, running programs, and history are protected. This session will survive network
@@ -90,17 +85,16 @@ function DurableAttachedContent({ onClose }: DurableAttachedContentProps) {
         </div>
     );
 }
-
 interface DurableDetachedContentProps {
     onClose: () => void;
 }
-
 function DurableDetachedContent({ onClose }: DurableDetachedContentProps) {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-col gap-2 max-w-[280px]">
             <div className="font-semibold text-sm flex items-center gap-2 text-secondary">
                 <i className="fa-sharp fa-solid fa-shield text-sky-300" />
-                Durable Session (Detached)
+                {t("block.durableSession.detached")}
             </div>
             <div className="text-xs text-secondary leading-relaxed">
                 Connection lost, but your session is still running on the remote server. Wave will automatically
@@ -110,25 +104,23 @@ function DurableDetachedContent({ onClose }: DurableDetachedContentProps) {
         </div>
     );
 }
-
 interface DurableAwaitingStartProps {
     connected: boolean;
     viewModel: TermViewModel;
     onClose: () => void;
 }
-
 function DurableAwaitingStart({ connected, viewModel, onClose }: DurableAwaitingStartProps) {
+    const { t } = useTranslation();
     const handleStartSession = () => {
         onClose();
         util.fireAndForget(() => viewModel.forceRestartController());
     };
-
     if (!connected) {
         return (
             <div className="flex flex-col gap-2 max-w-[280px]">
                 <div className="font-semibold text-sm flex items-center gap-2 text-secondary whitespace-nowrap">
                     <i className="fa-sharp fa-solid fa-shield text-muted" />
-                    Durable Session (Awaiting Connection)
+                    {t("block.durableSession.awaitingConnection")}
                 </div>
                 <div className="text-xs text-secondary leading-relaxed">
                     Configured for a durable session. The session will start when the connection is established.
@@ -137,7 +129,6 @@ function DurableAwaitingStart({ connected, viewModel, onClose }: DurableAwaiting
             </div>
         );
     }
-
     return (
         <div className="flex flex-col gap-2 max-w-[280px]">
             <div className="font-semibold text-sm flex items-center gap-2 text-secondary whitespace-nowrap">
@@ -158,46 +149,40 @@ function DurableAwaitingStart({ connected, viewModel, onClose }: DurableAwaiting
         </div>
     );
 }
-
 interface DurableStartingContentProps {
     onClose: () => void;
 }
-
 function DurableStartingContent({ onClose }: DurableStartingContentProps) {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-col gap-2 max-w-[280px]">
             <div className="font-semibold text-sm flex items-center gap-2 text-secondary">
                 <i className="fa-sharp fa-solid fa-shield text-sky-300" />
-                Durable Session (Starting)
+                {t("block.durableSession.starting")}
             </div>
             <div className="text-xs text-secondary leading-relaxed">The durable session is starting.</div>
             <LearnMoreButton />
         </div>
     );
 }
-
 interface DurableEndedContentProps {
     doneReason: string;
     startupError?: string;
     viewModel: TermViewModel;
     onClose: () => void;
 }
-
 function DurableEndedContent({ doneReason, startupError, viewModel, onClose }: DurableEndedContentProps) {
     const handleRestartSession = () => {
         onClose();
         util.fireAndForget(() => viewModel.forceRestartController());
     };
-
     const handleRestartAsStandard = () => {
         onClose();
         util.fireAndForget(() => viewModel.restartSessionWithDurability(false));
     };
-
     let titleText = "Durable Session (Ended)";
     let descriptionText = "The durable session has ended. This block is still configured for durable sessions.";
     const showRestartButton = true;
-
     if (doneReason === "terminated") {
         titleText = "Durable Session (Ended, Exited)";
         descriptionText =
@@ -239,7 +224,6 @@ function DurableEndedContent({ doneReason, startupError, viewModel, onClose }: D
             </div>
         );
     }
-
     return (
         <div className="flex flex-col gap-2 max-w-[280px]">
             <div className="font-semibold text-sm flex items-center gap-2 text-secondary">
@@ -260,7 +244,6 @@ function DurableEndedContent({ doneReason, startupError, viewModel, onClose }: D
         </div>
     );
 }
-
 function getContentToRender(
     viewModel: TermViewModel,
     onClose: () => void,
@@ -271,7 +254,6 @@ function getContentToRender(
     if (isConfigedDurable === false) {
         return <StandardSessionContent viewModel={viewModel} onClose={onClose} />;
     }
-
     const status = jobStatus?.status;
     if (status === "connected") {
         return <DurableAttachedContent onClose={onClose} />;
@@ -296,17 +278,14 @@ function getContentToRender(
     console.log("DurableSessionFlyover: unexpected jobStatus", jobStatus);
     return null;
 }
-
 function getIconProps(jobStatus: BlockJobStatusData, connStatus: ConnStatus, isConfigedDurable?: boolean | null) {
     let color = "text-muted";
     let iconType: "fa-solid" | "fa-regular" = "fa-solid";
-
     if (isConfigedDurable === false) {
         color = "text-muted";
         iconType = "fa-regular";
         return { color, iconType };
     }
-
     const status = jobStatus?.status;
     if (status === "connected") {
         color = "text-sky-500";
@@ -321,14 +300,12 @@ function getIconProps(jobStatus: BlockJobStatusData, connStatus: ConnStatus, isC
     }
     return { color, iconType };
 }
-
 interface DurableSessionFlyoverProps {
     blockId: string;
     viewModel: ViewModel;
     placement?: "top" | "bottom" | "left" | "right";
     divClassName?: string;
 }
-
 export function DurableSessionFlyover({
     blockId,
     viewModel,
@@ -340,17 +317,14 @@ export function DurableSessionFlyover({
     const termDurableStatus = util.useAtomValueSafe(viewModel?.termDurableStatus);
     const termConfigedDurable = util.useAtomValueSafe(viewModel?.termConfigedDurable);
     const connStatus = jotai.useAtomValue(waveEnv.getConnStatusAtom(connName));
-
     const { color: durableIconColor, iconType: durableIconType } = getIconProps(
         termDurableStatus,
         connStatus,
         termConfigedDurable
     );
-
     const [isOpen, setIsOpen] = useState(false);
     const [isVisible, setIsVisible] = useState(false);
     const timeoutRef = useRef<number | null>(null);
-
     const handleClose = () => {
         setIsVisible(false);
         if (timeoutRef.current !== null) {
@@ -360,7 +334,6 @@ export function DurableSessionFlyover({
             setIsOpen(false);
         }, 300);
     };
-
     const { refs, floatingStyles, context } = useFloating({
         open: isOpen,
         onOpenChange: (open) => {
@@ -386,7 +359,6 @@ export function DurableSessionFlyover({
         middleware: [offset(10), flip(), shift({ padding: 12 })],
         whileElementsMounted: autoUpdate,
     });
-
     useEffect(() => {
         return () => {
             if (timeoutRef.current !== null) {
@@ -394,21 +366,17 @@ export function DurableSessionFlyover({
             }
         };
     }, []);
-
     const hover = useHover(context, {
         handleClose: safePolygon(),
     });
     const { getReferenceProps, getFloatingProps } = useInteractions([hover]);
-
     if (!isTermViewModel(viewModel)) {
         return null;
     }
-
     const content = getContentToRender(viewModel, handleClose, termDurableStatus, connStatus, termConfigedDurable);
     if (content == null) {
         return null;
     }
-
     return (
         <>
             <div ref={refs.setReference} {...getReferenceProps()} className={divClassName}>

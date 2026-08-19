@@ -138,6 +138,7 @@ export class WaveTabView extends WebContentsView {
         super({
             webPreferences: {
                 preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
+                sandbox: false,
                 webviewTag: true,
             },
         });

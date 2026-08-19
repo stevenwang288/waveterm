@@ -68,6 +68,18 @@ export const AIPanelInput = memo(({ onSubmit, status, model }: AIPanelInputProps
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         const isComposing = e.nativeEvent?.isComposing || e.keyCode == 229;
+        if (
+            !isComposing &&
+            !e.altKey &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+            !input.trim()
+        ) {
+            model.scrollByLine(e.key === "ArrowUp" ? "up" : "down");
+            e.preventDefault();
+            return;
+        }
         if (e.key === "Enter" && !e.shiftKey && !isComposing) {
             e.preventDefault();
             onSubmit(e as any);

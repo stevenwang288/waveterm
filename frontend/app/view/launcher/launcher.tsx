@@ -1,6 +1,5 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
-
 import logoUrl from "@/app/asset/logo.svg?url";
 import type { BlockNodeModel } from "@/app/block/blocktypes";
 import { atoms, globalStore, replaceBlock } from "@/app/store/global";
@@ -10,16 +9,14 @@ import { isBlank, makeIconClass } from "@/util/util";
 import clsx from "clsx";
 import { atom, useAtom, useAtomValue } from "jotai";
 import React, { useEffect, useLayoutEffect, useRef } from "react";
-
+import { useTranslation } from "react-i18next";
 function sortByDisplayOrder(wmap: { [key: string]: WidgetConfigType } | null | undefined): WidgetConfigType[] {
     if (!wmap) return [];
     const wlist = Object.values(wmap);
     wlist.sort((a, b) => (a["display:order"] ?? 0) - (b["display:order"] ?? 0));
     return wlist;
 }
-
 type GridLayoutType = { columns: number; tileWidth: number; tileHeight: number; showLabel: boolean };
-
 export class LauncherViewModel implements ViewModel {
     blockId: string;
     nodeModel: BlockNodeModel;
@@ -34,13 +31,11 @@ export class LauncherViewModel implements ViewModel {
     selectedIndex = atom(0);
     containerSize = atom({ width: 0, height: 0 });
     gridLayout: GridLayoutType = null;
-
     constructor({ blockId, nodeModel, tabModel }: ViewModelInitType) {
         this.blockId = blockId;
         this.nodeModel = nodeModel;
         this.tabModel = tabModel;
     }
-
     filteredWidgetsAtom = atom((get) => {
         const searchTerm = get(this.searchTerm);
         const widgets = sortByDisplayOrder(get(atoms.fullConfigAtom)?.widgets || {});
@@ -50,7 +45,6 @@ export class LauncherViewModel implements ViewModel {
                 (!searchTerm || widget.label?.toLowerCase().includes(searchTerm.toLowerCase()))
         );
     });
-
     giveFocus(): boolean {
         if (this.inputRef.current) {
             this.inputRef.current.focus();
@@ -58,7 +52,6 @@ export class LauncherViewModel implements ViewModel {
         }
         return false;
     }
-
     keyDownHandler(e: WaveKeyboardEvent): boolean {
         if (this.gridLayout == null) {
             return;
@@ -127,7 +120,6 @@ export class LauncherViewModel implements ViewModel {
         }
         return false;
     }
-
     async handleWidgetSelect(widget: WidgetConfigType) {
         try {
             await replaceBlock(this.blockId, widget.blockdef, true);
@@ -136,17 +128,14 @@ export class LauncherViewModel implements ViewModel {
         }
     }
 }
-
 function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>) {
     // Search and selection state
     const [searchTerm, setSearchTerm] = useAtom(model.searchTerm);
     const [selectedIndex, setSelectedIndex] = useAtom(model.selectedIndex);
     const filteredWidgets = useAtomValue(model.filteredWidgetsAtom);
-
     // Container measurement
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerSize, setContainerSize] = useAtom(model.containerSize);
-
     useLayoutEffect(() => {
         if (!containerRef.current) return;
         const resizeObserver = new ResizeObserver((entries) => {
@@ -162,18 +151,15 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
             resizeObserver.disconnect();
         };
     }, []);
-
     // Layout constants
     const GAP = 16;
     const LABEL_THRESHOLD = 60;
     const MARGIN_BOTTOM = 24;
     const MAX_TILE_SIZE = 120;
-
     const calculatedLogoWidth = containerSize.width * 0.3;
     const logoWidth = containerSize.width >= 100 ? Math.min(Math.max(calculatedLogoWidth, 100), 300) : 0;
     const showLogo = logoWidth >= 100;
     const availableHeight = containerSize.height - (showLogo ? logoWidth + MARGIN_BOTTOM : 0);
-
     // Determine optimal grid layout
     const gridLayout: GridLayoutType = React.useMemo(() => {
         if (containerSize.width === 0 || availableHeight <= 0 || filteredWidgets.length === 0) {
@@ -200,15 +186,13 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
         return { columns: bestColumns, tileWidth: bestTileWidth, tileHeight: bestTileHeight, showLabel };
     }, [containerSize, availableHeight, filteredWidgets.length]);
     model.gridLayout = gridLayout;
-
     const finalTileWidth = Math.min(gridLayout.tileWidth, MAX_TILE_SIZE);
     const finalTileHeight = gridLayout.showLabel ? Math.min(gridLayout.tileHeight, MAX_TILE_SIZE) : finalTileWidth;
-
+        const { t } = useTranslation();
     // Reset selection when search term changes
     useEffect(() => {
         setSelectedIndex(0);
     }, [searchTerm]);
-
     return (
         <div ref={containerRef} className="w-full h-full p-4 box-border flex flex-col items-center justify-center">
             {/* Hidden input for search */}
@@ -219,16 +203,14 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
                 onKeyDown={keydownWrapper(model.keyDownHandler.bind(model))}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sr-only dummy"
-                aria-label="Search widgets"
+                aria-label={t("launcher.searchWidgets")}
             />
-
             {/* Logo */}
             {showLogo && (
                 <div className="mb-6" style={{ width: logoWidth, maxWidth: 300 }}>
-                    <img src={logoUrl} className="w-full h-auto filter grayscale brightness-70 opacity-70" alt="Logo" />
+                    <img src={logoUrl} className="w-full h-auto filter grayscale brightness-70 opacity-70" alt={t("launcher.logoAlt")} />
                 </div>
             )}
-
             {/* Grid of widgets */}
             <div
                 className="grid gap-4 justify-center"
@@ -268,11 +250,10 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
                     </div>
                 ))}
             </div>
-
             {/* Search instructions */}
             <div className="mt-4 text-secondary text-xs">
                 {filteredWidgets.length === 0 ? (
-                    <span>No widgets found. Press Escape to clear search.</span>
+                    <span>{t("launcher.noWidgets")}</span>
                 ) : (
                     <span>
                         {searchTerm == "" ? "Type to Filter" : "Searching " + '"' + searchTerm + '"'}, Enter to Launch,
@@ -283,5 +264,4 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
         </div>
     );
 }
-
 export default LauncherView;

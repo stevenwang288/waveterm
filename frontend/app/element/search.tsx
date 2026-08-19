@@ -1,6 +1,5 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
-
 import { autoUpdate, FloatingPortal, Middleware, offset, useFloating } from "@floating-ui/react";
 import clsx from "clsx";
 import { atom, useAtom, WritableAtom } from "jotai";
@@ -8,7 +7,7 @@ import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { IconButton, ToggleIconButton } from "./iconbutton";
 import { Input } from "./input";
 import "./search.scss";
-
+import { useTranslation } from "react-i18next";
 type SearchProps = SearchAtoms & {
     anchorRef?: React.RefObject<HTMLElement>;
     offsetX?: number;
@@ -17,7 +16,6 @@ type SearchProps = SearchAtoms & {
     onNext?: () => void;
     onPrev?: () => void;
 };
-
 const SearchComponent = ({
     searchValue: searchAtom,
     resultsIndex: indexAtom,
@@ -40,11 +38,9 @@ const SearchComponent = ({
     const [numResults, setNumResults] = useAtom<number>(numResultsAtom);
     const [focusInputCounter, setFocusInputCounter] = useAtom<number>(focusInputAtom);
     const inputRef = useRef<HTMLInputElement>(null);
-
     const handleOpenChange = useCallback((open: boolean) => {
         setIsOpen(open);
     }, []);
-
     useEffect(() => {
         if (!isOpen) {
             setSearch("");
@@ -53,13 +49,11 @@ const SearchComponent = ({
             setFocusInputCounter(0);
         }
     }, [isOpen]);
-
     useEffect(() => {
         setIndex(0);
         setNumResults(0);
         onSearch?.(search);
     }, [search]);
-
     // When activateSearch fires while already open, it increments focusInputCounter
     // to signal this specific instance to grab focus (avoids global DOM queries).
     useEffect(() => {
@@ -68,7 +62,6 @@ const SearchComponent = ({
             inputRef.current?.select();
         }
     }, [focusInputCounter]);
-
     const middleware: Middleware[] = [];
     const offsetCallback = useCallback(
         ({ rects }) => {
@@ -91,7 +84,6 @@ const SearchComponent = ({
         [offsetX, offsetY]
     );
     middleware.push(offset(offsetCallback));
-
     const { refs, floatingStyles } = useFloating({
         placement: "top-end",
         open: isOpen,
@@ -102,7 +94,6 @@ const SearchComponent = ({
             reference: anchorRef!.current,
         },
     });
-
     const onPrevWrapper = useCallback(
         () => (onPrev ? onPrev() : setIndex((index - 1) % numResults)),
         [onPrev, index, numResults]
@@ -111,7 +102,6 @@ const SearchComponent = ({
         () => (onNext ? onNext() : setIndex((index + 1) % numResults)),
         [onNext, index, numResults]
     );
-
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
             if (e.key === "Enter") {
@@ -125,7 +115,6 @@ const SearchComponent = ({
         },
         [onPrevWrapper, onNextWrapper, setIsOpen]
     );
-
     const prevDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "chevron-up",
@@ -133,7 +122,6 @@ const SearchComponent = ({
         disabled: numResults === 0,
         click: onPrevWrapper,
     };
-
     const nextDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "chevron-down",
@@ -141,18 +129,16 @@ const SearchComponent = ({
         disabled: numResults === 0,
         click: onNextWrapper,
     };
-
     const closeDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "xmark-large",
         title: "Close (Esc)",
         click: () => setIsOpen(false),
     };
-
     const regexDecl = createToggleButtonDecl(regexAtom, "custom@regex", "Regular Expression");
     const wholeWordDecl = createToggleButtonDecl(wholeWordAtom, "custom@whole-word", "Whole Word");
     const caseSensitiveDecl = createToggleButtonDecl(caseSensitiveAtom, "custom@case-sensitive", "Case Sensitive");
-
+        const { t } = useTranslation();
     return (
         <>
             {isOpen && (
@@ -160,7 +146,7 @@ const SearchComponent = ({
                     <div className="search-container" style={{ ...floatingStyles }} ref={refs.setFloating}>
                         <Input
                             ref={inputRef}
-                            placeholder="Search"
+                            placeholder={t("search.placeholder")}
                             value={search}
                             onChange={setSearch}
                             onKeyDown={onKeyDown}
@@ -169,11 +155,10 @@ const SearchComponent = ({
                         <div
                             className={clsx("search-results", { hidden: numResults === 0 })}
                             aria-live="polite"
-                            aria-label="Search Results"
+                            aria-label={t("search.resultsLabel")}
                         >
                             {index + 1}/{numResults}
                         </div>
-
                         {(caseSensitiveDecl || wholeWordDecl || regexDecl) && (
                             <div className="additional-buttons">
                                 {caseSensitiveDecl && <ToggleIconButton decl={caseSensitiveDecl} />}
@@ -181,7 +166,6 @@ const SearchComponent = ({
                                 {regexDecl && <ToggleIconButton decl={regexDecl} />}
                             </div>
                         )}
-
                         <div className="right-buttons">
                             <IconButton decl={prevDecl} />
                             <IconButton decl={nextDecl} />
@@ -193,9 +177,7 @@ const SearchComponent = ({
         </>
     );
 };
-
 export const Search = memo(SearchComponent) as typeof SearchComponent;
-
 type SearchOptions = {
     anchorRef?: React.RefObject<HTMLElement>;
     viewModel?: ViewModel;
@@ -203,8 +185,8 @@ type SearchOptions = {
     caseSensitive?: boolean;
     wholeWord?: boolean;
 };
-
 export function useSearch(options?: SearchOptions): SearchProps {
+    const { t } = useTranslation();
     const searchAtoms: SearchAtoms = useMemo(
         () => ({
             searchValue: atom(""),
@@ -229,7 +211,6 @@ export function useSearch(options?: SearchOptions): SearchProps {
     }, [options?.viewModel]);
     return { ...searchAtoms, anchorRef };
 }
-
 const createToggleButtonDecl = (
     atom: WritableAtom<boolean, [boolean], void> | undefined,
     icon: string,

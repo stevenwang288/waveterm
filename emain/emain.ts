@@ -27,6 +27,7 @@ import {
     setWasInFg,
 } from "./emain-activity";
 import { initIpcHandlers } from "./emain-ipc";
+import i18next from "./i18n-main";
 import { log } from "./emain-log";
 import { initMenuEventSubscriptions, makeAndSetAppMenu, makeDockTaskbar } from "./emain-menu";
 import {
@@ -277,9 +278,9 @@ electronApp.on("before-quit", (e) => {
         e.preventDefault();
         const choice = electron.dialog.showMessageBoxSync(null, {
             type: "question",
-            buttons: ["Cancel", "Quit"],
-            title: "Confirm Quit",
-            message: "Are you sure you want to quit Wave Terminal?",
+            buttons: [i18next.t("common.cancel"), i18next.t("common.quit")],
+            title: i18next.t("common.confirmQuitTitle"),
+            message: i18next.t("common.confirmQuitMessage", { appName: i18next.t("about.title") }),
             defaultId: 0,
             cancelId: 0,
         });

@@ -16,6 +16,7 @@ import { makeORef } from "../store/wos";
 import { TabBadges } from "./tabbadges";
 import "./tab.scss";
 import { buildTabContextMenu } from "./tabcontextmenu";
+import { useTranslation } from "react-i18next";
 
 export type TabEnv = WaveEnvSubset<{
     rpc: {
@@ -52,6 +53,7 @@ interface TabVProps {
 }
 
 const TabV = forwardRef<HTMLDivElement, TabVProps>((props, ref) => {
+    const { t } = useTranslation();
     const {
         tabId,
         tabName,
@@ -209,7 +211,7 @@ const TabV = forwardRef<HTMLDivElement, TabVProps>((props, ref) => {
                     className="ghost grey close"
                     onClick={onClose}
                     onMouseDown={handleMouseDownOnClose}
-                    title="Close Tab"
+                    title={t("tab.closeTab")}
                 >
                     <i className="fa fa-solid fa-xmark" />
                 </Button>

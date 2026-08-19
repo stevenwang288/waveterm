@@ -1,6 +1,5 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
-
 import { BlockModel } from "@/app/block/block-model";
 import { Modal } from "@/app/modals/modal";
 import { recordTEvent } from "@/app/store/global";
@@ -10,30 +9,25 @@ import { memo, useEffect, useRef, useState } from "react";
 import { WaveUIMessagePart } from "./aitypes";
 import { RestoreBackupModal } from "./restorebackupmodal";
 import { WaveAIModel } from "./waveai-model";
-
+import { useTranslation } from "react-i18next";
 // matches pkg/filebackup/filebackup.go
 const BackupRetentionDays = 5;
-
 interface ToolDescLineProps {
     text: string;
 }
-
 const ToolDescLine = memo(({ text }: ToolDescLineProps) => {
     let displayText = text;
     if (displayText.startsWith("* ")) {
         displayText = "• " + displayText.slice(2);
     }
-
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     const regex = /(?<!\w)([+-])(\d+)(?!\w)/g;
     let match;
-
     while ((match = regex.exec(displayText)) !== null) {
         if (match.index > lastIndex) {
             parts.push(displayText.slice(lastIndex, match.index));
         }
-
         const sign = match[1];
         const number = match[2];
         const colorClass = sign === "+" ? "text-green-600" : "text-red-600";
@@ -43,29 +37,21 @@ const ToolDescLine = memo(({ text }: ToolDescLineProps) => {
                 {number}
             </span>
         );
-
         lastIndex = match.index + match[0].length;
     }
-
     if (lastIndex < displayText.length) {
         parts.push(displayText.slice(lastIndex));
     }
-
     return <div>{parts.length > 0 ? parts : displayText}</div>;
 });
-
 ToolDescLine.displayName = "ToolDescLine";
-
 interface ToolDescProps {
     text: string | string[];
     className?: string;
 }
-
 const ToolDesc = memo(({ text, className }: ToolDescProps) => {
     const lines = Array.isArray(text) ? text : text.split("\n");
-
     if (lines.length === 0) return null;
-
     return (
         <div className={className}>
             {lines.map((line, idx) => (
@@ -74,23 +60,18 @@ const ToolDesc = memo(({ text, className }: ToolDescProps) => {
         </div>
     );
 });
-
 ToolDesc.displayName = "ToolDesc";
-
 function getEffectiveApprovalStatus(baseApproval: string, isStreaming: boolean): string {
     return !isStreaming && baseApproval === "needs-approval" ? "timeout" : baseApproval;
 }
-
 interface AIToolApprovalButtonsProps {
     count: number;
     onApprove: () => void;
     onDeny: () => void;
 }
-
 const AIToolApprovalButtons = memo(({ count, onApprove, onDeny }: AIToolApprovalButtonsProps) => {
     const approveText = count > 1 ? `Approve All (${count})` : "Approve";
     const denyText = count > 1 ? "Deny All" : "Deny";
-
     return (
         <div className="mt-2 flex gap-2">
             <button
@@ -108,14 +89,11 @@ const AIToolApprovalButtons = memo(({ count, onApprove, onDeny }: AIToolApproval
         </div>
     );
 });
-
 AIToolApprovalButtons.displayName = "AIToolApprovalButtons";
-
 interface AIToolUseBatchItemProps {
     part: WaveUIMessagePart & { type: "data-tooluse" };
     effectiveApproval: string;
 }
-
 const AIToolUseBatchItem = memo(({ part, effectiveApproval }: AIToolUseBatchItemProps) => {
     const statusIcon = part.data.status === "completed" ? "✓" : part.data.status === "error" ? "✗" : "•";
     const statusColor =
@@ -125,7 +103,6 @@ const AIToolUseBatchItem = memo(({ part, effectiveApproval }: AIToolUseBatchItem
               ? "text-error"
               : "text-gray-400";
     const effectiveErrorMessage = part.data.errormessage || (effectiveApproval === "timeout" ? "Not approved" : null);
-
     return (
         <div className="text-sm pl-2 flex items-start gap-1.5">
             <span className={cn("font-bold flex-shrink-0", statusColor)}>{statusIcon}</span>
@@ -136,39 +113,34 @@ const AIToolUseBatchItem = memo(({ part, effectiveApproval }: AIToolUseBatchItem
         </div>
     );
 });
-
 AIToolUseBatchItem.displayName = "AIToolUseBatchItem";
-
 interface AIToolUseBatchProps {
     parts: Array<WaveUIMessagePart & { type: "data-tooluse" }>;
     isStreaming: boolean;
 }
-
 const AIToolUseBatch = memo(({ parts, isStreaming }: AIToolUseBatchProps) => {
+    const { t } = useTranslation();
     const [userApprovalOverride, setUserApprovalOverride] = useState<string | null>(null);
-
     const firstTool = parts[0].data;
     const baseApproval = userApprovalOverride || firstTool.approval;
     const effectiveApproval = getEffectiveApprovalStatus(baseApproval, isStreaming);
-
     const handleApprove = () => {
         setUserApprovalOverride("user-approved");
         parts.forEach((part) => {
             WaveAIModel.getInstance().toolUseSendApproval(part.data.toolcallid, "user-approved");
         });
     };
-
     const handleDeny = () => {
+        const { t } = useTranslation();
         setUserApprovalOverride("user-denied");
         parts.forEach((part) => {
             WaveAIModel.getInstance().toolUseSendApproval(part.data.toolcallid, "user-denied");
         });
     };
-
     return (
         <div className="flex items-start gap-2 p-2 rounded bg-zinc-800/60 border border-zinc-700">
             <div className="flex-1">
-                <div className="font-semibold">Reading Files</div>
+                <div className="font-semibold">{t("aipanel.tools.readingFiles")}</div>
                 <div className="mt-1 space-y-0.5">
                     {parts.map((part, idx) => (
                         <AIToolUseBatchItem key={idx} part={part} effectiveApproval={effectiveApproval} />
@@ -181,15 +153,13 @@ const AIToolUseBatch = memo(({ parts, isStreaming }: AIToolUseBatchProps) => {
         </div>
     );
 });
-
 AIToolUseBatch.displayName = "AIToolUseBatch";
-
 interface AIToolUseProps {
     part: WaveUIMessagePart & { type: "data-tooluse" };
     isStreaming: boolean;
 }
-
 const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
+    const { t } = useTranslation();
     const toolData = part.data;
     const [userApprovalOverride, setUserApprovalOverride] = useState<string | null>(null);
     const model = WaveAIModel.getInstance();
@@ -197,16 +167,12 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
     const showRestoreModal = restoreModalToolCallId === toolData.toolcallid;
     const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const highlightedBlockIdRef = useRef<string | null>(null);
-
     const statusIcon = toolData.status === "completed" ? "✓" : toolData.status === "error" ? "✗" : "•";
     const statusColor =
         toolData.status === "completed" ? "text-success" : toolData.status === "error" ? "text-error" : "text-gray-400";
-
     const baseApproval = userApprovalOverride || toolData.approval;
     const effectiveApproval = getEffectiveApprovalStatus(baseApproval, isStreaming);
-
     const isFileWriteTool = toolData.toolname === "write_text_file" || toolData.toolname === "edit_text_file";
-
     useEffect(() => {
         return () => {
             if (highlightTimeoutRef.current) {
@@ -214,30 +180,24 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
             }
         };
     }, []);
-
     const handleApprove = () => {
         setUserApprovalOverride("user-approved");
         WaveAIModel.getInstance().toolUseSendApproval(toolData.toolcallid, "user-approved");
     };
-
     const handleDeny = () => {
         setUserApprovalOverride("user-denied");
         WaveAIModel.getInstance().toolUseSendApproval(toolData.toolcallid, "user-denied");
     };
-
     const handleMouseEnter = () => {
         if (!toolData.blockid) return;
-
         if (highlightTimeoutRef.current) {
             clearTimeout(highlightTimeoutRef.current);
         }
-
         highlightedBlockIdRef.current = toolData.blockid;
         BlockModel.getInstance().setBlockHighlight({
             blockId: toolData.blockid,
             icon: "sparkles",
         });
-
         highlightTimeoutRef.current = setTimeout(() => {
             if (highlightedBlockIdRef.current === toolData.blockid) {
                 BlockModel.getInstance().setBlockHighlight(null);
@@ -245,26 +205,22 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
             }
         }, 2000);
     };
-
     const handleMouseLeave = () => {
         if (!toolData.blockid) return;
-
         if (highlightTimeoutRef.current) {
             clearTimeout(highlightTimeoutRef.current);
             highlightTimeoutRef.current = null;
         }
-
         if (highlightedBlockIdRef.current === toolData.blockid) {
             BlockModel.getInstance().setBlockHighlight(null);
             highlightedBlockIdRef.current = null;
         }
     };
-
     const handleOpenDiff = () => {
+        const { t } = useTranslation();
         recordTEvent("waveai:showdiff");
         fireAndForget(() => WaveAIModel.getInstance().openDiff(toolData.inputfilename, toolData.toolcallid));
     };
-
     return (
         <div
             className={cn("flex flex-col gap-1 p-2 rounded bg-zinc-800/60 border border-zinc-700", statusColor)}
@@ -286,9 +242,9 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
                                 model.openRestoreBackupModal(toolData.toolcallid);
                             }}
                             className="flex-shrink-0 px-1.5 py-0.5 border border-zinc-600 hover:border-zinc-500 hover:bg-zinc-700 rounded cursor-pointer transition-colors flex items-center gap-1 text-zinc-400"
-                            title="Restore backup file"
+                            title={t("aipanel.tools.restoreBackupFile")}
                         >
-                            <span className="text-xs">Revert File</span>
+                            <span className="text-xs">{t("aipanel.tools.revertFile")}</span>
                             <i className="fa fa-clock-rotate-left text-xs"></i>
                         </button>
                     )}
@@ -296,9 +252,9 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
                     <button
                         onClick={handleOpenDiff}
                         className="flex-shrink-0 px-1.5 py-0.5 border border-zinc-600 hover:border-zinc-500 hover:bg-zinc-700 rounded cursor-pointer transition-colors flex items-center gap-1 text-zinc-400"
-                        title="Open in diff viewer"
+                        title={t("aipanel.tools.openInDiffViewer")}
                     >
-                        <span className="text-xs">Show Diff</span>
+                        <span className="text-xs">{t("aipanel.tools.showDiff")}</span>
                         <i className="fa fa-arrow-up-right-from-square text-xs"></i>
                     </button>
                 )}
@@ -316,16 +272,12 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
         </div>
     );
 });
-
 AIToolUse.displayName = "AIToolUse";
-
 interface AIToolProgressProps {
     part: WaveUIMessagePart & { type: "data-toolprogress" };
 }
-
 const AIToolProgress = memo(({ part }: AIToolProgressProps) => {
     const progressData = part.data;
-
     return (
         <div className="flex flex-col gap-1 p-2 rounded bg-zinc-800/60 border border-zinc-700">
             <div className="flex items-center gap-2">
@@ -338,19 +290,15 @@ const AIToolProgress = memo(({ part }: AIToolProgressProps) => {
         </div>
     );
 });
-
 AIToolProgress.displayName = "AIToolProgress";
-
 interface AIToolUseGroupProps {
     parts: Array<WaveUIMessagePart & { type: "data-tooluse" | "data-toolprogress" }>;
     isStreaming: boolean;
 }
-
 type ToolGroupItem =
     | { type: "batch"; parts: Array<WaveUIMessagePart & { type: "data-tooluse" }> }
     | { type: "single"; part: WaveUIMessagePart & { type: "data-tooluse" } }
     | { type: "progress"; part: WaveUIMessagePart & { type: "data-toolprogress" } };
-
 export const AIToolUseGroup = memo(({ parts, isStreaming }: AIToolUseGroupProps) => {
     const tooluseParts = parts.filter((p) => p.type === "data-tooluse") as Array<
         WaveUIMessagePart & { type: "data-tooluse" }
@@ -358,22 +306,17 @@ export const AIToolUseGroup = memo(({ parts, isStreaming }: AIToolUseGroupProps)
     const toolprogressParts = parts.filter((p) => p.type === "data-toolprogress") as Array<
         WaveUIMessagePart & { type: "data-toolprogress" }
     >;
-
     const tooluseCallIds = new Set(tooluseParts.map((p) => p.data.toolcallid));
     const filteredProgressParts = toolprogressParts.filter((p) => !tooluseCallIds.has(p.data.toolcallid));
-
     const isFileOp = (part: WaveUIMessagePart & { type: "data-tooluse" }) => {
         const toolName = part.data?.toolname;
         return toolName === "read_text_file" || toolName === "read_dir";
     };
-
     const needsApproval = (part: WaveUIMessagePart & { type: "data-tooluse" }) => {
         return getEffectiveApprovalStatus(part.data?.approval, isStreaming) === "needs-approval";
     };
-
     const readFileNeedsApproval: Array<WaveUIMessagePart & { type: "data-tooluse" }> = [];
     const readFileOther: Array<WaveUIMessagePart & { type: "data-tooluse" }> = [];
-
     for (const part of tooluseParts) {
         if (isFileOp(part)) {
             if (needsApproval(part)) {
@@ -383,15 +326,12 @@ export const AIToolUseGroup = memo(({ parts, isStreaming }: AIToolUseGroupProps)
             }
         }
     }
-
     const groupedItems: ToolGroupItem[] = [];
     let addedApprovalBatch = false;
     let addedOtherBatch = false;
-
     for (const part of tooluseParts) {
         const isFileOpPart = isFileOp(part);
         const partNeedsApproval = needsApproval(part);
-
         if (isFileOpPart && partNeedsApproval) {
             if (!addedApprovalBatch) {
                 groupedItems.push({ type: "batch", parts: readFileNeedsApproval });
@@ -406,11 +346,9 @@ export const AIToolUseGroup = memo(({ parts, isStreaming }: AIToolUseGroupProps)
             groupedItems.push({ type: "single", part });
         }
     }
-
     filteredProgressParts.forEach((part) => {
         groupedItems.push({ type: "progress", part });
     });
-
     return (
         <>
             {groupedItems.map((item, idx) => {
@@ -437,5 +375,4 @@ export const AIToolUseGroup = memo(({ parts, isStreaming }: AIToolUseGroupProps)
         </>
     );
 });
-
 AIToolUseGroup.displayName = "AIToolUseGroup";

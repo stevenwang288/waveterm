@@ -1,7 +1,9 @@
 // Copyright 2025, Command Line Inc.
+import { useTranslation } from "react-i18next";
 // SPDX-License-Identifier: Apache-2.0
 
 const UpgradeOnboardingModal_v0_13_1_Content = () => {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-col items-start gap-6 w-full mb-4 unselectable">
             <div className="text-secondary leading-relaxed">
@@ -17,7 +19,7 @@ const UpgradeOnboardingModal_v0_13_1_Content = () => {
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
                     <div className="text-foreground text-base font-semibold leading-[18px]">
-                        Windows Platform Enhancements
+                        {t("onboarding.upgrade.v0131.windows.title")}
                     </div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
@@ -45,7 +47,7 @@ const UpgradeOnboardingModal_v0_13_1_Content = () => {
                     <i className="text-[24px] text-accent fa-solid fa-sparkles"></i>
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
-                    <div className="text-foreground text-base font-semibold leading-[18px]">Wave AI Updates</div>
+                    <div className="text-foreground text-base font-semibold leading-[18px]">{t("onboarding.upgrade.v0131.waveAi.title")}</div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
                             <li>
@@ -66,7 +68,7 @@ const UpgradeOnboardingModal_v0_13_1_Content = () => {
                     <i className="text-[24px] text-accent fa-solid fa-terminal"></i>
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
-                    <div className="text-foreground text-base font-semibold leading-[18px]">Terminal Improvements</div>
+                    <div className="text-foreground text-base font-semibold leading-[18px]">{t("onboarding.upgrade.v0131.terminal.title")}</div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
                             <li>
