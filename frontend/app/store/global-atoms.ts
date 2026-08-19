@@ -126,6 +126,9 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
     });
     const reinitVersion = atom(0);
     const rateLimitInfoAtom = atom(null) as PrimitiveAtom<RateLimitInfo>;
+    // wave-cn: notification atoms
+    const notificationPopoverModeAtom = atom(false) as PrimitiveAtom<boolean>;
+    const notificationsAtom = atom([]) as PrimitiveAtom<NotificationType[]>;
     atoms = {
         // initialized in wave.ts (will not be null inside of application)
         builderId: builderIdAtom,
@@ -149,6 +152,9 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
         allConnStatus: allConnStatusAtom,
         reinitVersion,
         waveAIRateLimitInfoAtom: rateLimitInfoAtom,
+        // wave-cn: notification atoms
+        notificationPopoverMode: notificationPopoverModeAtom,
+        notifications: notificationsAtom,
     } as GlobalAtomsType;
 }
 

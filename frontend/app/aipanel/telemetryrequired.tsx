@@ -6,12 +6,14 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { cn } from "@/util/util";
 import { useState } from "react";
 import { WaveAIModel } from "./waveai-model";
+import { useTranslation } from "react-i18next";
 
 interface TelemetryRequiredMessageProps {
     className?: string;
 }
 
 const TelemetryRequiredMessage = ({ className }: TelemetryRequiredMessageProps) => {
+    const { t } = useTranslation();
     const [isEnabling, setIsEnabling] = useState(false);
 
     const handleEnableTelemetry = async () => {
@@ -34,7 +36,7 @@ const TelemetryRequiredMessage = ({ className }: TelemetryRequiredMessageProps) 
                 <div className="max-w-md space-y-6">
                     <div className="space-y-4">
                         <i className="fa fa-sparkles text-accent text-5xl"></i>
-                        <h2 className="text-2xl font-semibold text-foreground">Wave AI</h2>
+                        <h2 className="text-2xl font-semibold text-foreground">{t("aipanel.telemetryRequiredTitle")}</h2>
                         <p className="text-secondary leading-relaxed">
                             Wave AI is free to use and provides integrated AI chat that can interact with your widgets,
                             help you with code, analyze files, and assist with your terminal workflows.
@@ -45,7 +47,7 @@ const TelemetryRequiredMessage = ({ className }: TelemetryRequiredMessageProps) 
                         <div className="flex items-start gap-3">
                             <i className="fa fa-info-circle text-blue-400 text-lg mt-0.5"></i>
                             <div className="text-left">
-                                <div className="text-blue-400 font-medium mb-1">Telemetry keeps Wave AI free</div>
+                                <div className="text-blue-400 font-medium mb-1">{t("aipanel.telemetryTitle")}</div>
                                 <div className="text-secondary text-sm mb-3">
                                     <p className="mb-2">
                                         To keep Wave AI free for everyone, we require a small amount of <i>anonymous</i>{" "}
@@ -61,7 +63,7 @@ const TelemetryRequiredMessage = ({ className }: TelemetryRequiredMessageProps) 
                                         OpenAI's privacy policy for details on how they handle your data.
                                     </p>
                                     <p>
-                                        For information about BYOK and local model support, see{" "}
+                                        {t("aipanel.telemetryDesc4")}{" "}
                                         <a
                                             href="https://docs.waveterm.dev/waveai-modes"
                                             target="_blank"
@@ -91,7 +93,7 @@ const TelemetryRequiredMessage = ({ className }: TelemetryRequiredMessageProps) 
                             rel="noopener noreferrer"
                             className="!text-secondary hover:!text-accent/80 cursor-pointer"
                         >
-                            Privacy Policy
+                            {t("aipanel.privacyPolicy")}
                         </a>
                     </div>
                 </div>

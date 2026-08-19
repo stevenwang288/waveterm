@@ -16,6 +16,7 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import { useEffect, useRef, useState } from "react";
 import { debounce } from "throttle-debounce";
+import { useTranslation } from "react-i18next";
 
 type UpgradeMinorWelcomePageProps = {
     onStarClick: () => void;
@@ -24,6 +25,7 @@ type UpgradeMinorWelcomePageProps = {
 };
 
 const UpgradeMinorWelcomePage = ({ onStarClick, onAlreadyStarred, onMaybeLater }: UpgradeMinorWelcomePageProps) => {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-col h-full">
             <header className="flex flex-col gap-2 border-b-0 p-0 mt-1 mb-4 w-full unselectable flex-shrink-0">
@@ -41,7 +43,7 @@ const UpgradeMinorWelcomePage = ({ onStarClick, onAlreadyStarred, onMaybeLater }
                         <div className="flex flex-row gap-4 items-center">
                             <div className="flex h-[52px] px-3 items-center rounded-lg bg-hover text-accent text-[24px]">
                                 <i className="fa fa-sparkles" />
-                                <span className="font-bold ml-2 font-mono">Wave AI</span>
+                                <span className="font-bold ml-2 font-mono">{t("aipanel.telemetryRequiredTitle")}</span>
                             </div>
                             <div className="flex h-[52px] px-3 items-center rounded-lg bg-hover text-[18px]">
                                 <i className="fa-sharp fa-solid fa-shield text-sky-500" />
@@ -68,7 +70,7 @@ const UpgradeMinorWelcomePage = ({ onStarClick, onAlreadyStarred, onMaybeLater }
                     <div className="w-full max-w-[550px] border-t border-border my-2"></div>
 
                     <div className="flex flex-col items-center gap-3 text-center max-w-[550px]">
-                        <div className="text-foreground text-base">Thanks for being an early Wave adopter! ⭐</div>
+                        <div className="text-foreground text-base">{t("onboarding.upgradeMinor.thanks")}</div>
                         <div className="text-secondary text-sm text-left">
                             A GitHub star shows your support for Wave (and open-source) and helps us reach more
                             developers.
@@ -79,13 +81,13 @@ const UpgradeMinorWelcomePage = ({ onStarClick, onAlreadyStarred, onMaybeLater }
             <footer className="unselectable flex-shrink-0 mt-4">
                 <div className="flex flex-row items-center justify-center gap-2.5 [&>button]:!px-5 [&>button]:!py-2 [&>button]:text-sm [&>button]:!h-[37px]">
                     <Button className="outlined grey font-[600]" onClick={onAlreadyStarred}>
-                        🙏 Already Starred
+                        {t("onboarding.upgradeMinor.alreadyStarred")}
                     </Button>
                     <Button className="outlined green font-[600]" onClick={onStarClick}>
-                        ⭐ Star Now
+                        {t("onboarding.upgradeMinor.starNow")}
                     </Button>
                     <Button className="outlined grey font-[600]" onClick={onMaybeLater}>
-                        Maybe Later
+                        {t("onboarding.maybeLater")}
                     </Button>
                 </div>
             </footer>

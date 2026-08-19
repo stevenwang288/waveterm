@@ -7,12 +7,14 @@ import { useAtomValue } from "jotai";
 import { memo } from "react";
 import { WaveUIMessagePart } from "./aitypes";
 import { WaveAIModel } from "./waveai-model";
+import { useTranslation } from "react-i18next";
 
 interface RestoreBackupModalProps {
     part: WaveUIMessagePart & { type: "data-tooluse" };
 }
 
 export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
+    const { t } = useTranslation();
     const model = WaveAIModel.getInstance();
     const toolData = part.data;
     const status = useAtomValue(model.restoreBackupStatus);
@@ -35,14 +37,14 @@ export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
     };
 
     const handleClose = () => {
-        model.closeRestoreBackupModal();
-    };
+            model.closeRestoreBackupModal();
+        };
 
     if (status === "success") {
         return (
-            <Modal className="restore-backup-modal pb-5 pr-5" onClose={handleClose} onOk={handleClose} okLabel="Close">
+            <Modal className="restore-backup-modal pb-5 pr-5" onClose={handleClose} onOk={handleClose} okLabel={t("common.close")}>
                 <div className="flex flex-col gap-4 pt-4 pb-4 max-w-xl">
-                    <div className="font-semibold text-lg text-green-500">Backup Successfully Restored</div>
+                    <div className="font-semibold text-lg text-green-500">{t("aipanel.restoreBackup.successTitle")}</div>
                     <div className="text-sm text-gray-300 leading-relaxed">
                         The file <span className="font-mono text-white break-all">{toolData.inputfilename}</span> has
                         been restored to its previous state.
@@ -54,11 +56,11 @@ export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
 
     if (status === "error") {
         return (
-            <Modal className="restore-backup-modal pb-5 pr-5" onClose={handleClose} onOk={handleClose} okLabel="Close">
+            <Modal className="restore-backup-modal pb-5 pr-5" onClose={handleClose} onOk={handleClose} okLabel={t("common.close")}>
                 <div className="flex flex-col gap-4 pt-4 pb-4 max-w-xl">
-                    <div className="font-semibold text-lg text-red-500">Failed to Restore Backup</div>
+                    <div className="font-semibold text-lg text-red-500">{t("aipanel.restoreBackup.errorTitle")}</div>
                     <div className="text-sm text-gray-300 leading-relaxed">
-                        An error occurred while restoring the backup:
+                        {t("aipanel.restoreBackup.errorDesc")}
                     </div>
                     <div className="text-sm text-red-400 font-mono bg-zinc-800 p-3 rounded break-all">{error}</div>
                 </div>
@@ -75,19 +77,19 @@ export const RestoreBackupModal = memo(({ part }: RestoreBackupModalProps) => {
             onCancel={handleCancel}
             onOk={handleConfirm}
             okLabel={isProcessing ? "Restoring..." : "Confirm Restore"}
-            cancelLabel="Cancel"
+            cancelLabel={t("common.cancel")}
             okDisabled={isProcessing}
             cancelDisabled={isProcessing}
         >
             <div className="flex flex-col gap-4 pt-4 pb-4 max-w-xl">
-                <div className="font-semibold text-lg">Restore File Backup</div>
+                <div className="font-semibold text-lg">{t("aipanel.restoreBackup.confirmTitle")}</div>
                 <div className="text-sm text-gray-300 leading-relaxed">
                     This will restore <span className="font-mono text-white break-all">{toolData.inputfilename}</span>{" "}
                     to its state before this edit was made
                     {toolData.runts && <span> ({formatTimestamp(toolData.runts)})</span>}.
                 </div>
                 <div className="text-sm text-gray-300 leading-relaxed">
-                    Any changes made by this edit and subsequent edits will be lost.
+                    {t("aipanel.restoreBackup.confirmWarning")}
                 </div>
             </div>
         </Modal>

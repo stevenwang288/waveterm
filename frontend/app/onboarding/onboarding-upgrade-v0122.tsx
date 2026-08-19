@@ -1,7 +1,9 @@
 // Copyright 2025, Command Line Inc.
+import { useTranslation } from "react-i18next";
 // SPDX-License-Identifier: Apache-2.0
 
 const UpgradeOnboardingModal_v0_12_2_Content = () => {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-col items-start gap-6 w-full mb-4 unselectable">
             <div className="text-secondary leading-relaxed">
@@ -16,7 +18,7 @@ const UpgradeOnboardingModal_v0_12_2_Content = () => {
                     <i className="text-[24px] text-accent fa-solid fa-file-pen"></i>
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
-                    <div className="text-foreground text-base font-semibold leading-[18px]">Wave AI File Editing</div>
+                    <div className="text-foreground text-base font-semibold leading-[18px]">{t("onboarding.upgrade.v0122.fileEditing.title")}</div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
                             <li>
@@ -41,16 +43,16 @@ const UpgradeOnboardingModal_v0_12_2_Content = () => {
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
                     <div className="text-foreground text-base font-semibold leading-[18px]">
-                        Additional AI Improvements
+                        {t("onboarding.upgrade.v0122.aiImprovements.title")}
                     </div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
-                            <li>Drag & drop files from preview viewer directly to Wave AI</li>
+                            <li>{t("onboarding.upgrade.v0122.aiImprovements.bullet1")}</li>
                             <li>
                                 Directory listings support in <span className="font-mono">`wsh ai`</span> commands
                             </li>
-                            <li>Adjustable thinking level and max output tokens per chat</li>
-                            <li>Improved tool descriptions and input validations</li>
+                            <li>{t("onboarding.upgrade.v0122.aiImprovements.bullet3")}</li>
+                            <li>{t("onboarding.upgrade.v0122.aiImprovements.bullet4")}</li>
                         </ul>
                     </div>
                 </div>
@@ -62,13 +64,13 @@ const UpgradeOnboardingModal_v0_12_2_Content = () => {
                 </div>
                 <div className="flex flex-col items-start gap-2 flex-1">
                     <div className="text-foreground text-base font-semibold leading-[18px]">
-                        Bug Fixes & Improvements
+                        {t("onboarding.upgrade.v0122.bugFixes.title")}
                     </div>
                     <div className="text-secondary leading-5">
                         <ul className="list-disc list-outside space-y-1 pl-5">
-                            <li>Fixed significant memory leak in the RPC system</li>
-                            <li>Config file schema validation restored</li>
-                            <li>Fixed PowerShell 5.x regression</li>
+                            <li>{t("onboarding.upgrade.v0122.bugFixes.bullet1")}</li>
+                            <li>{t("onboarding.upgrade.v0122.bugFixes.bullet2")}</li>
+                            <li>{t("onboarding.upgrade.v0122.bugFixes.bullet3")}</li>
                         </ul>
                     </div>
                 </div>

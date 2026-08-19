@@ -24,6 +24,7 @@ import { makeORef } from "../store/wos";
 import { waveEventSubscribeSingle } from "../store/wps";
 import { WorkspaceEditor } from "./workspaceeditor";
 import "./workspaceswitcher.scss";
+import { useTranslation } from "react-i18next";
 
 export type WorkspaceSwitcherEnv = WaveEnvSubset<{
     electron: {
@@ -50,6 +51,7 @@ const workspaceMapAtom = atom<WorkspaceList>([]);
 const workspaceSplitAtom = splitAtom(workspaceMapAtom);
 const editingWorkspaceAtom = atom<string>();
 const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
+    const { t } = useTranslation();
     const env = useWaveEnv<WorkspaceSwitcherEnv>();
     const setWorkspaceList = useSetAtom(workspaceMapAtom);
     const activeWorkspace = useAtomValueSafe(env.atoms.workspace);
@@ -138,14 +140,14 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
                             <ExpandableMenuItemLeftElement>
                                 <i className="fa-sharp fa-solid fa-plus"></i>
                             </ExpandableMenuItemLeftElement>
-                            <div className="content">Create new workspace</div>
+                            <div className="content">{t("workspace.createNew")}</div>
                         </ExpandableMenuItem>
                     ) : (
                         <ExpandableMenuItem onClick={() => saveWorkspace()}>
                             <ExpandableMenuItemLeftElement>
                                 <i className="fa-sharp fa-solid fa-floppy-disk"></i>
                             </ExpandableMenuItemLeftElement>
-                            <div className="content">Save workspace</div>
+                            <div className="content">{t("workspace.save")}</div>
                         </ExpandableMenuItem>
                     )}
                 </div>

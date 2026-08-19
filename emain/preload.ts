@@ -1,7 +1,7 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { contextBridge, ipcRenderer, Rectangle, webUtils, WebviewTag } from "electron";
+import { contextBridge, ipcRenderer, Rectangle, WebviewTag } from "electron";
 
 // update type in custom.d.ts (ElectronApi type)
 contextBridge.exposeInMainWorld("api", {
@@ -14,15 +14,20 @@ contextBridge.exposeInMainWorld("api", {
     getDataDir: () => ipcRenderer.sendSync("get-data-dir"),
     getConfigDir: () => ipcRenderer.sendSync("get-config-dir"),
     getHomeDir: () => ipcRenderer.sendSync("get-home-dir"),
+    getSystemPath: (name: string) => ipcRenderer.sendSync("get-system-path", name),
     getAboutModalDetails: () => ipcRenderer.sendSync("get-about-modal-details"),
     getWebviewPreload: () => ipcRenderer.sendSync("get-webview-preload"),
+    getGooseWebviewPreload: () => ipcRenderer.sendSync("get-goose-webview-preload"),
+    getGooseFrontendUrl: () => ipcRenderer.sendSync("get-goose-frontend-url"),
+    syncCcSwitchConfig: (target) => ipcRenderer.invoke("ccswitch:sync-config", target),
+    optimizePromptInput: (prompt) => ipcRenderer.invoke("promptoptimizer:optimize-prompt", prompt),
     getZoomFactor: () => ipcRenderer.sendSync("get-zoom-factor"),
+    runGit: (cwd: string, args: string[]) => ipcRenderer.invoke("git-run", cwd, args),
     openNewWindow: () => ipcRenderer.send("open-new-window"),
     showWorkspaceAppMenu: (workspaceId) => ipcRenderer.send("workspace-appmenu-show", workspaceId),
     showBuilderAppMenu: (builderId) => ipcRenderer.send("builder-appmenu-show", builderId),
     showContextMenu: (workspaceId, menu) => ipcRenderer.send("contextmenu-show", workspaceId, menu),
-    onContextMenuClick: (callback: (id: string | null) => void) =>
-        ipcRenderer.on("contextmenu-click", (_event, id: string | null) => callback(id)),
+    onContextMenuClick: (callback) => ipcRenderer.on("contextmenu-click", (_event, id) => callback(id)),
     downloadFile: (filePath) => ipcRenderer.send("download", { filePath }),
     openExternal: (url) => {
         if (url && typeof url === "string") {
@@ -67,10 +72,65 @@ contextBridge.exposeInMainWorld("api", {
     incrementTermCommands: (opts?: { isRemote?: boolean; isWsl?: boolean; isDurable?: boolean }) =>
         ipcRenderer.send("increment-term-commands", opts),
     nativePaste: () => ipcRenderer.send("native-paste"),
+    codexTranslate: (text: string) => ipcRenderer.invoke("codex-translate", text),
+    codexAuthReady: () => ipcRenderer.invoke("codex-auth-ready"),
+    codexLastSessionId: (cwd: string) => ipcRenderer.invoke("codex-last-session-id", cwd),
+    pickDirectory: (opts?: { title?: string; defaultPath?: string; buttonLabel?: string }) =>
+        ipcRenderer.invoke("pick-directory", opts),
+    httpRequest: (req: {
+        url: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: string;
+    }) => ipcRenderer.invoke("http-request", req),
+    speechRequest: (req: {
+        url: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: string;
+    }) => ipcRenderer.invoke("speech-request", req),
+    getListeningPortOwner: (port: number) => ipcRenderer.invoke("get-listening-port-owner", port),
+    speechLog: (entry: {
+        event: string;
+        transport?: string;
+        role?: string;
+        ownerId?: string;
+        playId?: number;
+        chunkIndex?: number;
+        chunkCount?: number;
+        text?: string;
+        endpoint?: string;
+        model?: string;
+        voice?: string;
+        error?: string;
+        ts?: number;
+    }) => ipcRenderer.invoke("speech-log", entry),
+    pveListMachines: (req?: { origin?: string; timeoutMs?: number }) => ipcRenderer.invoke("pve-list-machines", req),
+    pveCreateConsoleSession: (req: {
+        origin?: string;
+        node: string;
+        vmid: number;
+        type: "qemu" | "lxc";
+        name?: string;
+        timeoutMs?: number;
+    }) => ipcRenderer.invoke("pve-create-console-session", req),
+    pveControlMachine: (req: {
+        origin?: string;
+        node: string;
+        vmid: number;
+        type: "qemu" | "lxc";
+        action: "start" | "shutdown" | "stop" | "reboot";
+        timeoutMs?: number;
+    }) => ipcRenderer.invoke("pve-control-machine", req),
+    pveGetManagedKnownHostsFile: () => ipcRenderer.invoke("pve-get-managed-known-hosts-file"),
+    pveRepairSshHostKey: (req: {
+        host: string;
+        port?: number;
+        timeoutMs?: number;
+    }) => ipcRenderer.invoke("pve-repair-ssh-host-key", req),
     openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
     setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),
-    getPathForFile: (file: File): string => webUtils.getPathForFile(file),
     saveTextFile: (fileName: string, content: string) => ipcRenderer.invoke("save-text-file", fileName, content),
     setIsActive: () => ipcRenderer.invoke("set-is-active"),
 });

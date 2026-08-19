@@ -11,6 +11,7 @@ import { isMacOS } from "@/util/platformutil";
 import { isBlank, makeConnRoute } from "@/util/util";
 import * as jotai from "jotai";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 // ---- types ----
 
@@ -499,6 +500,7 @@ const SortIndicator = React.memo(function SortIndicator({ active, desc }: { acti
 SortIndicator.displayName = "SortIndicator";
 
 const StatusIndicator = React.memo(function StatusIndicator({ model }: { model: ProcessViewerViewModel }) {
+    const { t } = useTranslation();
     const paused = jotai.useAtomValue(model.pausedAtom);
     const error = jotai.useAtomValue(model.errorAtom);
     const lastSuccess = jotai.useAtomValue(model.lastSuccessAtom);
@@ -511,10 +513,10 @@ const StatusIndicator = React.memo(function StatusIndicator({ model }: { model: 
     }, [paused]);
 
     if (paused) {
-        const tooltipContent = (
+            const tooltipContent = (
             <div className="flex flex-col gap-0.5">
-                <span>Paused</span>
-                <span className="text-muted">Click to resume</span>
+                <span>{t("sysinfo.paused")}</span>
+                <span className="text-muted">{t("sysinfo.clickToResume")}</span>
             </div>
         );
         return (
@@ -538,7 +540,7 @@ const StatusIndicator = React.memo(function StatusIndicator({ model }: { model: 
     const tooltipContent = (
         <div className="flex flex-col gap-0.5">
             <span>{statusLabel}</span>
-            <span className="text-muted">Click to pause</span>
+            <span className="text-muted">{t("sysinfo.clickToPause")}</span>
         </div>
     );
 
@@ -607,6 +609,7 @@ const ProcessRow = React.memo(function ProcessRow({
     onSelect: (pid: number) => void;
     onContextMenu: (pid: number, e: React.MouseEvent) => void;
 }) {
+    const { t } = useTranslation();
     const cols = getColumns(platform);
     const visibleKeys = new Set(cols.map((c) => c.key));
     const gridTemplate = getGridTemplate(platform);
@@ -621,7 +624,7 @@ const ProcessRow = React.memo(function ProcessRow({
                 <div className="px-2 flex items-center truncate justify-end text-secondary font-mono text-[11px]">
                     {proc.pid}
                 </div>
-                <div className="px-2 flex items-center truncate text-muted italic">(gone)</div>
+                <div className="px-2 flex items-center truncate text-muted italic">{t("sysinfo.gone")}</div>
                 {visibleKeys.has("status") && <div className="px-2 flex items-center truncate" />}
                 {visibleKeys.has("user") && <div className="px-2 flex items-center truncate" />}
                 {visibleKeys.has("threads") && <div className="px-2 flex items-center truncate" />}
@@ -694,6 +697,7 @@ type StatusBarProps = {
 };
 
 const StatusBar = React.memo(function StatusBar({ model, data, loading, error, wide }: StatusBarProps) {
+    const { t } = useTranslation();
     const searchOpen = jotai.useAtomValue(model.searchOpenAtom);
     const totalCount = data?.totalcount ?? 0;
     const filteredCount = data?.filteredcount ?? 0;
@@ -730,7 +734,7 @@ const StatusBar = React.memo(function StatusBar({ model, data, loading, error, w
                 </div>
                 {hasSummaryLoad && (
                     <span className="shrink-0 whitespace-pre">
-                        Load{" "}
+                        {t("sysinfo.load")}{" "}
                         <span className="font-mono text-[11px]">
                             {fmtLoad(summary.load1)} {fmtLoad(summary.load5)} {fmtLoad(summary.load15)}
                         </span>
@@ -740,7 +744,7 @@ const StatusBar = React.memo(function StatusBar({ model, data, loading, error, w
                     <>
                         <div className="w-px self-stretch bg-white/10 shrink-0" />
                         <span className="shrink-0 whitespace-pre">
-                            Mem{" "}
+                            {t("sysinfo.mem")}{" "}
                             <span className="font-mono text-[11px]">
                                 {memUsedFmt} / {memTotalFmt}
                             </span>
@@ -762,7 +766,7 @@ const StatusBar = React.memo(function StatusBar({ model, data, loading, error, w
                     </>
                 )}
                 <span className="ml-auto whitespace-pre">
-                    Procs <span className="font-mono text-[11px]">{procCountValue}</span>
+                    {t("sysinfo.procs")} <span className="font-mono text-[11px]">{procCountValue}</span>
                 </span>
                 <Tooltip content={searchTooltip} placement="bottom">
                     <button
@@ -785,7 +789,7 @@ const StatusBar = React.memo(function StatusBar({ model, data, loading, error, w
             <div className="flex flex-row flex-1 min-w-0 items-center">
                 {hasSummaryLoad && (
                     <div className="flex flex-col shrink-0 w-[100px] mr-1">
-                        <div>Load</div>
+                        <div>{t("sysinfo.load")}</div>
                         <div className="font-mono text-[11px] whitespace-pre">
                             {fmtLoad(summary.load1)} {fmtLoad(summary.load5)} {fmtLoad(summary.load15)}
                         </div>
@@ -794,7 +798,7 @@ const StatusBar = React.memo(function StatusBar({ model, data, loading, error, w
                 {hasSummaryLoad && <div className="flex-1 max-w-3" />}
                 {hasSummaryMem && (
                     <div className="flex flex-col shrink-0 w-[95px] mr-1">
-                        <div>Mem</div>
+                        <div>{t("sysinfo.mem")}</div>
                         <div className="font-mono text-[11px] whitespace-pre">
                             {memUsedFmt} / {memTotalFmt}
                         </div>
@@ -817,7 +821,7 @@ const StatusBar = React.memo(function StatusBar({ model, data, loading, error, w
                 {hasSummaryCpu && <div className="flex-1 max-w-3" />}
                 <div className="flex-1" />
                 <div className="flex flex-col w-[38px] shrink-0">
-                    <div>Procs</div>
+                    <div>{t("sysinfo.procs")}</div>
                     <div className="font-mono text-[11px] whitespace-pre">{procCountValue}</div>
                 </div>
                 <Tooltip content={searchTooltip} placement="bottom">
@@ -835,6 +839,7 @@ const StatusBar = React.memo(function StatusBar({ model, data, loading, error, w
 StatusBar.displayName = "StatusBar";
 
 const SearchBar = React.memo(function SearchBar({ model }: { model: ProcessViewerViewModel }) {
+    const { t } = useTranslation();
     const searchOpen = jotai.useAtomValue(model.searchOpenAtom);
     const textSearch = jotai.useAtomValue(model.textSearchAtom);
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -854,7 +859,7 @@ const SearchBar = React.memo(function SearchBar({ model }: { model: ProcessViewe
                 ref={inputRef}
                 type="text"
                 value={textSearch}
-                placeholder="Filter processes…"
+                placeholder={t("sysinfo.filterProcesses")}
                 className="flex-1 bg-transparent text-xs text-primary placeholder-secondary outline-none min-w-0"
                 onChange={(e) => model.setTextSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -877,6 +882,7 @@ SearchBar.displayName = "SearchBar";
 
 export const ProcessViewerView: React.FC<ViewComponentProps<ProcessViewerViewModel>> = React.memo(
     function ProcessViewerView({ blockId: _blockId, blockRef: _blockRef, contentRef: _contentRef, model }) {
+        const { t } = useTranslation();
         const data = jotai.useAtomValue(model.dataAtom);
         const sortBy = jotai.useAtomValue(model.sortByAtom);
         const sortDesc = jotai.useAtomValue(model.sortDescAtom);
@@ -993,7 +999,7 @@ export const ProcessViewerView: React.FC<ViewComponentProps<ProcessViewerViewMod
                 <div className="flex-1 overflow-x-auto overflow-y-hidden">
                     {!connStatus?.connected ? (
                         <div className="flex items-center justify-center h-full text-secondary text-sm">
-                            Waiting for connection…
+                            {t("sysinfo.waitingForConnection")}
                         </div>
                     ) : (
                         <div className="flex flex-col h-full min-w-full w-max">

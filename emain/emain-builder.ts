@@ -66,6 +66,7 @@ export async function createBuilderWindow(appId: string): Promise<BuilderWindowT
         backgroundColor: "#222222",
         webPreferences: {
             preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
+            sandbox: false,
             webviewTag: true,
         },
     });

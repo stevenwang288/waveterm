@@ -29,6 +29,8 @@ declare global {
         allConnStatus: jotai.Atom<ConnStatus[]>;
         reinitVersion: jotai.PrimitiveAtom<number>;
         waveAIRateLimitInfoAtom: jotai.PrimitiveAtom<RateLimitInfo>;
+        notifications: jotai.PrimitiveAtom<NotificationType[]>;
+        notificationPopoverMode: jotai.PrimitiveAtom<boolean>;
     };
 
     type ThrottledValueAtom<T> = jotai.WritableAtom<T, [update: jotai.SetStateAction<T>], void>;
@@ -486,6 +488,28 @@ declare global {
           };
 
     type AIModeConfigWithMode = { mode: string } & AIModeConfigType;
+
+    type NotificationActionType = {
+        label: string;
+        actionKey: string;
+        rightIcon?: string;
+        color?: "green" | "grey";
+        disabled?: boolean;
+    };
+
+    type NotificationType = {
+        id?: string;
+        icon: string;
+        title: string;
+        message: string;
+        timestamp: string;
+        expiration?: number;
+        hidden?: boolean;
+        actions?: NotificationActionType[];
+        persistent?: boolean;
+        type?: "error" | "update" | "info" | "warning";
+        clickActionKey?: string;
+    };
 }
 
 export {};

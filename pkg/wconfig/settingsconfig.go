@@ -5,6 +5,7 @@ package wconfig
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -14,9 +15,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
+	"unicode/utf16"
 
-	"github.com/wavetermdev/waveterm/pkg/util/fileutil"
 	"github.com/wavetermdev/waveterm/pkg/util/utilfn"
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
@@ -26,8 +26,6 @@ import (
 const SettingsFile = "settings.json"
 const ConnectionsFile = "connections.json"
 const ProfilesFile = "profiles.json"
-
-var configWriteLock sync.Mutex
 
 const AnySchema = `
 {
@@ -45,6 +43,7 @@ type AiSettingsType struct {
 	AiApiToken      string  `json:"ai:apitoken,omitempty"`
 	AiName          string  `json:"ai:name,omitempty"`
 	AiModel         string  `json:"ai:model,omitempty"`
+	AiThinkingLevel string  `json:"ai:thinkinglevel,omitempty" jsonschema:"enum=low,enum=medium,enum=high,enum=xhigh"`
 	AiOrgID         string  `json:"ai:orgid,omitempty"`
 	AIApiVersion    string  `json:"ai:apiversion,omitempty"`
 	AiMaxTokens     float64 `json:"ai:maxtokens,omitempty"`
@@ -68,7 +67,6 @@ type SettingsType struct {
 	AppDisableCtrlShiftArrows     bool   `json:"app:disablectrlshiftarrows,omitempty"`
 	AppDisableCtrlShiftDisplay    bool   `json:"app:disablectrlshiftdisplay,omitempty"`
 	AppFocusFollowsCursor         string `json:"app:focusfollowscursor,omitempty" jsonschema:"enum=off,enum=on,enum=term"`
-	AppTabBar                     string `json:"app:tabbar,omitempty" jsonschema:"enum=top,enum=left"`
 
 	FeatureWaveAppBuilder bool `json:"feature:waveappbuilder,omitempty"`
 
@@ -79,6 +77,7 @@ type SettingsType struct {
 	AiApiToken      string  `json:"ai:apitoken,omitempty"`
 	AiName          string  `json:"ai:name,omitempty"`
 	AiModel         string  `json:"ai:model,omitempty"`
+	AiThinkingLevel string  `json:"ai:thinkinglevel,omitempty" jsonschema:"enum=low,enum=medium,enum=high,enum=xhigh"`
 	AiOrgID         string  `json:"ai:orgid,omitempty"`
 	AIApiVersion    string  `json:"ai:apiversion,omitempty"`
 	AiMaxTokens     float64 `json:"ai:maxtokens,omitempty"`
@@ -86,6 +85,26 @@ type SettingsType struct {
 	AiProxyUrl      string  `json:"ai:proxyurl,omitempty"`
 	AiFontSize      float64 `json:"ai:fontsize,omitempty"`
 	AiFixedFontSize float64 `json:"ai:fixedfontsize,omitempty"`
+
+	SpeechClear            bool     `json:"speech:*,omitempty"`
+	SpeechEnabled          *bool    `json:"speech:enabled,omitempty"`
+	SpeechProvider         string   `json:"speech:provider,omitempty" jsonschema:"enum=local,enum=api"`
+	SpeechEndpoint         string   `json:"speech:endpoint,omitempty"`
+	SpeechModel            string   `json:"speech:model,omitempty"`
+	SpeechVoice            string   `json:"speech:voice,omitempty"`
+	SpeechVoiceAssistant   string   `json:"speech:voiceassistant,omitempty"`
+	SpeechVoiceUser        string   `json:"speech:voiceuser,omitempty"`
+	SpeechVoiceSystem      string   `json:"speech:voicesystem,omitempty"`
+	SpeechFilterUrls       *bool    `json:"speech:filterurls,omitempty"`
+	SpeechFilterPaths      *bool    `json:"speech:filterpaths,omitempty"`
+	SpeechFilterCode       *bool    `json:"speech:filtercode,omitempty"`
+	SpeechAutoPlay         *bool    `json:"speech:autoplay,omitempty"`
+	SpeechAutoplayMigrated *bool    `json:"speech:autoplay-migrated,omitempty"`
+	SpeechManualButton     *bool    `json:"speech:manualbutton,omitempty"`
+	SpeechRate             *float64 `json:"speech:rate,omitempty"`
+	SpeechLocalEngine      string   `json:"speech:localengine,omitempty" jsonschema:"enum=browser,enum=edge,enum=melo"`
+	SpeechLocalModel       string   `json:"speech:localmodel,omitempty"`
+	SpeechLocalModelPath   string   `json:"speech:localmodelpath,omitempty"`
 
 	WaveAiShowCloudModes bool   `json:"waveai:showcloudmodes,omitempty"`
 	WaveAiDefaultMode    string `json:"waveai:defaultmode,omitempty"`
@@ -99,19 +118,17 @@ type SettingsType struct {
 	TermLocalShellOpts      []string `json:"term:localshellopts,omitempty"`
 	TermGitBashPath         string   `json:"term:gitbashpath,omitempty"`
 	TermScrollback          *int64   `json:"term:scrollback,omitempty"`
+	TermActivityWindowMs    *int64   `json:"term:activitywindowms,omitempty"`
 	TermCopyOnSelect        *bool    `json:"term:copyonselect,omitempty"`
 	TermTransparency        *float64 `json:"term:transparency,omitempty"`
 	TermAllowBracketedPaste *bool    `json:"term:allowbracketedpaste,omitempty"`
 	TermShiftEnterNewline   *bool    `json:"term:shiftenternewline,omitempty"`
 	TermMacOptionIsMeta     *bool    `json:"term:macoptionismeta,omitempty"`
-	TermCursor              string   `json:"term:cursor,omitempty"`
-	TermCursorBlink         *bool    `json:"term:cursorblink,omitempty"`
 	TermBellSound           *bool    `json:"term:bellsound,omitempty"`
 	TermBellIndicator       *bool    `json:"term:bellindicator,omitempty"`
-	TermOsc52               string   `json:"term:osc52,omitempty" jsonschema:"enum=focus,enum=always"`
-	TermDurable                    *bool    `json:"term:durable,omitempty"`
-	TermShowSplitButtons           bool     `json:"term:showsplitbuttons,omitempty"`
-	TermTrimTrailingWhitespace     *bool    `json:"term:trimtrailingwhitespace,omitempty"`
+	TermBellNotify          *bool    `json:"term:bellnotify,omitempty"`
+	TermDurable             *bool    `json:"term:durable,omitempty"`
+	TermWheelLineScroll     *bool    `json:"term:wheellinescroll,omitempty"`
 
 	EditorMinimapEnabled      bool    `json:"editor:minimapenabled,omitempty"`
 	EditorStickyScrollEnabled bool    `json:"editor:stickyscrollenabled,omitempty"`
@@ -133,12 +150,11 @@ type SettingsType struct {
 	MarkdownFontSize      float64 `json:"markdown:fontsize,omitempty"`
 	MarkdownFixedFontSize float64 `json:"markdown:fixedfontsize,omitempty"`
 
-	PreviewShowHiddenFiles *bool  `json:"preview:showhiddenfiles,omitempty"`
-	PreviewDefaultSort     string `json:"preview:defaultsort,omitempty" jsonschema:"enum=name,enum=modtime"`
+	PreviewShowHiddenFiles *bool `json:"preview:showhiddenfiles,omitempty"`
 
-	TabPreset       string `json:"tab:preset,omitempty"`
-	TabConfirmClose bool   `json:"tab:confirmclose,omitempty"`
-	TabBackground   string `json:"tab:background,omitempty"`
+	TabPreset               string   `json:"tab:preset,omitempty"`
+	TabConfirmClose         bool     `json:"tab:confirmclose,omitempty"`
+	TabSidePanelButtonOrder []string `json:"tab:sidepanelbuttonorder,omitempty"`
 
 	WidgetClear    bool  `json:"widget:*,omitempty"`
 	WidgetShowHelp *bool `json:"widget:showhelp,omitempty"`
@@ -175,7 +191,6 @@ type SettingsType struct {
 	DebugClear               bool `json:"debug:*,omitempty"`
 	DebugPprofPort           *int `json:"debug:pprofport,omitempty"`
 	DebugPprofMemProfileRate *int `json:"debug:pprofmemprofilerate,omitempty"`
-	DebugWebGlStatus         bool `json:"debug:webglstatus,omitempty"`
 
 	TsunamiClear          bool   `json:"tsunami:*,omitempty"`
 	TsunamiScaffoldPath   string `json:"tsunami:scaffoldpath,omitempty"`
@@ -193,6 +208,7 @@ func (s *SettingsType) GetAiSettings() *AiSettingsType {
 		AiApiToken:      s.AiApiToken,
 		AiName:          s.AiName,
 		AiModel:         s.AiModel,
+		AiThinkingLevel: s.AiThinkingLevel,
 		AiOrgID:         s.AiOrgID,
 		AIApiVersion:    s.AIApiVersion,
 		AiMaxTokens:     s.AiMaxTokens,
@@ -236,6 +252,9 @@ func MergeAiSettings(settings ...*AiSettingsType) *AiSettingsType {
 		}
 		if s.AiModel != "" {
 			result.AiModel = s.AiModel
+		}
+		if s.AiThinkingLevel != "" {
+			result.AiThinkingLevel = s.AiThinkingLevel
 		}
 		if s.AiOrgID != "" {
 			result.AiOrgID = s.AiOrgID
@@ -289,13 +308,12 @@ type AIModeConfigType struct {
 	DisplayOrder       float64  `json:"display:order,omitempty"`
 	DisplayIcon        string   `json:"display:icon,omitempty"`
 	DisplayDescription string   `json:"display:description,omitempty"`
-	Provider           string   `json:"ai:provider,omitempty" jsonschema:"enum=wave,enum=google,enum=groq,enum=openrouter,enum=nanogpt,enum=openai,enum=azure,enum=azure-legacy,enum=custom"`
+	Provider           string   `json:"ai:provider,omitempty" jsonschema:"enum=wave,enum=google,enum=openrouter,enum=nanogpt,enum=openai,enum=azure,enum=azure-legacy,enum=custom"`
 	APIType            string   `json:"ai:apitype,omitempty" jsonschema:"enum=google-gemini,enum=openai-responses,enum=openai-chat"`
 	Model              string   `json:"ai:model,omitempty"`
 	ThinkingLevel      string   `json:"ai:thinkinglevel,omitempty" jsonschema:"enum=low,enum=medium,enum=high"`
-	Verbosity          string   `json:"ai:verbosity,omitempty" jsonschema:"enum=low,enum=medium,enum=high,description=Text verbosity level (OpenAI Responses API only)"`
+	Verbosity          string   `json:"ai:verbosity,omitempty" jsonschema:"enum=low,enum=medium,enum=high"`
 	Endpoint           string   `json:"ai:endpoint,omitempty"`
-	ProxyURL           string   `json:"ai:proxyurl,omitempty"`
 	AzureAPIVersion    string   `json:"ai:azureapiversion,omitempty"`
 	APIToken           string   `json:"ai:apitoken,omitempty"`
 	APITokenSecretName string   `json:"ai:apitokensecretname,omitempty"`
@@ -311,74 +329,17 @@ type AIModeConfigUpdate struct {
 	Configs map[string]AIModeConfigType `json:"configs"`
 }
 
-type WidgetConfigType struct {
-	DisplayOrder  float64          `json:"display:order,omitempty"`
-	DisplayHidden bool             `json:"display:hidden,omitempty"`
-	Icon          string           `json:"icon,omitempty"`
-	Color         string           `json:"color,omitempty"`
-	Label         string           `json:"label,omitempty"`
-	Description   string           `json:"description,omitempty"`
-	Workspaces    []string         `json:"workspaces,omitempty"`
-	Magnified     bool             `json:"magnified,omitempty"`
-	BlockDef      waveobj.BlockDef `json:"blockdef"`
-}
-
-type BackgroundConfigType struct {
-	Bg                  string  `json:"bg,omitempty" jsonschema_description:"CSS background property value"`
-	BgOpacity           float64 `json:"bg:opacity,omitempty" jsonschema_description:"Background opacity (0.0-1.0)"`
-	BgBlendMode         string  `json:"bg:blendmode,omitempty" jsonschema_description:"CSS background-blend-mode property value"`
-	BgBorderColor       string  `json:"bg:bordercolor,omitempty" jsonschema_description:"Block frame border color"`
-	BgActiveBorderColor string  `json:"bg:activebordercolor,omitempty" jsonschema_description:"Block frame focused border color"`
-	DisplayName         string  `json:"display:name" jsonschema_description:"The name shown in the context menu"`
-	DisplayOrder        float64 `json:"display:order,omitempty" jsonschema_description:"Determines the order of the background in the context menu"`
-}
-
-type MimeTypeConfigType struct {
-	Icon  string `json:"icon"`
-	Color string `json:"color"`
-}
-
-type TermThemeType struct {
-	DisplayName         string  `json:"display:name"`
-	DisplayOrder        float64 `json:"display:order"`
-	Black               string  `json:"black"`
-	Red                 string  `json:"red"`
-	Green               string  `json:"green"`
-	Yellow              string  `json:"yellow"`
-	Blue                string  `json:"blue"`
-	Magenta             string  `json:"magenta"`
-	Cyan                string  `json:"cyan"`
-	White               string  `json:"white"`
-	BrightBlack         string  `json:"brightBlack"`
-	BrightRed           string  `json:"brightRed"`
-	BrightGreen         string  `json:"brightGreen"`
-	BrightYellow        string  `json:"brightYellow"`
-	BrightBlue          string  `json:"brightBlue"`
-	BrightMagenta       string  `json:"brightMagenta"`
-	BrightCyan          string  `json:"brightCyan"`
-	BrightWhite         string  `json:"brightWhite"`
-	Gray                string  `json:"gray"`
-	CmdText             string  `json:"cmdtext"`
-	Foreground          string  `json:"foreground"`
-	SelectionBackground string  `json:"selectionBackground"`
-	Background          string  `json:"background"`
-	Cursor              string  `json:"cursor"`
-}
-
 type FullConfigType struct {
-	Settings       SettingsType                    `json:"settings" merge:"meta"`
-	MimeTypes      map[string]MimeTypeConfigType   `json:"mimetypes"`
-	DefaultWidgets map[string]WidgetConfigType     `json:"defaultwidgets"`
-	Widgets        map[string]WidgetConfigType     `json:"widgets"`
-	Presets        map[string]waveobj.MetaMapType  `json:"presets"`
-	Backgrounds    map[string]BackgroundConfigType `json:"backgrounds"`
-	TermThemes     map[string]TermThemeType        `json:"termthemes"`
-	Connections    map[string]ConnKeywords         `json:"connections"`
-	Bookmarks      map[string]WebBookmark          `json:"bookmarks"`
-	WaveAIModes    map[string]AIModeConfigType     `json:"waveai"`
-	ConfigErrors   []ConfigError                   `json:"configerrors" configfile:"-"`
-	Version        string                          `json:"version" configfile:"-"`
-	BuildTime      string                          `json:"buildtime" configfile:"-"`
+	Settings       SettingsType                   `json:"settings" merge:"meta"`
+	MimeTypes      map[string]MimeTypeConfigType  `json:"mimetypes"`
+	DefaultWidgets map[string]WidgetConfigType    `json:"defaultwidgets"`
+	Widgets        map[string]WidgetConfigType    `json:"widgets"`
+	Presets        map[string]waveobj.MetaMapType `json:"presets"`
+	TermThemes     map[string]TermThemeType       `json:"termthemes"`
+	Connections    map[string]ConnKeywords        `json:"connections"`
+	Bookmarks      map[string]WebBookmark         `json:"bookmarks"`
+	WaveAIModes    map[string]AIModeConfigType    `json:"waveai"`
+	ConfigErrors   []ConfigError                  `json:"configerrors" configfile:"-"`
 }
 
 type ConnKeywords struct {
@@ -387,7 +348,14 @@ type ConnKeywords struct {
 	ConnWshPath             string `json:"conn:wshpath,omitempty"`
 	ConnShellPath           string `json:"conn:shellpath,omitempty"`
 	ConnIgnoreSshConfig     *bool  `json:"conn:ignoresshconfig,omitempty"`
+	ConnGuiURL              string `json:"conn:guiurl,omitempty"`
+	ConnGuiMode             string `json:"conn:guimode,omitempty"`
+	PveVmid                 int    `json:"pve:vmid,omitempty"`
+	PveNode                 string `json:"pve:node,omitempty"`
+	PveType                 string `json:"pve:type,omitempty"`
+	PveName                 string `json:"pve:name,omitempty"`
 
+	DisplayName   string  `json:"display:name,omitempty"`
 	DisplayHidden *bool   `json:"display:hidden,omitempty"`
 	DisplayOrder  float32 `json:"display:order,omitempty"`
 
@@ -524,6 +492,12 @@ func readConfigHelper(fileName string, barr []byte, readErr error) (waveobj.Meta
 	if len(barr) == 0 {
 		return nil, cerrs
 	}
+	normalized, normErr := normalizeJSONConfigBytes(barr)
+	if normErr != nil {
+		cerrs = append(cerrs, ConfigError{File: fileName, Err: normErr.Error()})
+		return nil, cerrs
+	}
+	barr = normalized
 	var rtn waveobj.MetaMapType
 	err := json.Unmarshal(barr, &rtn)
 	if err != nil {
@@ -551,6 +525,49 @@ func readConfigHelper(fileName string, barr []byte, readErr error) (waveobj.Meta
 	return rtn, cerrs
 }
 
+func normalizeJSONConfigBytes(barr []byte) ([]byte, error) {
+	if len(barr) == 0 {
+		return barr, nil
+	}
+	// Tolerate UTF-8 BOM (`EF BB BF`) at the beginning of JSON config files.
+	// This commonly happens on Windows when tools write UTF-8 with BOM.
+	if bytes.HasPrefix(barr, []byte{0xEF, 0xBB, 0xBF}) {
+		barr = barr[3:]
+	}
+	// Tolerate UTF-16 BOMs. We convert to UTF-8 so downstream parsing behaves normally.
+	if bytes.HasPrefix(barr, []byte{0xFF, 0xFE}) {
+		decoded, err := decodeUTF16ToUTF8(barr[2:], true)
+		if err != nil {
+			return nil, fmt.Errorf("json config is UTF-16LE but failed to decode: %w", err)
+		}
+		return decoded, nil
+	}
+	if bytes.HasPrefix(barr, []byte{0xFE, 0xFF}) {
+		decoded, err := decodeUTF16ToUTF8(barr[2:], false)
+		if err != nil {
+			return nil, fmt.Errorf("json config is UTF-16BE but failed to decode: %w", err)
+		}
+		return decoded, nil
+	}
+	return barr, nil
+}
+
+func decodeUTF16ToUTF8(barr []byte, littleEndian bool) ([]byte, error) {
+	if len(barr)%2 != 0 {
+		return nil, fmt.Errorf("odd byte length %d", len(barr))
+	}
+	u16 := make([]uint16, len(barr)/2)
+	for i := 0; i < len(u16); i++ {
+		off := i * 2
+		if littleEndian {
+			u16[i] = binary.LittleEndian.Uint16(barr[off : off+2])
+		} else {
+			u16[i] = binary.BigEndian.Uint16(barr[off : off+2])
+		}
+	}
+	return []byte(string(utf16.Decode(u16))), nil
+}
+
 func readConfigFileFS(fsys fs.FS, logPrefix string, fileName string) (waveobj.MetaMapType, []ConfigError) {
 	barr, readErr := fs.ReadFile(fsys, fileName)
 	if readErr != nil {
@@ -571,16 +588,13 @@ func ReadWaveHomeConfigFile(fileName string) (waveobj.MetaMapType, []ConfigError
 }
 
 func WriteWaveHomeConfigFile(fileName string, m waveobj.MetaMapType) error {
-	configWriteLock.Lock()
-	defer configWriteLock.Unlock()
-
 	configDirAbsPath := wavebase.GetWaveConfigDir()
 	fullFileName := filepath.Join(configDirAbsPath, fileName)
 	barr, err := jsonMarshalConfigInOrder(m)
 	if err != nil {
 		return err
 	}
-	return fileutil.AtomicWriteFile(fullFileName, barr, 0644)
+	return os.WriteFile(fullFileName, barr, 0644)
 }
 
 // simple merge that overwrites
@@ -699,8 +713,6 @@ func ReadFullConfig() FullConfigType {
 			utilfn.ReUnmarshal(fieldPtr, configPart)
 		}
 	}
-	fullConfig.Version = wavebase.WaveVersion
-	fullConfig.BuildTime = wavebase.BuildTime
 	return fullConfig
 }
 
@@ -888,58 +900,86 @@ func SetConnectionsConfigValue(connName string, toMerge waveobj.MetaMapType) err
 	if m == nil {
 		m = make(waveobj.MetaMapType)
 	}
+	connName = strings.TrimSpace(connName)
+	if connName == "" {
+		return fmt.Errorf("connection name cannot be empty")
+	}
+	if toMerge == nil {
+		delete(m, connName)
+		return WriteWaveHomeConfigFile(ConnectionsFile, m)
+	}
 	connData := m.GetMap(connName)
 	if connData == nil {
 		connData = make(waveobj.MetaMapType)
 	}
 	for configKey, val := range toMerge {
+		if val == nil {
+			delete(connData, configKey)
+			continue
+		}
 		connData[configKey] = val
 	}
-	m[connName] = connData
+	if len(connData) == 0 {
+		delete(m, connName)
+	} else {
+		m[connName] = connData
+	}
 	return WriteWaveHomeConfigFile(ConnectionsFile, m)
 }
 
-func MigratePresetsBackgrounds() {
-	configDirAbsPath := wavebase.GetWaveConfigDir()
-	backgroundsFile := filepath.Join(configDirAbsPath, "backgrounds.json")
-	if _, err := os.Stat(backgroundsFile); err == nil {
-		return
-	} else if !os.IsNotExist(err) {
-		log.Printf("error checking backgrounds.json during migration: %v\n", err)
-		return
-	}
-	bgFile := filepath.Join(configDirAbsPath, "presets", "bg.json")
-	bgData, err := os.ReadFile(bgFile)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Printf("error reading presets/bg.json for migration: %v\n", err)
-		}
-		return
-	}
-	var rawMap map[string]json.RawMessage
-	if err := json.Unmarshal(bgData, &rawMap); err != nil {
-		log.Printf("error parsing presets/bg.json for migration: %v\n", err)
-		return
-	}
-	filtered := make(map[string]json.RawMessage)
-	for k, v := range rawMap {
-		if strings.HasPrefix(k, "bg@") {
-			filtered[k] = v
-		}
-	}
-	if len(filtered) == 0 {
-		return
-	}
-	outBarr, err := json.MarshalIndent(filtered, "", "  ")
-	if err != nil {
-		log.Printf("error marshaling backgrounds.json during migration: %v\n", err)
-		return
-	}
-	if err := fileutil.AtomicWriteFile(backgroundsFile, outBarr, 0644); err != nil {
-		log.Printf("error writing backgrounds.json during migration: %v\n", err)
-		return
-	}
-	log.Printf("migrated %d background presets from presets/bg.json to backgrounds.json\n", len(filtered))
+type WidgetConfigType struct {
+	DisplayOrder  float64          `json:"display:order,omitempty"`
+	DisplayHidden bool             `json:"display:hidden,omitempty"`
+	Icon          string           `json:"icon,omitempty"`
+	Color         string           `json:"color,omitempty"`
+	Label         string           `json:"label,omitempty"`
+	Description   string           `json:"description,omitempty"`
+	Workspaces    []string         `json:"workspaces,omitempty"`
+	Magnified     bool             `json:"magnified,omitempty"`
+	BlockDef      waveobj.BlockDef `json:"blockdef"`
+}
+
+type BgPresetsType struct {
+	BgClear             bool    `json:"bg:*,omitempty"`
+	Bg                  string  `json:"bg,omitempty" jsonschema_description:"CSS background property value"`
+	BgOpacity           float64 `json:"bg:opacity,omitempty" jsonschema_description:"Background opacity (0.0-1.0)"`
+	BgBlendMode         string  `json:"bg:blendmode,omitempty" jsonschema_description:"CSS background-blend-mode property value"`
+	BgBorderColor       string  `json:"bg:bordercolor,omitempty" jsonschema_description:"Block frame border color"`
+	BgActiveBorderColor string  `json:"bg:activebordercolor,omitempty" jsonschema_description:"Block frame focused border color"`
+	DisplayName         string  `json:"display:name,omitempty" jsonschema_description:"The name shown in the context menu"`
+	DisplayOrder        float64 `json:"display:order,omitempty" jsonschema_description:"Determines the order of the background in the context menu"`
+}
+
+type MimeTypeConfigType struct {
+	Icon  string `json:"icon"`
+	Color string `json:"color"`
+}
+
+type TermThemeType struct {
+	DisplayName         string  `json:"display:name"`
+	DisplayOrder        float64 `json:"display:order"`
+	Black               string  `json:"black"`
+	Red                 string  `json:"red"`
+	Green               string  `json:"green"`
+	Yellow              string  `json:"yellow"`
+	Blue                string  `json:"blue"`
+	Magenta             string  `json:"magenta"`
+	Cyan                string  `json:"cyan"`
+	White               string  `json:"white"`
+	BrightBlack         string  `json:"brightBlack"`
+	BrightRed           string  `json:"brightRed"`
+	BrightGreen         string  `json:"brightGreen"`
+	BrightYellow        string  `json:"brightYellow"`
+	BrightBlue          string  `json:"brightBlue"`
+	BrightMagenta       string  `json:"brightMagenta"`
+	BrightCyan          string  `json:"brightCyan"`
+	BrightWhite         string  `json:"brightWhite"`
+	Gray                string  `json:"gray"`
+	CmdText             string  `json:"cmdtext"`
+	Foreground          string  `json:"foreground"`
+	SelectionBackground string  `json:"selectionBackground"`
+	Background          string  `json:"background"`
+	Cursor              string  `json:"cursor"`
 }
 
 // CountCustomWidgets returns the number of custom widgets the user has defined.

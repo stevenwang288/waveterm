@@ -18,6 +18,7 @@ import { VTab, VTabItem } from "./vtab";
 import { VTabBarEnv } from "./vtabbarenv";
 import { WorkspaceSwitcher } from "./workspaceswitcher";
 export type { VTabItem } from "./vtab";
+import { useTranslation } from "react-i18next";
 
 const VTabBarAIButton = memo(() => {
     const env = useWaveEnv<VTabBarEnv>();
@@ -185,6 +186,7 @@ function VTabWrapper({
 }
 
 export function VTabBar({ workspace, className }: VTabBarProps) {
+    const { t } = useTranslation();
     const env = useWaveEnv<VTabBarEnv>();
     const activeTabId = useAtomValue(env.atoms.staticTabId);
     const reinitVersion = useAtomValue(env.atoms.reinitVersion);
@@ -425,11 +427,11 @@ export function VTabBar({ workspace, className }: VTabBarProps) {
                 onClick={() => env.electron.createTab()}
                 onMouseEnter={() => setIsNewTabHovered(true)}
                 onMouseLeave={() => setIsNewTabHovered(false)}
-                aria-label="New Tab"
+                aria-label={t("tips.keybindings.main.newTab")}
             >
                 <div className="pointer-events-none absolute inset-x-1 inset-y-[4px] rounded-sm bg-transparent transition-colors group-hover:bg-hover" />
                 <i className="fa fa-solid fa-plus" style={{ fontSize: "10px" }} />
-                <span>New Tab</span>
+                <span>{t("tips.keybindings.main.newTab")}</span>
             </button>
         </div>
     );

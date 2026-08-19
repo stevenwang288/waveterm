@@ -20,6 +20,7 @@ import {
     WaveBrowserWindow,
 } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
+import i18next from "./i18n-main";
 import { updater } from "./updater";
 
 type AppMenuCallbacks = {
@@ -49,7 +50,7 @@ async function getWorkspaceMenu(ww?: WaveBrowserWindow): Promise<Electron.MenuIt
     const workspaceList = await RpcApi.WorkspaceListCommand(ElectronWshClient);
     const workspaceMenu: Electron.MenuItemConstructorOptions[] = [
         {
-            label: "Create Workspace",
+            label: i18next.t("menu.createWorkspace"),
             click: (_, window) => fireAndForget(() => createWorkspace((window as WaveBrowserWindow) ?? ww)),
         },
     ];
@@ -92,34 +93,42 @@ function makeEditMenu(fullConfig?: FullConfigType): Electron.MenuItemConstructor
     return [
         {
             role: "undo",
+            label: i18next.t("menu.undo"),
             accelerator: unamePlatform === "darwin" ? "Command+Z" : "",
         },
         {
             role: "redo",
+            label: i18next.t("menu.redo"),
             accelerator: unamePlatform === "darwin" ? "Command+Shift+Z" : "",
         },
         { type: "separator" },
         {
             role: "cut",
+            label: i18next.t("menu.cut"),
             accelerator: unamePlatform === "darwin" ? "Command+X" : "",
         },
         {
             role: "copy",
+            label: i18next.t("menu.copy"),
             accelerator: unamePlatform === "darwin" ? "Command+C" : "",
         },
         {
             role: "paste",
+            label: i18next.t("menu.paste"),
             accelerator: pasteAccelerator,
         },
         {
             role: "pasteAndMatchStyle",
+            label: i18next.t("menu.pasteAndMatchStyle"),
             accelerator: unamePlatform === "darwin" ? "Command+Shift+V" : "",
         },
         {
             role: "delete",
+            label: i18next.t("menu.delete"),
         },
         {
             role: "selectAll",
+            label: i18next.t("menu.selectAll"),
             accelerator: unamePlatform === "darwin" ? "Command+A" : "",
         },
     ];
@@ -132,7 +141,7 @@ function makeFileMenu(
 ): Electron.MenuItemConstructorOptions[] {
     const fileMenu: Electron.MenuItemConstructorOptions[] = [
         {
-            label: "New Window",
+            label: i18next.t("menu.newWindow"),
             accelerator: "CommandOrControl+Shift+N",
             click: () => fireAndForget(callbacks.createNewWaveWindow),
         },
@@ -147,21 +156,21 @@ function makeFileMenu(
     const featureWaveAppBuilder = fullConfig?.settings?.["feature:waveappbuilder"];
     if (isDev || featureWaveAppBuilder) {
         fileMenu.splice(1, 0, {
-            label: "New WaveApp Builder Window",
+            label: i18next.t("menu.newBuilderWindow"),
             accelerator: unamePlatform === "darwin" ? "Command+Shift+B" : "Alt+Shift+B",
             click: () => openBuilderWindow(""),
         });
     }
     if (numWaveWindows == 0) {
         fileMenu.push({
-            label: "New Window (hidden-1)",
+            label: i18next.t("menu.newWindow") + " (hidden-1)",
             accelerator: unamePlatform === "darwin" ? "Command+N" : "Alt+N",
             acceleratorWorksWhenHidden: true,
             visible: false,
             click: () => fireAndForget(callbacks.createNewWaveWindow),
         });
         fileMenu.push({
-            label: "New Window (hidden-2)",
+            label: i18next.t("menu.newWindow") + " (hidden-2)",
             accelerator: unamePlatform === "darwin" ? "Command+T" : "Alt+T",
             acceleratorWorksWhenHidden: true,
             visible: false,
@@ -174,13 +183,13 @@ function makeFileMenu(
 function makeAppMenuItems(webContents: electron.WebContents): Electron.MenuItemConstructorOptions[] {
     const appMenuItems: Electron.MenuItemConstructorOptions[] = [
         {
-            label: "About Wave Terminal",
+            label: i18next.t("menu.about"),
             click: (_, window) => {
                 (getWindowWebContents(window) ?? webContents)?.send("menu-item-about");
             },
         },
         {
-            label: "Check for Updates",
+            label: i18next.t("menu.checkUpdates"),
             click: () => {
                 fireAndForget(() => updater?.checkForUpdates(true));
             },
@@ -209,22 +218,22 @@ function makeViewMenu(
     const devToolsAccel = unamePlatform === "darwin" ? "Option+Command+I" : "Alt+Shift+I";
     return [
         {
-            label: isBuilderWindowFocused ? "Reload Window" : "Reload Tab",
+            label: isBuilderWindowFocused ? i18next.t("menu.reloadWindow") : i18next.t("menu.reloadTab"),
             accelerator: "Shift+CommandOrControl+R",
             click: (_, window) => {
                 (getWindowWebContents(window) ?? webContents)?.reloadIgnoringCache();
             },
         },
         {
-            label: "Relaunch All Windows",
+            label: i18next.t("menu.relaunchAll"),
             click: () => callbacks.relaunchBrowserWindows(),
         },
         {
-            label: "Clear Tab Cache",
+            label: i18next.t("menu.clearTabCache"),
             click: () => clearTabCache(),
         },
         {
-            label: "Toggle DevTools",
+            label: i18next.t("menu.toggleDevTools"),
             accelerator: devToolsAccel,
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -233,7 +242,7 @@ function makeViewMenu(
         },
         { type: "separator" },
         {
-            label: "Reset Zoom",
+            label: i18next.t("menu.resetZoom"),
             accelerator: "CommandOrControl+0",
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -243,8 +252,7 @@ function makeViewMenu(
             },
         },
         {
-            label: "Zoom In",
-            accelerator: "CommandOrControl+=",
+            label: i18next.t("menu.zoomIn"),
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
                 if (wc) {
@@ -253,7 +261,7 @@ function makeViewMenu(
             },
         },
         {
-            label: "Zoom In (hidden)",
+            label: i18next.t("menu.zoomIn") + " (hidden)",
             accelerator: "CommandOrControl+Shift+=",
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -265,8 +273,7 @@ function makeViewMenu(
             acceleratorWorksWhenHidden: true,
         },
         {
-            label: "Zoom Out",
-            accelerator: "CommandOrControl+-",
+            label: i18next.t("menu.zoomOut"),
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
                 if (wc) {
@@ -275,7 +282,7 @@ function makeViewMenu(
             },
         },
         {
-            label: "Zoom Out (hidden)",
+            label: i18next.t("menu.zoomOut") + " (hidden)",
             accelerator: "CommandOrControl+Shift+-",
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -287,10 +294,10 @@ function makeViewMenu(
             acceleratorWorksWhenHidden: true,
         },
         {
-            label: "Launch On Full Screen",
+            label: i18next.t("menu.launchFullScreen"),
             submenu: [
                 {
-                    label: "On",
+                    label: i18next.t("menu.on"),
                     type: "radio",
                     checked: fullscreenOnLaunch,
                     click: () => {
@@ -298,7 +305,7 @@ function makeViewMenu(
                     },
                 },
                 {
-                    label: "Off",
+                    label: i18next.t("menu.off"),
                     type: "radio",
                     checked: !fullscreenOnLaunch,
                     click: () => {
@@ -313,7 +320,7 @@ function makeViewMenu(
         },
         { type: "separator" },
         {
-            label: "Toggle Widgets Bar",
+            label: i18next.t("menu.toggleWidgetsBar"),
             click: () => {
                 fireAndForget(async () => {
                     const workspaceId = focusedWaveWindow?.workspaceId;
@@ -365,8 +372,7 @@ async function makeFullAppMenu(callbacks: AppMenuCallbacks, workspaceOrBuilderId
     ];
     if (workspaceMenu != null && !isBuilderWindowFocused) {
         menuTemplate.push({
-            label: "Workspace",
-            id: "workspace-menu",
+            label: i18next.t("menu.workspace"),
             submenu: workspaceMenu,
         });
     }

@@ -1,6 +1,5 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
-
 import { CopyButton } from "@/app/element/copybutton";
 import { createContentBlockPlugin } from "@/app/element/markdown-contentblock-plugin";
 import {
@@ -25,10 +24,9 @@ import remarkGfm from "remark-gfm";
 import { openLink } from "../store/global";
 import { IconButton } from "./iconbutton";
 import "./markdown.scss";
-
+import { useTranslation } from "react-i18next";
 let mermaidInitialized = false;
 let mermaidInstance: any = null;
-
 const initializeMermaid = async () => {
     if (!mermaidInitialized) {
         const mermaid = await import("mermaid");
@@ -37,7 +35,6 @@ const initializeMermaid = async () => {
         mermaidInitialized = true;
     }
 };
-
 const Link = ({
     setFocusedHeading,
     props,
@@ -59,7 +56,6 @@ const Link = ({
         </a>
     );
 };
-
 const Heading = ({ props, hnum }: { props: React.HTMLAttributes<HTMLHeadingElement>; hnum: number }) => {
     return (
         <div id={props.id} className={clsx("heading", `is-${hnum}`)}>
@@ -67,29 +63,24 @@ const Heading = ({ props, hnum }: { props: React.HTMLAttributes<HTMLHeadingEleme
         </div>
     );
 };
-
 const Mermaid = ({ chart }: { chart: string }) => {
     const ref = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
     useEffect(() => {
         const renderMermaid = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
-
                 await initializeMermaid();
                 if (!ref.current || !mermaidInstance) {
                     return;
                 }
-
                 // Normalize the chart text
                 let normalizedChart = chart
                     .replace(/<br\s*\/?>/gi, "\n") // Convert <br/> and <br> to newlines
                     .replace(/\r\n?/g, "\n") // Normalize \r \r\n to \n
                     .replace(/\n+$/, ""); // Remove final newline
-
                 ref.current.removeAttribute("data-processed");
                 ref.current.textContent = normalizedChart;
                 // console.log("mermaid", normalizedChart);
@@ -101,13 +92,10 @@ const Mermaid = ({ chart }: { chart: string }) => {
                 setIsLoading(false);
             }
         };
-
         renderMermaid();
     }, [chart]);
-
     useEffect(() => {
         if (!ref.current) return;
-
         if (error) {
             ref.current.textContent = `Error: ${error}`;
             ref.current.className = "mermaid error";
@@ -118,10 +106,8 @@ const Mermaid = ({ chart }: { chart: string }) => {
             ref.current.className = "mermaid";
         }
     }, [isLoading, error]);
-
     return <div className="mermaid" ref={ref} />;
 };
-
 const Code = ({ className = "", children }: { className?: string; children: React.ReactNode }) => {
     if (/\blanguage-mermaid\b/.test(className)) {
         const text = Array.isArray(children) ? children.join("") : String(children ?? "");
@@ -129,13 +115,12 @@ const Code = ({ className = "", children }: { className?: string; children: Reac
     }
     return <code className={className}>{children}</code>;
 };
-
 type CodeBlockProps = {
     children: React.ReactNode;
     onClickExecute?: (cmd: string) => void;
 };
-
 const CodeBlock = ({ children, onClickExecute }: CodeBlockProps) => {
+    const { t } = useTranslation();
     const getTextContent = (children: any): string => {
         if (typeof children === "string") {
             return children;
@@ -146,27 +131,24 @@ const CodeBlock = ({ children, onClickExecute }: CodeBlockProps) => {
         }
         return "";
     };
-
     const handleCopy = async (e: React.MouseEvent) => {
         let textToCopy = getTextContent(children);
         textToCopy = textToCopy.replace(/\n$/, ""); // remove trailing newline
         await navigator.clipboard.writeText(textToCopy);
     };
-
     const handleExecute = (e: React.MouseEvent) => {
-        let textToCopy = getTextContent(children);
+            let textToCopy = getTextContent(children);
         textToCopy = textToCopy.replace(/\n$/, ""); // remove trailing newline
         if (onClickExecute) {
             onClickExecute(textToCopy);
             return;
         }
     };
-
     return (
         <pre className="codeblock">
             {children}
             <div className="codeblock-actions">
-                <CopyButton onClick={handleCopy} title="Copy" />
+                <CopyButton onClick={handleCopy} title={t("common.copy")} />
                 {onClickExecute && (
                     <IconButton
                         decl={{
@@ -180,7 +162,6 @@ const CodeBlock = ({ children, onClickExecute }: CodeBlockProps) => {
         </pre>
     );
 };
-
 const MarkdownSource = ({
     props,
     resolveOpts,
@@ -193,29 +174,23 @@ const MarkdownSource = ({
 }) => {
     const [resolvedSrcSet, setResolvedSrcSet] = useState<string>(props.srcSet);
     const [resolving, setResolving] = useState<boolean>(true);
-
     useEffect(() => {
         const resolvePath = async () => {
             const resolved = await resolveSrcSet(props.srcSet, resolveOpts);
             setResolvedSrcSet(resolved);
             setResolving(false);
         };
-
         resolvePath();
     }, [props.srcSet]);
-
     if (resolving) {
         return null;
     }
-
     return <source srcSet={resolvedSrcSet} media={props.media} />;
 };
-
 interface WaveBlockProps {
     blockkey: string;
     blockmap: Map<string, MarkdownContentBlockType>;
 }
-
 function WaveBlock(props: WaveBlockProps) {
     const { blockkey, blockmap } = props;
     const block = blockmap.get(blockkey);
@@ -238,7 +213,6 @@ function WaveBlock(props: WaveBlockProps) {
         </div>
     );
 }
-
 const MarkdownImg = ({
     props,
     resolveOpts,
@@ -250,7 +224,6 @@ const MarkdownImg = ({
     const [resolvedSrcSet, setResolvedSrcSet] = useState<string>(props.srcSet);
     const [resolvedStr, setResolvedStr] = useState<string>(null);
     const [resolving, setResolving] = useState<boolean>(true);
-
     useEffect(() => {
         if (props.src.startsWith("data:image/")) {
             setResolving(false);
@@ -264,13 +237,11 @@ const MarkdownImg = ({
             setResolvedStr(`[img:${props.src}]`);
             return;
         }
-
         const resolveFn = async () => {
             const [resolvedSrc, resolvedSrcSet] = await Promise.all([
                 resolveRemoteFile(props.src, resolveOpts),
                 resolveSrcSet(props.srcSet, resolveOpts),
             ]);
-
             setResolvedSrc(resolvedSrc);
             setResolvedSrcSet(resolvedSrcSet);
             setResolvedStr(null);
@@ -278,7 +249,6 @@ const MarkdownImg = ({
         };
         resolveFn();
     }, [props.src, props.srcSet]);
-
     if (resolving) {
         return null;
     }
@@ -290,7 +260,6 @@ const MarkdownImg = ({
     }
     return <span>[img]</span>;
 };
-
 type MarkdownProps = {
     text?: string;
     textAtom?: Atom<string> | Atom<Promise<string>>;
@@ -305,7 +274,6 @@ type MarkdownProps = {
     fontSizeOverride?: number;
     fixedFontSizeOverride?: number;
 };
-
 const Markdown = ({
     text,
     textAtom,
@@ -325,15 +293,12 @@ const Markdown = ({
     const showToc = useAtomValueSafe(showTocAtom) ?? false;
     const contentsOsRef = useRef<OverlayScrollbarsComponentRef>(null);
     const [focusedHeading, setFocusedHeading] = useState<string>(null);
-
     // Ensure uniqueness of ids between MD preview instances.
     const [idPrefix] = useState<string>(crypto.randomUUID());
-
     text = textAtomValue ?? text ?? "";
     const transformedOutput = transformBlocks(text);
     const transformedText = transformedOutput.content;
     const contentBlocksMap = transformedOutput.blocks;
-
     useEffect(() => {
         if (focusedHeading && contentsOsRef.current && contentsOsRef.current.osInstance()) {
             const { viewport } = contentsOsRef.current.osInstance().elements();
@@ -346,7 +311,6 @@ const Markdown = ({
             }
         }
     }, [focusedHeading]);
-
     const markdownComponents: Partial<Components> = {
         a: (props: React.HTMLAttributes<HTMLAnchorElement>) => (
             <Link props={props} setFocusedHeading={setFocusedHeading} />
@@ -379,12 +343,11 @@ const Markdown = ({
             }
             return String(children || "");
         };
-
         const chartText = getTextContent(props.children);
         return <Mermaid chart={chartText} />;
     };
-
     const toc = useMemo(() => {
+        const { t } = useTranslation();
         if (showToc) {
             if (tocRef.current.length > 0) {
                 return tocRef.current.map((item) => {
@@ -405,13 +368,12 @@ const Markdown = ({
                         className="toc-item toc-empty text-secondary"
                         style={{ "--indent-factor": 2 } as React.CSSProperties}
                     >
-                        No sub-headings found
+                        {t("markdown.noSubHeadings")}
                     </div>
                 );
             }
         }
     }, [showToc, tocRef]);
-
     let rehypePlugins = null;
     if (rehype) {
         rehypePlugins = [
@@ -452,7 +414,6 @@ const Markdown = ({
         [RemarkFlexibleToc, { tocRef: tocRef.current }],
         [createContentBlockPlugin, { blocks: contentBlocksMap }],
     ];
-
     const ScrollableMarkdown = () => {
         return (
             <OverlayScrollbarsComponent
@@ -470,7 +431,6 @@ const Markdown = ({
             </OverlayScrollbarsComponent>
         );
     };
-
     const NonScrollableMarkdown = () => {
         return (
             <div className={cn("content non-scrollable", contentClassName)}>
@@ -484,8 +444,8 @@ const Markdown = ({
             </div>
         );
     };
-
     const mergedStyle = { ...style };
+        const { t } = useTranslation();
     if (fontSizeOverride != null) {
         mergedStyle["--markdown-font-size"] = `${boundNumber(fontSizeOverride, 6, 64)}px`;
     }
@@ -498,7 +458,7 @@ const Markdown = ({
             {toc && (
                 <OverlayScrollbarsComponent className="toc mt-1" options={{ scrollbars: { autoHide: "leave" } }}>
                     <div className="toc-inner">
-                        <h4 className="font-bold">Table of Contents</h4>
+                        <h4 className="font-bold">{t("preview.tableOfContents")}</h4>
                         {toc}
                     </div>
                 </OverlayScrollbarsComponent>
@@ -506,5 +466,4 @@ const Markdown = ({
         </div>
     );
 };
-
 export { Markdown };
