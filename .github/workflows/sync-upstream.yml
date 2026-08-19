@@ -1,0 +1,76 @@
+name: Sync with Upstream (wavetermdev/waveterm)
+
+# 自动同步上游 wavetermdev/waveterm → 本 fork
+# main  = 纯上游,每天自动合并上游更新
+# custom = 自研分支(汉化/PVE/VNC),rebase 到最新上游,遇到冲突开 PR 人工处理
+
+on:
+  schedule:
+    # 每天 04:00 UTC (北京时间 12:00) 自动检查上游更新
+    - cron: "0 4 * * *"
+  workflow_dispatch:   # 支持手动触发: Actions 页面 → Run workflow
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/wavetermdev/waveterm.git
+          git fetch upstream main
+
+      - name: Sync main with upstream
+        run: |
+          git checkout main || git checkout -b main origin/main
+          git config user.name "stevenwang288"
+          git config user.email "stevenwang288@users.noreply.github.com"
+          git merge upstream/main --no-edit && echo "main 已合并上游最新" || echo "main 合并冲突"
+
+      - name: Push synced main
+        if: success()
+        run: |
+          git push origin main
+
+  # custom 分支: 在最新上游之上重放自研改动
+  sync-custom:
+    runs-on: ubuntu-latest
+    needs: sync-main
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/wavetermdev/waveterm.git
+          git fetch upstream main
+
+      - name: Rebase custom onto latest upstream
+        id: rebase
+        run: |
+          git checkout custom || git checkout -b custom origin/custom
+          git rebase upstream/main
+          git push --force-with-lease origin custom
+        continue-on-error: true
+
+      # rebase 有冲突时,推送一个 conflict 分支并开 PR,提示人工处理
+      - name: Open PR for conflicts
+        if: steps.rebase.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git checkout -b upstream-sync-conflict
+          git push origin upstream-sync-conflict
+          gh pr create --base custom --head upstream-sync-conflict \
+            --title "⚠️ 上游同步冲突,需要人工处理" \
+            --body "自动同步上游时 rebase 产生冲突。请在本分支解决冲突后合入 custom。"
